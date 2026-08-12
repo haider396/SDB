@@ -120,7 +120,14 @@ export async function insertRequisition(
 /** Candidate with every gated PII field populated, so gating is observable. */
 export async function insertCandidate(
   sql: Queryable,
-  opts: { id?: string; firstName?: string; lastName?: string } = {},
+  opts: {
+    id?: string;
+    firstName?: string;
+    lastName?: string;
+    /** has_consent_to_share_profile (default false, as in the schema). */
+    hasConsent?: boolean;
+    doNotPresentToClientIds?: string[];
+  } = {},
 ): Promise<string> {
   const id = opts.id ?? randomUUID();
   const short = id.slice(0, 8);
@@ -132,13 +139,14 @@ export async function insertCandidate(
     insert into candidates (
       id, reference, first_name, last_name,
       email, phone, whatsapp, linkedin_url, current_employer, current_title, country,
-      source
+      source, has_consent_to_share_profile, do_not_present_to_client_ids
     ) values (
       ${id}, ${uniqueRef('CAN-IT')},
       ${opts.firstName ?? `First${short}`}, ${opts.lastName ?? `Last${short}`},
       ${`candidate-${short}@example.com`}, ${'+1-555-0000'}, ${'+1-555-0001'},
       ${`https://linkedin.com/in/c${short}`}, ${'Employer Inc'}, ${'Specialist'}, ${'Mexico'},
-      'other'
+      'other', ${opts.hasConsent ?? false},
+      ${sql.array(opts.doNotPresentToClientIds ?? [])}::uuid[]
     )
   `;
   return id;

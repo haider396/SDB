@@ -39,14 +39,17 @@ import {
   createLoadContext,
   type ContextLoader,
 } from './middleware/load-context.js';
+import { assignmentRoutes } from './routes/assignments.js';
 import { authRoutes } from './routes/auth.js';
 import { candidateRoutes } from './routes/candidates.js';
 import { clientRoutes } from './routes/clients.js';
 import { fileRoutes } from './routes/files.js';
 import { healthRoutes } from './routes/health.js';
 import { intakeRoutes } from './routes/intake.js';
+import { placementRoutes } from './routes/placements.js';
 import { questionRoutes } from './routes/questions.js';
 import { requisitionRoutes } from './routes/requisitions.js';
+import { createAssignmentsService } from './services/assignments.service.js';
 import { createAuthService } from './services/auth.service.js';
 import { createCandidateFilesService } from './services/candidate-files.service.js';
 import {
@@ -57,6 +60,7 @@ import { createCandidatesService } from './services/candidates.service.js';
 import { createClientsService } from './services/clients.service.js';
 import { createIntakeFormService } from './services/intake-form.service.js';
 import { createIntakeSubmissionService } from './services/intake-submission.service.js';
+import { createPlacementsService } from './services/placements.service.js';
 import { createQuestionsService } from './services/questions.service.js';
 import { createRequisitionsService } from './services/requisitions.service.js';
 
@@ -235,6 +239,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     logger,
   });
   const requisitionsService = createRequisitionsService({ db, logger });
+  const assignmentsService = createAssignmentsService({ db, logger });
+  const placementsService = createPlacementsService({ db });
   const candidatesService = createCandidatesService({ db });
   const candidateFilesService = createCandidateFilesService({ db, storage });
   const candidateWebhookService = createCandidateWebhookService({
@@ -284,6 +290,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(fileRoutes, {
     prefix: '/api/v1',
     candidateFilesService,
+  });
+  await app.register(assignmentRoutes, {
+    prefix: '/api/v1',
+    assignmentsService,
+  });
+  await app.register(placementRoutes, {
+    prefix: '/api/v1',
+    placementsService,
   });
 
   // --- OpenAPI (04 §15) ------------------------------------------------------

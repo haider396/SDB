@@ -9,7 +9,9 @@
  * to their own client (clientId never accepted from the request, 04 §1.3);
  * admins must pass `clientId`.
  *
- * GET /requisitions/:id/assignments is P4 and deliberately absent.
+ * The requisition-nested assignment endpoints (POST/GET
+ * /requisitions/:id/assignments) live in routes/assignments.ts with the rest
+ * of the pipeline surface (04 §9).
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';

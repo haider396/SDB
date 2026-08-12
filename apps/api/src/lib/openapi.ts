@@ -106,6 +106,26 @@ import {
   WebhookResponseSchema,
 } from '@sdb/contracts';
 import {
+  AdvanceBodySchema,
+  CreateAssignmentsBodySchema,
+  ListPlacementsQuerySchema,
+  PlaceBodySchema,
+  PresentBodySchema,
+  RejectBodySchema,
+  UpdateAssignmentBodySchema,
+  UpdatePlacementBodySchema,
+} from '@sdb/contracts';
+import {
+  AdminAssignmentCollectionSchema,
+  AdminAssignmentEnvelopeSchema,
+  AssignmentCollectionSchema,
+  AssignmentEnvelopeSchema,
+  AssignmentEventCollectionSchema,
+  ClientVisibleAssignmentEnvelopeSchema,
+  PlacementCollectionSchema,
+  PlacementEnvelopeSchema,
+} from '../schemas/assignments.js';
+import {
   AssessmentCollectionSchema,
   CandidateCollectionSchema,
   CandidateDetailEnvelopeSchema,
@@ -1151,6 +1171,206 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
       200: ok('Signed URL', FileDownloadUrlEnvelopeSchema),
       401: errorResponse('Unauthenticated'),
       404: errorResponse('Not found or not visible to this caller'),
+    },
+  });
+
+  // --- assignments and pipeline (04 §9) -------------------------------------
+  const assignmentIdParams = { params: z.object({ id: z.string().uuid() }) };
+
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/requisitions/{id}/assignments',
+    summary:
+      'Assign candidates at sourced; 409 DUPLICATE_ASSIGNMENT on repeat; do-not-present list enforced',
+    tags: ['assignments'],
+    security: securedReq,
+    request: { ...requisitionIdParams, ...jsonBody(CreateAssignmentsBodySchema) },
+    responses: {
+      201: ok('Assignments created', AdminAssignmentCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing candidate.assign'),
+      409: errorResponse('DUPLICATE_ASSIGNMENT'),
+      422: errorResponse('VALIDATION_FAILED — do_not_present_to_client_ids'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/requisitions/{id}/assignments',
+    summary:
+      'Admin: full rows with candidate summary. Client: rows from client_visible_assignments only',
+    tags: ['assignments'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Assignments', AssignmentCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found (including cross-tenant addressing)'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/assignments/present',
+    summary:
+      'Bulk present, all-or-nothing: consent validated on every candidate; requisition → candidates_presented; notification per client user',
+    tags: ['assignments'],
+    security: securedReq,
+    request: jsonBody(PresentBodySchema),
+    responses: {
+      200: ok('Presented', AdminAssignmentCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      409: errorResponse('INVALID_TRANSITION'),
+      422: errorResponse('CONSENT_MISSING — nothing was presented'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/assignments/{id}',
+    summary: 'Admin: full row. Client: view-backed and stage-gated (404 for non-visible stages)',
+    tags: ['assignments'],
+    security: securedReq,
+    request: assignmentIdParams,
+    responses: {
+      200: ok('Assignment', AssignmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found or not visible to this caller'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/assignments/{id}',
+    summary: 'Update adminNote, clientNote, sortOrder',
+    tags: ['assignments'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(UpdateAssignmentBodySchema) },
+    responses: {
+      200: ok('Updated', AdminAssignmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing assignment.advance'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/assignments/{id}/advance',
+    summary: 'Stage transition validated against the 01 §5 machine',
+    tags: ['assignments'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(AdvanceBodySchema) },
+    responses: {
+      200: ok('Advanced', AdminAssignmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      409: errorResponse('INVALID_TRANSITION with { from, to } details'),
+      422: errorResponse('CONSENT_MISSING when advancing into presented'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/assignments/{id}/approve-for-interview',
+    summary:
+      'Client action: presented → client_reviewing; fires client_decision_recorded to admins',
+    tags: ['assignments'],
+    security: securedReq,
+    request: assignmentIdParams,
+    responses: {
+      200: ok('Approved', ClientVisibleAssignmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found or not a client-scoped caller'),
+      409: errorResponse('INVALID_TRANSITION'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/assignments/{id}/reject',
+    summary:
+      'Reject: actor derived from the caller, never the body; writes a rejections row',
+    tags: ['assignments'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(RejectBodySchema) },
+    responses: {
+      200: ok('Rejected', AssignmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      409: errorResponse('INVALID_TRANSITION'),
+      422: errorResponse('VALIDATION_FAILED — reasonId or reasonOther required'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/assignments/{id}/request-interview',
+    summary: 'Client action: notifies admins; no stage change, no interview record',
+    tags: ['assignments'],
+    security: securedReq,
+    request: assignmentIdParams,
+    responses: {
+      200: ok('Requested', ClientVisibleAssignmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found or not a client-scoped caller'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/assignments/{id}/place',
+    summary:
+      'One transaction: placement row, assignment → placed, requisition → placed, siblings → closed_not_selected, candidate pool_status = placed',
+    tags: ['placements'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(PlaceBodySchema) },
+    responses: {
+      201: ok('Placed', PlacementEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      409: errorResponse('INVALID_TRANSITION (assignment or requisition)'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/assignments/{id}/events',
+    summary: 'Chronological event log, app+trigger pairs de-duplicated (06 §2.3)',
+    tags: ['assignments'],
+    security: securedReq,
+    request: assignmentIdParams,
+    responses: {
+      200: ok('Events', AssignmentEventCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing event.view'),
+    },
+  });
+
+  // --- placements (04 §11) --------------------------------------------------
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/placements',
+    summary: 'List placements — admin: all with filters; client: implicitly scoped',
+    tags: ['placements'],
+    security: securedReq,
+    request: { query: ListPlacementsQuerySchema },
+    responses: {
+      200: ok('Placements', PlacementCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing client.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/placements/{id}',
+    summary: 'Placement detail; client callers read only their own (404 otherwise)',
+    tags: ['placements'],
+    security: securedReq,
+    request: assignmentIdParams,
+    responses: {
+      200: ok('Placement', PlacementEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found (including cross-tenant addressing)'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/placements/{id}',
+    summary: 'Update placement terms or status; writes an event',
+    tags: ['placements'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(UpdatePlacementBodySchema) },
+    responses: {
+      200: ok('Updated', PlacementEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing client.update'),
     },
   });
 
