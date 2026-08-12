@@ -28,6 +28,10 @@ import {
   createSupabaseAdmin,
   type SupabaseAdminPort,
 } from './lib/supabase-admin.js';
+import {
+  createSupabaseStorage,
+  type SupabaseStoragePort,
+} from './lib/supabase-storage.js';
 import { createAuthenticate } from './middleware/authenticate.js';
 import {
   createCachedContextLoader,
@@ -36,12 +40,20 @@ import {
   type ContextLoader,
 } from './middleware/load-context.js';
 import { authRoutes } from './routes/auth.js';
+import { candidateRoutes } from './routes/candidates.js';
 import { clientRoutes } from './routes/clients.js';
+import { fileRoutes } from './routes/files.js';
 import { healthRoutes } from './routes/health.js';
 import { intakeRoutes } from './routes/intake.js';
 import { questionRoutes } from './routes/questions.js';
 import { requisitionRoutes } from './routes/requisitions.js';
 import { createAuthService } from './services/auth.service.js';
+import { createCandidateFilesService } from './services/candidate-files.service.js';
+import {
+  createCandidateWebhookService,
+  type CvFetcher,
+} from './services/candidate-webhook.service.js';
+import { createCandidatesService } from './services/candidates.service.js';
 import { createClientsService } from './services/clients.service.js';
 import { createIntakeFormService } from './services/intake-form.service.js';
 import { createIntakeSubmissionService } from './services/intake-submission.service.js';
@@ -81,6 +93,10 @@ export interface BuildAppOptions {
   /** Context loader override; tests return fixed contexts, no DB. */
   contextLoader?: ContextLoader;
   supabaseAdmin?: SupabaseAdminPort;
+  /** Storage port override; tests inject an in-memory stub (P3 files). */
+  storage?: SupabaseStoragePort;
+  /** Webhook CV fetcher override; tests inject a canned/local fetcher. */
+  cvFetcher?: CvFetcher;
   logger?: Logger;
   /**
    * Injectable clock (epoch ms) for the intake-form cache TTL — integration
@@ -95,6 +111,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const ownsDb = options.db === undefined;
   const db = options.db ?? createDb(env.DATABASE_URL);
   const supabaseAdmin = options.supabaseAdmin ?? createSupabaseAdmin(env);
+  const storage = options.storage ?? createSupabaseStorage(env);
 
   const app = fastify({
     // pino's Logger structurally satisfies FastifyBaseLogger; the upcast keeps
@@ -218,6 +235,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     logger,
   });
   const requisitionsService = createRequisitionsService({ db, logger });
+  const candidatesService = createCandidatesService({ db });
+  const candidateFilesService = createCandidateFilesService({ db, storage });
+  const candidateWebhookService = createCandidateWebhookService({
+    db,
+    storage,
+    webhookToken: env.WEBHOOK_INBOUND_TOKEN,
+    logger,
+    ...(options.cvFetcher !== undefined ? { cvFetcher: options.cvFetcher } : {}),
+  });
 
   // --- routes ----------------------------------------------------------------
   await app.register(healthRoutes, {
@@ -248,6 +274,16 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(clientRoutes, {
     prefix: '/api/v1',
     clientsService,
+  });
+  await app.register(candidateRoutes, {
+    prefix: '/api/v1',
+    candidatesService,
+    candidateFilesService,
+    candidateWebhookService,
+  });
+  await app.register(fileRoutes, {
+    prefix: '/api/v1',
+    candidateFilesService,
   });
 
   // --- OpenAPI (04 §15) ------------------------------------------------------

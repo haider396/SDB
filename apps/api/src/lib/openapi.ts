@@ -80,6 +80,50 @@ import {
   QuestionEnvelopeSchema,
   ReorderResponseSchema,
 } from '../schemas/questions.js';
+import {
+  CandidateConsentBodySchema,
+  CreateCandidateAssessmentBodySchema,
+  CreateCandidateBodySchema,
+  CreateCandidateCertificationBodySchema,
+  CreateCandidateEducationBodySchema,
+  CreateCandidateEmploymentBodySchema,
+  CreateCandidateLanguageBodySchema,
+  CreateCandidateNoteBodySchema,
+  CreateCandidateReferenceBodySchema,
+  FileUploadUrlBodySchema,
+  ListCandidatesQuerySchema,
+  PutCandidateSkillsBodySchema,
+  PutCandidateToolsBodySchema,
+  PutDisqualifierChecksBodySchema,
+  UpdateCandidateBodySchema,
+  UpdateCandidateCertificationBodySchema,
+  UpdateCandidateEducationBodySchema,
+  UpdateCandidateEmploymentBodySchema,
+  UpdateCandidateFileBodySchema,
+  UpdateCandidateLanguageBodySchema,
+  UpdateCandidateReferenceBodySchema,
+  WebhookCandidateBodySchema,
+  WebhookResponseSchema,
+} from '@sdb/contracts';
+import {
+  AssessmentCollectionSchema,
+  CandidateCollectionSchema,
+  CandidateDetailEnvelopeSchema,
+  CandidateEnvelopeSchema,
+  CandidateFileEnvelopeSchema,
+  CertificationCollectionSchema,
+  DisqualifierCheckCollectionSchema,
+  EducationCollectionSchema,
+  EmploymentCollectionSchema,
+  FileCollectionSchema,
+  FileDownloadUrlEnvelopeSchema,
+  FileUploadUrlEnvelopeSchema,
+  LanguageCollectionSchema,
+  NoteCollectionSchema,
+  ReferenceCollectionSchema,
+  SkillCollectionSchema,
+  ToolCollectionSchema,
+} from '../schemas/candidates.js';
 
 function errorResponse(description: string) {
   return {
@@ -784,6 +828,329 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
     responses: {
       200: ok('Deactivated', CategoryEnvelopeSchema),
       401: errorResponse('Unauthenticated'),
+    },
+  });
+
+  // --- candidates (04 §8) ---------------------------------------------------
+  const candidateIdParams = { params: z.object({ id: z.string().uuid() }) };
+  const candidateChildParams = {
+    params: z.object({ id: z.string().uuid(), entryId: z.string().uuid() }),
+  };
+  const candidateFileParams = {
+    params: z.object({ id: z.string().uuid(), fileId: z.string().uuid() }),
+  };
+
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidates/webhook',
+    summary:
+      'Inbound sourcing webhook — static WEBHOOK_INBOUND_TOKEN bearer, lenient validation, upsert on externalId (04 §8.2)',
+    tags: ['candidates'],
+    request: jsonBody(WebhookCandidateBodySchema),
+    responses: {
+      200: ok('Ingested', WebhookResponseSchema),
+      401: errorResponse('Missing or wrong webhook token'),
+      422: errorResponse('firstName/lastName missing'),
+      429: errorResponse('Rate limited'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/candidates',
+    summary: 'List candidates (admin pool) with combined filters and cursor pagination',
+    tags: ['candidates'],
+    security: securedReq,
+    request: { query: ListCandidatesQuerySchema },
+    responses: {
+      200: ok('Candidates', CandidateCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing candidate.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidates',
+    summary: 'Create a candidate — only firstName and lastName required',
+    tags: ['candidates'],
+    security: securedReq,
+    request: jsonBody(CreateCandidateBodySchema),
+    responses: {
+      201: ok('Created', CandidateEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing candidate.create'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/candidates/{id}',
+    summary: 'Full internal record with all child collections',
+    tags: ['candidates'],
+    security: securedReq,
+    request: candidateIdParams,
+    responses: {
+      200: ok('Candidate detail', CandidateDetailEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/candidates/{id}',
+    summary: 'Update candidate fields; data_completeness is recomputed',
+    tags: ['candidates'],
+    security: securedReq,
+    request: { ...candidateIdParams, ...jsonBody(UpdateCandidateBodySchema) },
+    responses: {
+      200: ok('Updated', CandidateEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidates/{id}/archive',
+    summary: 'Soft-archive (sets archived_at)',
+    tags: ['candidates'],
+    security: securedReq,
+    request: candidateIdParams,
+    responses: {
+      200: ok('Archived', CandidateEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidates/{id}/consent',
+    summary: 'Capture profile-sharing consent; sets consent_captured_at',
+    tags: ['candidates'],
+    security: securedReq,
+    request: { ...candidateIdParams, ...jsonBody(CandidateConsentBodySchema) },
+    responses: {
+      200: ok('Consent recorded', CandidateEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+
+  // Child collections: [path, GET schema, create/put schema+method, update schema?]
+  const childCollections: {
+    segment: string;
+    collection: z.ZodTypeAny;
+    write: { method: 'post' | 'put'; schema: z.ZodTypeAny };
+    update?: z.ZodTypeAny;
+    hasDelete?: boolean;
+  }[] = [
+    {
+      segment: 'languages',
+      collection: LanguageCollectionSchema,
+      write: { method: 'post', schema: CreateCandidateLanguageBodySchema },
+      update: UpdateCandidateLanguageBodySchema,
+      hasDelete: true,
+    },
+    {
+      segment: 'tools',
+      collection: ToolCollectionSchema,
+      write: { method: 'put', schema: PutCandidateToolsBodySchema },
+    },
+    {
+      segment: 'skills',
+      collection: SkillCollectionSchema,
+      write: { method: 'put', schema: PutCandidateSkillsBodySchema },
+    },
+    {
+      segment: 'employment-history',
+      collection: EmploymentCollectionSchema,
+      write: { method: 'post', schema: CreateCandidateEmploymentBodySchema },
+      update: UpdateCandidateEmploymentBodySchema,
+      hasDelete: true,
+    },
+    {
+      segment: 'education',
+      collection: EducationCollectionSchema,
+      write: { method: 'post', schema: CreateCandidateEducationBodySchema },
+      update: UpdateCandidateEducationBodySchema,
+      hasDelete: true,
+    },
+    {
+      segment: 'certifications',
+      collection: CertificationCollectionSchema,
+      write: { method: 'post', schema: CreateCandidateCertificationBodySchema },
+      update: UpdateCandidateCertificationBodySchema,
+      hasDelete: true,
+    },
+    {
+      segment: 'references',
+      collection: ReferenceCollectionSchema,
+      write: { method: 'post', schema: CreateCandidateReferenceBodySchema },
+      update: UpdateCandidateReferenceBodySchema,
+      hasDelete: true,
+    },
+    {
+      segment: 'notes',
+      collection: NoteCollectionSchema,
+      write: { method: 'post', schema: CreateCandidateNoteBodySchema },
+    },
+    {
+      segment: 'disqualifier-checks',
+      collection: DisqualifierCheckCollectionSchema,
+      write: { method: 'put', schema: PutDisqualifierChecksBodySchema },
+    },
+    {
+      segment: 'assessments',
+      collection: AssessmentCollectionSchema,
+      write: { method: 'post', schema: CreateCandidateAssessmentBodySchema },
+    },
+  ];
+
+  for (const child of childCollections) {
+    const base = `/api/v1/candidates/{id}/${child.segment}`;
+    registry.registerPath({
+      method: 'get',
+      path: base,
+      summary: `List candidate ${child.segment}`,
+      tags: ['candidates'],
+      security: securedReq,
+      request: candidateIdParams,
+      responses: {
+        200: ok('Collection', child.collection),
+        401: errorResponse('Unauthenticated'),
+        404: errorResponse('Not found'),
+      },
+    });
+    registry.registerPath({
+      method: child.write.method,
+      path: base,
+      summary:
+        child.write.method === 'put'
+          ? `Replace the full ${child.segment} set`
+          : `Add a ${child.segment} entry`,
+      tags: ['candidates'],
+      security: securedReq,
+      request: { ...candidateIdParams, ...jsonBody(child.write.schema) },
+      responses: {
+        [child.write.method === 'put' ? 200 : 201]: ok(
+          'Collection after write',
+          child.collection,
+        ),
+        401: errorResponse('Unauthenticated'),
+        422: errorResponse('Invalid reference or duplicate entry'),
+      },
+    });
+    if (child.update !== undefined) {
+      registry.registerPath({
+        method: 'patch',
+        path: `${base}/{entryId}`,
+        summary: `Update a ${child.segment} entry`,
+        tags: ['candidates'],
+        security: securedReq,
+        request: { ...candidateChildParams, ...jsonBody(child.update) },
+        responses: {
+          200: ok('Collection after write', child.collection),
+          401: errorResponse('Unauthenticated'),
+          404: errorResponse('Not found'),
+        },
+      });
+    }
+    if (child.hasDelete === true) {
+      registry.registerPath({
+        method: 'delete',
+        path: `${base}/{entryId}`,
+        summary: `Delete a ${child.segment} entry`,
+        tags: ['candidates'],
+        security: securedReq,
+        request: candidateChildParams,
+        responses: {
+          204: { description: 'Deleted' },
+          401: errorResponse('Unauthenticated'),
+          404: errorResponse('Not found'),
+        },
+      });
+    }
+  }
+
+  // --- candidate files (04 §8.1) --------------------------------------------
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidates/{id}/files/upload-url',
+    summary:
+      'Signed Storage upload URL; 415 outside NFR-5 MIME set, 413 above NFR-4 size',
+    tags: ['candidates'],
+    security: securedReq,
+    request: { ...candidateIdParams, ...jsonBody(FileUploadUrlBodySchema) },
+    responses: {
+      201: ok('Pending file + signed URL', FileUploadUrlEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      413: errorResponse('FILE_TOO_LARGE'),
+      415: errorResponse('UNSUPPORTED_MEDIA_TYPE'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidates/{id}/files/{fileId}/confirm',
+    summary:
+      'Confirm the upload (object exists, size matches); a CV queues text extraction',
+    tags: ['candidates'],
+    security: securedReq,
+    request: candidateFileParams,
+    responses: {
+      200: ok('Confirmed', CandidateFileEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse('Object missing or size mismatch'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/candidates/{id}/files',
+    summary: 'List candidate files',
+    tags: ['candidates'],
+    security: securedReq,
+    request: candidateIdParams,
+    responses: {
+      200: ok('Files', FileCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/candidates/{id}/files/{fileId}',
+    summary: 'Toggle isClientVisible, change fileType',
+    tags: ['candidates'],
+    security: securedReq,
+    request: { ...candidateFileParams, ...jsonBody(UpdateCandidateFileBodySchema) },
+    responses: {
+      200: ok('Updated', CandidateFileEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'delete',
+    path: '/api/v1/candidates/{id}/files/{fileId}',
+    summary: 'Remove the storage object and the row',
+    tags: ['candidates'],
+    security: securedReq,
+    request: candidateFileParams,
+    responses: {
+      204: { description: 'Deleted' },
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/files/{fileId}/download-url',
+    summary:
+      '300-second signed download URL; client callers only for client-visible files of client-visibly assigned candidates',
+    tags: ['candidates'],
+    security: securedReq,
+    request: { params: z.object({ fileId: z.string().uuid() }) },
+    responses: {
+      200: ok('Signed URL', FileDownloadUrlEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found or not visible to this caller'),
     },
   });
 

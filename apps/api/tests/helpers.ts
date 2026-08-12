@@ -15,6 +15,10 @@ import {
 import type { AuthUser, PermissionKey, UserRoleKey } from '@sdb/contracts';
 import { loadEnv, type Env } from '../src/lib/env.js';
 import type { SupabaseAdminPort } from '../src/lib/supabase-admin.js';
+import type {
+  StorageObjectStat,
+  SupabaseStoragePort,
+} from '../src/lib/supabase-storage.js';
 import type { RequestContext } from '../src/middleware/load-context.js';
 
 export const TEST_ENV_VARS: Record<string, string> = {
@@ -139,4 +143,76 @@ export function stubSupabaseAdmin(): SupabaseAdminPort & {
 
 export function freshUserId(): string {
   return randomUUID();
+}
+
+/**
+ * In-memory Supabase Storage stub (P3 files): records every call, serves
+ * bytes from a Map so tests can simulate a browser upload (`putObject`) and
+ * the extraction job can download fixture bytes.
+ */
+export interface StorageStub extends SupabaseStoragePort {
+  objects: Map<string, { bytes: Uint8Array; mimeType: string }>;
+  calls: {
+    createSignedUploadUrl: string[];
+    createSignedDownloadUrl: { path: string; expiresInSeconds: number }[];
+    removeObject: string[];
+    statObject: string[];
+    uploadObject: { path: string; size: number; contentType: string }[];
+    downloadObject: string[];
+  };
+  /** Test-side helper: pretend the browser uploaded these bytes. */
+  putObject(path: string, bytes: Uint8Array, mimeType: string): void;
+}
+
+export function stubStorage(): StorageStub {
+  const objects = new Map<string, { bytes: Uint8Array; mimeType: string }>();
+  const calls: StorageStub['calls'] = {
+    createSignedUploadUrl: [],
+    createSignedDownloadUrl: [],
+    removeObject: [],
+    statObject: [],
+    uploadObject: [],
+    downloadObject: [],
+  };
+  return {
+    objects,
+    calls,
+    putObject(path, bytes, mimeType) {
+      objects.set(path, { bytes, mimeType });
+    },
+    async createSignedUploadUrl(path) {
+      calls.createSignedUploadUrl.push(path);
+      return {
+        url: `https://storage.test/upload/${encodeURIComponent(path)}`,
+        token: `upload-token-${path.length}`,
+      };
+    },
+    async createSignedDownloadUrl(path, expiresInSeconds) {
+      calls.createSignedDownloadUrl.push({ path, expiresInSeconds });
+      return `https://storage.test/signed/${encodeURIComponent(path)}?expires_in=${expiresInSeconds}`;
+    },
+    async removeObject(path) {
+      calls.removeObject.push(path);
+      objects.delete(path);
+    },
+    async statObject(path): Promise<StorageObjectStat | null> {
+      calls.statObject.push(path);
+      const entry = objects.get(path);
+      return entry === undefined
+        ? null
+        : { sizeBytes: entry.bytes.byteLength, mimeType: entry.mimeType };
+    },
+    async uploadObject(path, bytes, contentType) {
+      calls.uploadObject.push({ path, size: bytes.byteLength, contentType });
+      objects.set(path, { bytes, mimeType: contentType });
+    },
+    async downloadObject(path) {
+      calls.downloadObject.push(path);
+      const entry = objects.get(path);
+      if (entry === undefined) {
+        throw new Error(`stubStorage: no object at ${path}`);
+      }
+      return entry.bytes;
+    },
+  };
 }

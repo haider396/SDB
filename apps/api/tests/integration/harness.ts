@@ -19,10 +19,13 @@ import postgres from 'postgres';
 import { expect, inject } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import type { Db } from '../../src/lib/db.js';
+import type { CvFetcher } from '../../src/services/candidate-webhook.service.js';
 import {
   createTestAuth,
+  stubStorage,
   stubSupabaseAdmin,
   testEnv,
+  type StorageStub,
   type TestAuth,
 } from '../helpers.js';
 import { applyDevSeed } from './sql-files.js';
@@ -104,6 +107,8 @@ export interface TestApp {
   auth: TestAuth;
   /** The stubbed Supabase Admin port, exposed for call assertions. */
   supabaseAdmin: ReturnType<typeof stubSupabaseAdmin>;
+  /** The in-memory Storage stub (P3 files), exposed for call assertions. */
+  storage: StorageStub;
   /** Bearer header for a user id. */
   bearer(userId: string): Promise<Record<string, string>>;
 }
@@ -119,10 +124,15 @@ export async function buildTestApp(
   opts: {
     /** Injectable clock for the intake-form cache TTL (AC-Q-01). */
     now?: () => number;
+    /** Storage stub override (defaults to a fresh in-memory stub). */
+    storage?: StorageStub;
+    /** Webhook cvUrl fetcher override (P3 webhook tests). */
+    cvFetcher?: CvFetcher;
   } = {},
 ): Promise<TestApp> {
   const auth = await createTestAuth();
   const supabaseAdmin = stubSupabaseAdmin();
+  const storage = opts.storage ?? stubStorage();
   const app = await buildApp({
     // DATABASE_URL is unused when `db` is injected; the rest are dummy values
     // (GHL etc.) that nothing in P0 dials out to.
@@ -130,6 +140,8 @@ export async function buildTestApp(
     db: db.sql,
     jwtKeySource: auth.jwks,
     supabaseAdmin,
+    storage,
+    ...(opts.cvFetcher !== undefined ? { cvFetcher: opts.cvFetcher } : {}),
     ...(opts.now !== undefined ? { now: opts.now } : {}),
   });
   if (registerExtra !== undefined) {
@@ -140,6 +152,7 @@ export async function buildTestApp(
     app,
     auth,
     supabaseAdmin,
+    storage,
     async bearer(userId: string) {
       return { authorization: `Bearer ${await auth.signToken(userId)}` };
     },

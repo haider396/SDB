@@ -10,5 +10,6 @@ export * from './questions.js';
 export * from './clients.js';
 export * from './requisitions.js';
 export * from './taxonomy.js';
+export * from './candidates.js';
 export * from './auth.js';
 export * from './nfr.js';
