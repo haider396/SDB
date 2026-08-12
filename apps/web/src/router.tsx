@@ -15,17 +15,18 @@ import { ClientLayout } from "@/components/layout/client-layout";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { useSession } from "@/lib/auth";
 import { homePathFor, useMe } from "@/lib/permissions";
+import {
+  CandidateDetailPage,
+  CandidateNewPage,
+  CandidatesListPage,
+} from "@/features/candidates";
 import { ClientDetailPage, ClientsListPage } from "@/features/clients";
 import { QuestionManagerPage } from "@/features/question-manager";
 import {
   RequisitionDetailPage,
   RequisitionsListPage,
 } from "@/features/requisitions";
-import {
-  AttentionQueuePage,
-  CandidatesPage,
-  SettingsPage,
-} from "@/routes/admin/index-pages";
+import { AttentionQueuePage, SettingsPage } from "@/routes/admin/index-pages";
 import {
   ClientDashboardPage,
   ClientRequisitionsPage,
@@ -114,7 +115,23 @@ export const router = createBrowserRouter([
         path: "candidates",
         element: (
           <RequirePermission permission="candidate.view">
-            <CandidatesPage />
+            <CandidatesListPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "candidates/new",
+        element: (
+          <RequirePermission permission="candidate.create">
+            <CandidateNewPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "candidates/:id",
+        element: (
+          <RequirePermission permission="candidate.view">
+            <CandidateDetailPage />
           </RequirePermission>
         ),
       },
