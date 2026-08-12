@@ -16,16 +16,21 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(JsonValueSchema),
-    z.record(JsonValueSchema),
-  ]),
-);
+/**
+ * Non-recursive on purpose: values arrive via JSON.parse, so nested content is
+ * JSON by construction — validating the top level is sufficient, and it keeps
+ * the schema walkable by @asteasolutions/zod-to-openapi (a `z.lazy` here breaks
+ * OpenAPI generation, 04 §15). The cast narrows the inferred output
+ * (`unknown[]`/`Record<string, unknown>`) to the recursive JsonValue type.
+ */
+export const JsonValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(z.unknown()),
+  z.record(z.unknown()),
+]) as unknown as z.ZodType<JsonValue>;
 
 /** Conditional operators supported by `questions.conditional_operator` (02 §6). */
 export const ConditionalOperatorSchema = z.enum([
@@ -134,4 +139,25 @@ export const IntakeSubmissionResponseSchema = z.object({
 });
 export type IntakeSubmissionResponse = z.infer<
   typeof IntakeSubmissionResponseSchema
+>;
+
+/**
+ * Body of `POST /api/v1/requisitions` — the authenticated in-portal variant of
+ * the same engine (03 §3.5). `clientId` is honoured only for admin callers;
+ * client-scoped callers always attach to their own client (04 §1.3).
+ */
+export const InPortalRequisitionBodySchema = IntakeSubmissionSchema.extend({
+  clientId: z.string().uuid().optional(),
+});
+export type InPortalRequisitionBody = z.infer<
+  typeof InPortalRequisitionBodySchema
+>;
+
+/** `201` response of `POST /api/v1/requisitions` (authenticated caller). */
+export const InPortalRequisitionResponseSchema = z.object({
+  id: z.string().uuid(),
+  requisitionReference: z.string(),
+});
+export type InPortalRequisitionResponse = z.infer<
+  typeof InPortalRequisitionResponseSchema
 >;

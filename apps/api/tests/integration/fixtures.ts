@@ -158,27 +158,105 @@ export async function insertQuestionCategory(
 
 export async function insertQuestion(
   sql: Queryable,
-  opts: { id?: string; categoryId: string; questionType: string; key?: string },
+  opts: {
+    id?: string;
+    categoryId: string;
+    questionType: string;
+    key?: string;
+    label?: string;
+    audience?: 'client' | 'internal';
+    isRequired?: boolean;
+    isActive?: boolean;
+    sortOrder?: number;
+    validation?: Record<string, unknown>;
+  },
 ): Promise<string> {
   const id = opts.id ?? randomUUID();
   await sql`
-    insert into questions (id, category_id, key, label, question_type)
+    insert into questions (id, category_id, key, label, question_type,
+                           audience, is_required, is_active, sort_order, validation)
     values (${id}, ${opts.categoryId}, ${opts.key ?? `q_${id.slice(0, 8)}`},
-            'Test Question', ${opts.questionType}::question_type)
+            ${opts.label ?? 'Test Question'}, ${opts.questionType}::question_type,
+            ${opts.audience ?? 'client'}::question_audience,
+            ${opts.isRequired ?? false}, ${opts.isActive ?? true},
+            ${opts.sortOrder ?? 0},
+            ${sql.json((opts.validation ?? {}) as postgres.JSONValue)})
   `;
   return id;
 }
 
 export async function insertQuestionOption(
   sql: Queryable,
-  opts: { id?: string; questionId: string; value?: string },
+  opts: {
+    id?: string;
+    questionId: string;
+    value?: string;
+    label?: string;
+    sortOrder?: number;
+    isActive?: boolean;
+  },
 ): Promise<string> {
   const id = opts.id ?? randomUUID();
   await sql`
-    insert into question_options (id, question_id, value, label)
-    values (${id}, ${opts.questionId}, ${opts.value ?? `opt_${id.slice(0, 8)}`}, 'Option')
+    insert into question_options (id, question_id, value, label, sort_order, is_active)
+    values (${id}, ${opts.questionId}, ${opts.value ?? `opt_${id.slice(0, 8)}`},
+            ${opts.label ?? 'Option'}, ${opts.sortOrder ?? 0}, ${opts.isActive ?? true})
   `;
   return id;
+}
+
+export async function scopeQuestionToRole(
+  sql: Queryable,
+  questionId: string,
+  roleCategoryId: string,
+): Promise<void> {
+  await sql`
+    insert into question_role_scopes (question_id, role_category_id)
+    values (${questionId}, ${roleCategoryId})
+    on conflict do nothing
+  `;
+}
+
+/** Minimal engine → department → role_category chain for scoping tests. */
+export async function insertTaxonomyChain(
+  sql: Queryable,
+  opts: { engineKey?: string } = {},
+): Promise<{
+  engineId: string;
+  engineKey: string;
+  departmentId: string;
+  departmentKey: string;
+  roleCategoryId: string;
+  roleCategoryKey: string;
+}> {
+  const engineKey = opts.engineKey ?? 'operations';
+  const engineRows = await sql<{ id: string }[]>`
+    select id from engines where key = ${engineKey}
+  `;
+  const engineId = engineRows[0]?.id;
+  if (engineId === undefined) {
+    throw new Error(`engine ${engineKey} not seeded`);
+  }
+  const departmentId = randomUUID();
+  const departmentKey = `dept_${departmentId.slice(0, 8)}`;
+  await sql`
+    insert into departments (id, engine_id, key, label)
+    values (${departmentId}, ${engineId}, ${departmentKey}, 'Test Department')
+  `;
+  const roleCategoryId = randomUUID();
+  const roleCategoryKey = `role_${roleCategoryId.slice(0, 8)}`;
+  await sql`
+    insert into role_categories (id, department_id, key, label)
+    values (${roleCategoryId}, ${departmentId}, ${roleCategoryKey}, 'Test Role')
+  `;
+  return {
+    engineId,
+    engineKey,
+    departmentId,
+    departmentKey,
+    roleCategoryId,
+    roleCategoryKey,
+  };
 }
 
 export interface AnswerValues {

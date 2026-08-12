@@ -6,6 +6,7 @@
  * Database triggers write duplicate backstop events; the read API de-duplicates
  * on display (02 §12).
  */
+import type postgres from 'postgres';
 import type { UserRoleKey } from '@sdb/contracts';
 import type { Tx } from '../lib/db.js';
 
@@ -15,6 +16,7 @@ export type EventEntityType =
   | 'client'
   | 'candidate'
   | 'question'
+  | 'question_category'
   | 'user';
 
 export interface EmitEventParams {
@@ -44,7 +46,13 @@ export async function emitEvent(
       ${params.actorRole},
       ${params.fromValue ?? null},
       ${params.toValue ?? null},
-      ${JSON.stringify(params.metadata ?? {})}::jsonb
+      ${
+        // sql.json, never a stringified parameter: postgres.js JSON-encodes
+        // string parameters bound to jsonb, so `${JSON.stringify(x)}::jsonb`
+        // double-encodes and stores a jsonb *string scalar* instead of the
+        // object.
+        tx.json((params.metadata ?? {}) as postgres.JSONValue)
+      }
     )
     returning id
   `;

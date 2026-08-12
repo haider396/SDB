@@ -19,10 +19,9 @@ import {
 } from 'fastify-type-provider-zod';
 import { createRemoteJWKSet, type JWTVerifyGetKey } from 'jose';
 import type { OpenAPIV3 } from 'openapi-types';
-import { makeApiError } from '@sdb/contracts';
 import { createDb, type Db } from './lib/db.js';
 import type { Env } from './lib/env.js';
-import { registerErrorHandling } from './lib/errors.js';
+import { ApiError, registerErrorHandling } from './lib/errors.js';
 import { createLogger, type Logger } from './lib/logger.js';
 import { buildOpenApiDocument } from './lib/openapi.js';
 import {
@@ -38,7 +37,13 @@ import {
 } from './middleware/load-context.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+import { intakeRoutes } from './routes/intake.js';
+import { questionRoutes } from './routes/questions.js';
+import { requisitionRoutes } from './routes/requisitions.js';
 import { createAuthService } from './services/auth.service.js';
+import { createIntakeFormService } from './services/intake-form.service.js';
+import { createIntakeSubmissionService } from './services/intake-submission.service.js';
+import { createQuestionsService } from './services/questions.service.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as {
   version: string;
@@ -56,7 +61,11 @@ export interface RegisteredRoute {
   url: string;
   /** Route-level config, e.g. `{ permission: 'question.manage' }`. */
   config: Record<string, unknown>;
-  /** preHandler guards as registered, for cross-checking declared permissions. */
+  /**
+   * preValidation + preHandler guards as registered, for cross-checking
+   * declared permissions. Authorization guards attach at preValidation so a
+   * denied caller receives 403 before body validation can 400 (04 §1.3).
+   */
   preHandlers: readonly unknown[];
 }
 
@@ -70,6 +79,11 @@ export interface BuildAppOptions {
   contextLoader?: ContextLoader;
   supabaseAdmin?: SupabaseAdminPort;
   logger?: Logger;
+  /**
+   * Injectable clock (epoch ms) for the intake-form cache TTL — integration
+   * tests control it directly instead of mocking global timers (AC-Q-01).
+   */
+  now?: () => number;
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
@@ -96,13 +110,12 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const routeTable: RegisteredRoute[] = [];
   app.addHook('onRoute', (route) => {
     const methods = Array.isArray(route.method) ? route.method : [route.method];
-    const preHandler = route.preHandler;
-    const preHandlers =
-      preHandler === undefined
-        ? []
-        : Array.isArray(preHandler)
-          ? [...preHandler]
-          : [preHandler];
+    const collect = (hooks: unknown): unknown[] =>
+      hooks === undefined ? [] : Array.isArray(hooks) ? [...hooks] : [hooks];
+    const preHandlers = [
+      ...collect(route.preValidation),
+      ...collect(route.preHandler),
+    ];
     for (const method of methods) {
       routeTable.push({
         method,
@@ -159,11 +172,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     timeWindow: 60_000,
     max: (request) => (request.authUserId !== null ? 600 : 60),
     keyGenerator: (request) => request.authUserId ?? request.ip,
-    errorResponseBuilder: (request, context) =>
-      makeApiError(
+    // The builder's return value is THROWN by the plugin, so it must be an
+    // Error carrying a statusCode — ApiError(429) flows through the global
+    // error handler into the standard envelope with Retry-After intact.
+    errorResponseBuilder: (_request, context) =>
+      new ApiError(
         'RATE_LIMITED',
         `Rate limit exceeded. Retry in ${context.after}.`,
-        request.id,
       ),
   });
 
@@ -175,6 +190,22 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     invalidateUserContext: cachedLoader.invalidate,
   });
 
+  const intakeFormService = createIntakeFormService({
+    db,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+  });
+  const questionsService = createQuestionsService({
+    db,
+    invalidateFormCache: () => intakeFormService.clearCache(),
+  });
+  const intakeSubmissionService = createIntakeSubmissionService({
+    db,
+    formService: intakeFormService,
+    logger,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+  });
+  app.decorate('clearIntakeFormCache', () => intakeFormService.clearCache());
+
   // --- routes ----------------------------------------------------------------
   await app.register(healthRoutes, {
     prefix: '/api/v1',
@@ -185,6 +216,21 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(healthRoutes, { db, version: pkg.version });
 
   await app.register(authRoutes, { prefix: '/api/v1', authService });
+
+  await app.register(intakeRoutes, {
+    prefix: '/api/v1',
+    intakeFormService,
+    intakeSubmissionService,
+  });
+  await app.register(questionRoutes, {
+    prefix: '/api/v1',
+    questionsService,
+    intakeFormService,
+  });
+  await app.register(requisitionRoutes, {
+    prefix: '/api/v1',
+    intakeSubmissionService,
+  });
 
   // --- OpenAPI (04 §15) ------------------------------------------------------
   const openApiDocument = buildOpenApiDocument(pkg.version);

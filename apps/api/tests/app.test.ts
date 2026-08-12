@@ -139,9 +139,58 @@ describe('app', () => {
         '/api/v1/auth/logout',
         '/api/v1/health',
         '/api/v1/health/ready',
+        '/api/v1/intake-form',
+        '/api/v1/taxonomy/public',
+        '/api/v1/intake-submissions',
+        '/api/v1/requisitions',
+        '/api/v1/questions',
+        '/api/v1/questions/preview',
+        '/api/v1/questions/reorder',
+        '/api/v1/questions/{id}',
+        '/api/v1/questions/{id}/activate',
+        '/api/v1/questions/{id}/deactivate',
+        '/api/v1/questions/{id}/duplicate',
+        '/api/v1/questions/{id}/options',
+        '/api/v1/questions/{id}/options/{optionId}',
+        '/api/v1/questions/{id}/options/{optionId}/deactivate',
+        '/api/v1/question-categories',
+        '/api/v1/question-categories/reorder',
+        '/api/v1/question-categories/{id}',
+        '/api/v1/question-categories/{id}/activate',
+        '/api/v1/question-categories/{id}/deactivate',
       ]) {
         expect(doc.paths[path], `missing ${path}`).toBeDefined();
       }
+    });
+
+    it('route-coverage: every registered API route appears in the document (AC-NFR-07)', async () => {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/openapi.json' });
+      const doc = res.json();
+      const documented = new Set(
+        Object.entries(doc.paths as Record<string, Record<string, unknown>>)
+          .flatMap(([path, methods]) =>
+            Object.keys(methods).map((method) => `${method.toUpperCase()} ${path}`),
+          ),
+      );
+      // Infrastructure endpoints excluded from the contract document.
+      const EXCLUDED = new Set(['GET /health', 'GET /health/ready']);
+      const undocumented = app.routeTable
+        .filter(
+          (route) =>
+            route.method !== 'HEAD' &&
+            route.method !== 'OPTIONS' &&
+            !route.url.startsWith('/api/v1/docs') &&
+            route.url !== '/api/v1/openapi.json' &&
+            route.url !== '*' &&
+            !route.url.startsWith('/api/v1/_test') &&
+            !EXCLUDED.has(`${route.method} ${route.url}`),
+        )
+        .map(
+          (route) =>
+            `${route.method} ${route.url.replaceAll(/:([^/]+)/g, '{$1}')}`,
+        )
+        .filter((key) => !documented.has(key));
+      expect(undocumented, 'routes missing from openapi.json').toEqual([]);
     });
 
     it('serves Swagger UI at /api/v1/docs outside production', async () => {

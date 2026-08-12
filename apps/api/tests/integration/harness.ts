@@ -114,6 +114,10 @@ export interface TestApp {
 export async function buildTestApp(
   db: TestDb,
   registerExtra?: (app: FastifyInstance) => void | Promise<void>,
+  opts: {
+    /** Injectable clock for the intake-form cache TTL (AC-Q-01). */
+    now?: () => number;
+  } = {},
 ): Promise<TestApp> {
   const auth = await createTestAuth();
   const app = await buildApp({
@@ -123,6 +127,7 @@ export async function buildTestApp(
     db: db.sql,
     jwtKeySource: auth.jwks,
     supabaseAdmin: stubSupabaseAdmin(),
+    ...(opts.now !== undefined ? { now: opts.now } : {}),
   });
   if (registerExtra !== undefined) {
     await registerExtra(app);

@@ -34,6 +34,8 @@ declare module 'fastify' {
     loadContext: LoadContextHook;
     /** loadContext cache invalidation hook, keyed by user id. */
     invalidateUserContext: (userId: string) => void;
+    /** Intake-form cache invalidation (tests + question-config writes). */
+    clearIntakeFormCache: () => void;
     /** Inventory of every registered route+method (see RegisteredRoute). */
     routeTable: readonly RegisteredRoute[];
   }

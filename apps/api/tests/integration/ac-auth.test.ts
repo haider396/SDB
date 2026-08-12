@@ -65,6 +65,10 @@ const PUBLIC_URLS = new Set([
   '/api/v1/health/ready',
   '/api/v1/openapi.json',
   '/api/v1/auth/accept-invitation',
+  // Public intake surface (04 §3) — rate-limited, never authenticated.
+  '/api/v1/intake-form',
+  '/api/v1/taxonomy/public',
+  '/api/v1/intake-submissions',
 ]);
 function isPublic(url: string): boolean {
   return PUBLIC_URLS.has(url) || url.startsWith('/api/v1/docs');

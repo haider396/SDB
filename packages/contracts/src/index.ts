@@ -6,5 +6,7 @@ export * from './envelopes.js';
 export * from './validation-rules.js';
 export * from './mapped-questions.js';
 export * from './intake.js';
+export * from './questions.js';
+export * from './taxonomy.js';
 export * from './auth.js';
 export * from './nfr.js';
