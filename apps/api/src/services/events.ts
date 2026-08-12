@@ -17,7 +17,16 @@ export type EventEntityType =
   | 'candidate'
   | 'question'
   | 'question_category'
-  | 'user';
+  | 'user'
+  // Taxonomy management (04 §5) — per-entity types, one per managed table.
+  | 'engine'
+  | 'department'
+  | 'role_category'
+  | 'tool'
+  | 'skill'
+  | 'industry'
+  | 'disqualifier'
+  | 'rejection_reason';
 
 export interface EmitEventParams {
   entityType: EventEntityType;

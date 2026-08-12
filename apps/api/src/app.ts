@@ -53,6 +53,7 @@ import { placementRoutes } from './routes/placements.js';
 import { questionRoutes } from './routes/questions.js';
 import { reportRoutes } from './routes/reports.js';
 import { requisitionRoutes } from './routes/requisitions.js';
+import { taxonomyRoutes } from './routes/taxonomy.js';
 import { createAssignmentsService } from './services/assignments.service.js';
 import { createAttentionQueueService } from './services/attention-queue.service.js';
 import { createAuthService } from './services/auth.service.js';
@@ -71,6 +72,7 @@ import { createPlacementsService } from './services/placements.service.js';
 import { createQuestionsService } from './services/questions.service.js';
 import { createReportingService } from './services/reporting.service.js';
 import { createRequisitionsService } from './services/requisitions.service.js';
+import { createTaxonomyAdminService } from './services/taxonomy-admin.service.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as {
   version: string;
@@ -238,6 +240,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   app.decorate('clearIntakeFormCache', () => intakeFormService.clearCache());
 
+  // Engine/department/role-category writes change the public taxonomy cascade,
+  // so they invalidate the same cache the intake form service serves from.
+  const taxonomyAdminService = createTaxonomyAdminService({
+    db,
+    invalidatePublicTaxonomyCache: () => intakeFormService.clearCache(),
+  });
+
   const clientsService = createClientsService({
     db,
     supabaseAdmin,
@@ -291,6 +300,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     prefix: '/api/v1',
     intakeSubmissionService,
     requisitionsService,
+  });
+  await app.register(taxonomyRoutes, {
+    prefix: '/api/v1',
+    taxonomyAdminService,
   });
   await app.register(clientRoutes, {
     prefix: '/api/v1',

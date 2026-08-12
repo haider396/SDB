@@ -10,6 +10,7 @@ export * from './questions.js';
 export * from './clients.js';
 export * from './requisitions.js';
 export * from './taxonomy.js';
+export * from './taxonomy-admin.js';
 export * from './candidates.js';
 export * from './assignments.js';
 export * from './interviews.js';

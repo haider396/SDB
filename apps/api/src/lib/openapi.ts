@@ -126,6 +126,43 @@ import {
   InterviewEnvelopeSchema,
 } from '../schemas/interviews.js';
 import {
+  CreateDepartmentBodySchema,
+  CreateDisqualifierBodySchema,
+  CreateIndustryBodySchema,
+  CreateRejectionReasonBodySchema,
+  CreateRoleCategoryBodySchema,
+  CreateSkillBodySchema,
+  CreateToolBodySchema,
+  ListDepartmentsQuerySchema,
+  ListDisqualifiersQuerySchema,
+  ListReferenceDataQuerySchema,
+  ListRejectionReasonsQuerySchema,
+  ListRoleCategoriesQuerySchema,
+  UpdateDepartmentBodySchema,
+  UpdateDisqualifierBodySchema,
+  UpdateEngineBodySchema,
+  UpdateRejectionReasonBodySchema,
+  UpdateRoleCategoryBodySchema,
+} from '@sdb/contracts';
+import {
+  DepartmentCollectionSchema,
+  DepartmentEnvelopeSchema,
+  DisqualifierCollectionSchema,
+  DisqualifierEnvelopeSchema,
+  EngineCollectionSchema,
+  EngineEnvelopeSchema,
+  IndustryCollectionSchema,
+  IndustryEnvelopeSchema,
+  RejectionReasonCollectionSchema,
+  RejectionReasonEnvelopeSchema,
+  RoleCategoryCollectionSchema,
+  RoleCategoryEnvelopeSchema,
+  TaxonomySkillCollectionSchema,
+  TaxonomySkillEnvelopeSchema,
+  TaxonomyToolCollectionSchema,
+  TaxonomyToolEnvelopeSchema,
+} from '../schemas/taxonomy-admin.js';
+import {
   AdminStatsEnvelopeSchema,
   AttentionQueueEnvelopeSchema,
   ClientDashboardEnvelopeSchema,
@@ -865,6 +902,325 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
     responses: {
       200: ok('Deactivated', CategoryEnvelopeSchema),
       401: errorResponse('Unauthenticated'),
+    },
+  });
+
+  // --- taxonomy management (04 §5) ------------------------------------------
+  // settings.manage for writes, requisition.view for reads. Engines are a
+  // fixed set of five — no POST/DELETE path exists for them.
+  const taxonomyIdParams = { params: z.object({ id: z.string().uuid() }) };
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/engines',
+    summary: 'List the five fixed engines (5E model)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListReferenceDataQuerySchema },
+    responses: {
+      200: ok('Engines', EngineCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/engines/{id}',
+    summary:
+      'Edit an engine — only label, isStaffed, sortOrder; any other field is rejected (engines cannot be created or deleted)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { ...taxonomyIdParams, ...jsonBody(UpdateEngineBodySchema) },
+    responses: {
+      200: ok('Updated', EngineEnvelopeSchema),
+      400: errorResponse('Field outside label/isStaffed/sortOrder'),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      404: errorResponse('Not found'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/departments',
+    summary: 'List departments, filterable by engine and active state',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListDepartmentsQuerySchema },
+    responses: {
+      200: ok('Departments', DepartmentCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/departments',
+    summary: 'Create a department under an engine (key auto-slugged from the label)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: jsonBody(CreateDepartmentBodySchema),
+    responses: {
+      201: ok('Created', DepartmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      404: errorResponse('Engine not found'),
+      422: errorResponse('Duplicate key within the engine'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/departments/{id}',
+    summary: 'Edit a department (key immutable; isActive: true reactivates)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { ...taxonomyIdParams, ...jsonBody(UpdateDepartmentBodySchema) },
+    responses: {
+      200: ok('Updated', DepartmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      422: errorResponse('Key is immutable after creation'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/departments/{id}/deactivate',
+    summary: 'Set is_active = false (no archived_at on taxonomy tables)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: taxonomyIdParams,
+    responses: {
+      200: ok('Deactivated', DepartmentEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/role-categories',
+    summary: 'List role categories, filterable by department, engine, active state',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListRoleCategoriesQuerySchema },
+    responses: {
+      200: ok('Role categories', RoleCategoryCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/role-categories',
+    summary:
+      'Create a role category under a department (key auto-slugged from the label)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: jsonBody(CreateRoleCategoryBodySchema),
+    responses: {
+      201: ok('Created', RoleCategoryEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      404: errorResponse('Department not found'),
+      422: errorResponse('Duplicate key within the department'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/role-categories/{id}',
+    summary: 'Edit a role category (key immutable; isActive: true reactivates)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { ...taxonomyIdParams, ...jsonBody(UpdateRoleCategoryBodySchema) },
+    responses: {
+      200: ok('Updated', RoleCategoryEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      422: errorResponse('Key is immutable after creation'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/role-categories/{id}/deactivate',
+    summary: 'Set is_active = false; the public taxonomy cache is invalidated',
+    tags: ['taxonomy'],
+    security: secured,
+    request: taxonomyIdParams,
+    responses: {
+      200: ok('Deactivated', RoleCategoryEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/tools',
+    summary: 'List tools (full list — small reference data, no pagination)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListReferenceDataQuerySchema },
+    responses: {
+      200: ok('Tools', TaxonomyToolCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/tools',
+    summary: 'Add a tool (unique name)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: jsonBody(CreateToolBodySchema),
+    responses: {
+      201: ok('Created', TaxonomyToolEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      422: errorResponse('Duplicate name'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/skills',
+    summary: 'List skills (full list — small reference data, no pagination)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListReferenceDataQuerySchema },
+    responses: {
+      200: ok('Skills', TaxonomySkillCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/skills',
+    summary: 'Add a skill (unique name)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: jsonBody(CreateSkillBodySchema),
+    responses: {
+      201: ok('Created', TaxonomySkillEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      422: errorResponse('Duplicate name'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/industries',
+    summary: 'List industries (full list — small reference data, no pagination)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListReferenceDataQuerySchema },
+    responses: {
+      200: ok('Industries', IndustryCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/industries',
+    summary: 'Add an industry (unique name)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: jsonBody(CreateIndustryBodySchema),
+    responses: {
+      201: ok('Created', IndustryEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      422: errorResponse('Duplicate name'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/disqualifiers',
+    summary:
+      'List disqualifiers; roleCategoryId filter returns that scope plus global rows',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListDisqualifiersQuerySchema },
+    responses: {
+      200: ok('Disqualifiers', DisqualifierCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/disqualifiers',
+    summary: 'Create a disqualifier (key auto-slugged from the label)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: jsonBody(CreateDisqualifierBodySchema),
+    responses: {
+      201: ok('Created', DisqualifierEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      422: errorResponse('Duplicate key'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/disqualifiers/{id}',
+    summary: 'Edit a disqualifier (key immutable after creation)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { ...taxonomyIdParams, ...jsonBody(UpdateDisqualifierBodySchema) },
+    responses: {
+      200: ok('Updated', DisqualifierEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      422: errorResponse('Key is immutable after creation'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/rejection-reasons',
+    summary: 'List rejection reasons, filterable by actor (client/admin)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: { query: ListRejectionReasonsQuerySchema },
+    responses: {
+      200: ok('Rejection reasons', RejectionReasonCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/rejection-reasons',
+    summary:
+      'Create a rejection reason — actor (client/admin) required; key auto-slugged and immutable thereafter',
+    tags: ['taxonomy'],
+    security: secured,
+    request: jsonBody(CreateRejectionReasonBodySchema),
+    responses: {
+      201: ok('Created', RejectionReasonEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      422: errorResponse('Duplicate key'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/rejection-reasons/{id}',
+    summary: 'Edit a rejection reason (key immutable after creation)',
+    tags: ['taxonomy'],
+    security: secured,
+    request: {
+      ...taxonomyIdParams,
+      ...jsonBody(UpdateRejectionReasonBodySchema),
+    },
+    responses: {
+      200: ok('Updated', RejectionReasonEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      422: errorResponse('Key is immutable after creation'),
     },
   });
 
