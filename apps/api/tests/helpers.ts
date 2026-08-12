@@ -106,19 +106,33 @@ export function makeCtx(
 }
 
 export function stubSupabaseAdmin(): SupabaseAdminPort & {
-  calls: { updateUserPassword: [string, string][]; signOutUser: string[] };
+  calls: {
+    createUser: { email: string; fullName: string }[];
+    updateUserPassword: [string, string][];
+    signOutUser: string[];
+    revokeUserSessions: string[];
+  };
 } {
   const calls = {
+    createUser: [] as { email: string; fullName: string }[],
     updateUserPassword: [] as [string, string][],
     signOutUser: [] as string[],
+    revokeUserSessions: [] as string[],
   };
   return {
     calls,
+    async createUser(input) {
+      calls.createUser.push(input);
+      return { id: randomUUID() };
+    },
     async updateUserPassword(userId, password) {
       calls.updateUserPassword.push([userId, password]);
     },
     async signOutUser(accessToken) {
       calls.signOutUser.push(accessToken);
+    },
+    async revokeUserSessions(userId) {
+      calls.revokeUserSessions.push(userId);
     },
   };
 }

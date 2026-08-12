@@ -88,12 +88,31 @@ export async function insertClientMember(
 
 export async function insertRequisition(
   sql: Queryable,
-  opts: { id?: string; clientId: string },
+  opts: {
+    id?: string;
+    clientId: string;
+    status?: string;
+    principalUserId?: string;
+    roleCategoryId?: string;
+    budget?: { min: number; max: number; unit: string; currency?: string };
+    serviceTier?: string;
+  },
 ): Promise<string> {
   const id = opts.id ?? randomUUID();
   await sql`
-    insert into requisitions (id, reference, client_id)
-    values (${id}, ${uniqueRef('REQ-IT')}, ${opts.clientId})
+    insert into requisitions (
+      id, reference, client_id, status, principal_user_id, role_category_id,
+      budget_min, budget_max, budget_unit, budget_currency, service_tier
+    )
+    values (
+      ${id}, ${uniqueRef('REQ-IT')}, ${opts.clientId},
+      ${opts.status ?? 'submitted'}::requisition_status,
+      ${opts.principalUserId ?? null}, ${opts.roleCategoryId ?? null},
+      ${opts.budget?.min ?? null}, ${opts.budget?.max ?? null},
+      ${opts.budget?.unit ?? null}::rate_unit,
+      ${opts.budget?.currency ?? 'USD'},
+      ${opts.serviceTier ?? null}::service_tier
+    )
   `;
   return id;
 }

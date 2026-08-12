@@ -19,19 +19,44 @@ extendZodWithOpenApi(z);
 import {
   AcceptInvitationBodySchema,
   ApiErrorSchema,
+  ConfirmPaymentBodySchema,
+  CreateClientBodySchema,
   CreateQuestionBodySchema,
   CreateQuestionCategoryBodySchema,
   CreateQuestionOptionBodySchema,
+  GrantAccessBodySchema,
   InPortalRequisitionBodySchema,
   IntakeSubmissionSchema,
+  InviteMemberBodySchema,
+  ListClientsQuerySchema,
   ListQuestionCategoriesQuerySchema,
   ListQuestionsQuerySchema,
+  ListRequisitionsQuerySchema,
+  PrincipalRequestChangesBodySchema,
   ReorderQuestionCategoriesBodySchema,
   ReorderQuestionsBodySchema,
+  TransitionRequisitionBodySchema,
+  UpdateClientBodySchema,
+  UpdateMemberBodySchema,
   UpdateQuestionBodySchema,
   UpdateQuestionCategoryBodySchema,
   UpdateQuestionOptionBodySchema,
+  UpdateRequisitionAnswersBodySchema,
+  UpdateRequisitionBodySchema,
 } from '@sdb/contracts';
+import {
+  ClientCollectionSchema,
+  ClientEnvelopeSchema,
+  MemberCollectionSchema,
+  MemberEnvelopeSchema,
+  RevokeAccessEnvelopeSchema,
+} from '../schemas/clients.js';
+import {
+  EventCollectionSchema,
+  RequisitionCollectionSchema,
+  RequisitionDetailEnvelopeSchema,
+  RequisitionEnvelopeSchema,
+} from '../schemas/requisitions.js';
 import {
   AcceptInvitationResponseSchema,
   AuthMeEnvelopeSchema,
@@ -218,6 +243,299 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
       401: errorResponse('Unauthenticated'),
       403: errorResponse('Missing requisition.create'),
       422: errorResponse('Validation pipeline failure'),
+    },
+  });
+
+  // --- requisition lifecycle (04 §7) ---------------------------------------
+  const securedReq = [{ [bearerAuth.name]: [] }];
+  const requisitionIdParams = { params: z.object({ id: z.string().uuid() }) };
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/requisitions',
+    summary:
+      'List requisitions — admin: all with filters; client: implicitly scoped',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: { query: ListRequisitionsQuerySchema },
+    responses: {
+      200: ok('Requisitions', RequisitionCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/requisitions/{id}',
+    summary:
+      'Requisition detail with answers, snapshots, taxonomy labels; commercials gated by requisition.view_commercials',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Requisition detail', RequisitionDetailEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found (including cross-tenant addressing)'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/requisitions/{id}',
+    summary: 'Admin update: briefMarkdown, budget, headcount, principalUserId',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: { ...requisitionIdParams, ...jsonBody(UpdateRequisitionBodySchema) },
+    responses: {
+      200: ok('Updated', RequisitionDetailEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing requisition.update'),
+      422: errorResponse('VALIDATION_FAILED (budget unit rule, principal membership)'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/requisitions/{id}/answers',
+    summary: 'Upsert answers post-submission via the intake validation pipeline',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: {
+      ...requisitionIdParams,
+      ...jsonBody(UpdateRequisitionAnswersBodySchema),
+    },
+    responses: {
+      200: ok('Answers upserted', RequisitionDetailEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse(
+        'UNKNOWN_QUESTION | REQUIRED_ANSWER_MISSING | VALUE_TYPE_MISMATCH | VALIDATION_FAILED | INVALID_OPTION | CONDITION_NOT_MET',
+      ),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/requisitions/{id}/transition',
+    summary: 'Status transition validated against the 01 §4 state machine',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: {
+      ...requisitionIdParams,
+      ...jsonBody(TransitionRequisitionBodySchema),
+    },
+    responses: {
+      200: ok('Transitioned', RequisitionEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      409: errorResponse('INVALID_TRANSITION with { from, to } details'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/requisitions/{id}/request-principal-approval',
+    summary: 'Move to pending_principal_approval and notify the principal',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Approval requested', RequisitionEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      409: errorResponse('INVALID_TRANSITION'),
+      422: errorResponse('No principal designated'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/requisitions/{id}/principal-approve',
+    summary:
+      'Principal approves the brief — caller must be principalUserId; moves to sourcing',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Approved', RequisitionEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Caller is not the designated principal'),
+      409: errorResponse('INVALID_TRANSITION'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/requisitions/{id}/principal-request-changes',
+    summary: 'Principal requests changes with a required comment',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: {
+      ...requisitionIdParams,
+      ...jsonBody(PrincipalRequestChangesBodySchema),
+    },
+    responses: {
+      200: ok('Changes requested', RequisitionEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Caller is not the designated principal'),
+      409: errorResponse('INVALID_TRANSITION'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/requisitions/{id}/events',
+    summary: 'Chronological event log, app+trigger pairs de-duplicated (06 §2.3)',
+    tags: ['requisitions'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Events', EventCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing event.view'),
+    },
+  });
+
+  // --- clients (04 §6) ------------------------------------------------------
+  const memberParams = {
+    params: z.object({ id: z.string().uuid(), userId: z.string().uuid() }),
+  };
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/clients',
+    summary: 'List clients (admin); a client-scoped caller sees only their own',
+    tags: ['clients'],
+    security: securedReq,
+    request: { query: ListClientsQuerySchema },
+    responses: {
+      200: ok('Clients', ClientCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing client.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/clients',
+    summary: 'Create a client manually, outside the intake funnel',
+    tags: ['clients'],
+    security: securedReq,
+    request: jsonBody(CreateClientBodySchema),
+    responses: {
+      201: ok('Created', ClientEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing client.create'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/clients/{id}',
+    summary: 'Client detail; client users read only their own (404 otherwise)',
+    tags: ['clients'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Client', ClientEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/clients/{id}',
+    summary: 'Update client fields',
+    tags: ['clients'],
+    security: securedReq,
+    request: { ...requisitionIdParams, ...jsonBody(UpdateClientBodySchema) },
+    responses: {
+      200: ok('Updated', ClientEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing client.update'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/clients/{id}/confirm-payment',
+    summary: 'Record manual payment confirmation and service tier (J2)',
+    tags: ['clients'],
+    security: securedReq,
+    request: { ...requisitionIdParams, ...jsonBody(ConfirmPaymentBodySchema) },
+    responses: {
+      200: ok('Payment confirmed', ClientEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing client.grant_access'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/clients/{id}/grant-access',
+    summary:
+      'Grant portal access: one transaction creating the user, membership, role, event, and queued invitation',
+    tags: ['clients'],
+    security: securedReq,
+    request: { ...requisitionIdParams, ...jsonBody(GrantAccessBodySchema) },
+    responses: {
+      200: ok('Access granted', ClientEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse('PAYMENT_NOT_CONFIRMED'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/clients/{id}/revoke-access',
+    summary:
+      'Revoke portal access: clears portal_access_enabled_at, deactivates member users, revokes sessions',
+    tags: ['clients'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Access revoked', RevokeAccessEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/clients/{id}/members',
+    summary: 'List client members',
+    tags: ['clients'],
+    security: securedReq,
+    request: requisitionIdParams,
+    responses: {
+      200: ok('Members', MemberCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/clients/{id}/members/invite',
+    summary:
+      'Invite a member — a client_admin may invite only into their own client',
+    tags: ['clients'],
+    security: securedReq,
+    request: { ...requisitionIdParams, ...jsonBody(InviteMemberBodySchema) },
+    responses: {
+      201: ok('Invited', MemberEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('WRONG_TENANT — inviting into another client'),
+      422: errorResponse('Already a member | one-principal violation'),
+    },
+  });
+  registry.registerPath({
+    method: 'delete',
+    path: '/api/v1/clients/{id}/members/{userId}',
+    summary: 'Soft-remove a member; the last client_admin cannot be removed',
+    tags: ['clients'],
+    security: securedReq,
+    request: memberParams,
+    responses: {
+      204: { description: 'Removed' },
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse('Last client_admin cannot be removed'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/clients/{id}/members/{userId}',
+    summary: 'Change a member role or principal flag',
+    tags: ['clients'],
+    security: securedReq,
+    request: { ...memberParams, ...jsonBody(UpdateMemberBodySchema) },
+    responses: {
+      200: ok('Updated', MemberEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse('Last client_admin cannot be demoted | one-principal violation'),
     },
   });
 

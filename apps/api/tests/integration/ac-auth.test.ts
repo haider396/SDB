@@ -337,11 +337,109 @@ describe('AC-AUTH-05 — cross-tenant requests never return data', () => {
   });
 });
 
+describe('AC-AUTH-06 — a client_admin invites only into their own client', () => {
+  it('inviting into the OWN client succeeds', async () => {
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/clients/${clientA}/members/invite`,
+      headers: await harness.bearer(userByRole.get('client_admin')!),
+      payload: {
+        email: `own-invite-${randomUUID().slice(0, 8)}@example.com`,
+        fullName: 'Invited Colleague',
+        role: 'client_user',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const { data } = res.json<{ data: { clientId: string; role: string } }>();
+    expect(data.clientId).toBe(clientA);
+    expect(data.role).toBe('client_user');
+  });
+
+  it("inviting into ANOTHER client is 403 and writes nothing", async () => {
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/clients/${clientB}/members/invite`,
+      headers: await harness.bearer(userByRole.get('client_admin')!),
+      payload: {
+        email: `cross-invite-${randomUUID().slice(0, 8)}@example.com`,
+        fullName: 'Cross Tenant',
+        role: 'client_user',
+      },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe('WRONG_TENANT');
+    const members = await db.sql`
+      select id from client_members where client_id = ${clientB}
+    `;
+    expect(members).toHaveLength(0);
+  });
+
+  it('a client_user lacks client.invite_user entirely', async () => {
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/clients/${clientA}/members/invite`,
+      headers: await harness.bearer(userByRole.get('client_user')!),
+      payload: {
+        email: 'nope@example.com',
+        fullName: 'No Permission',
+        role: 'client_user',
+      },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe('FORBIDDEN');
+  });
+});
+
 describe('AC-AUTH-07 — last client_admin cannot be removed', () => {
-  // TODO(P2): member-removal endpoints do not exist in P0. Implement this
-  // against DELETE /api/v1/clients/:id/members/:memberId (04-API.md) when P2
-  // lands; the rule is API behaviour, not a database constraint, so there is
-  // nothing real to assert yet and faking it here would be worse than
-  // deferring it.
-  it.todo('rejects removing the last client_admin from a client (P2 endpoint)');
+  it('rejects removing — or demoting — the last client_admin, allows it once another exists', async () => {
+    const firstAdmin = userByRole.get('client_admin')!;
+    const superAdminHeaders = await harness.bearer(userByRole.get('super_admin')!);
+
+    // clientA currently has exactly one client_admin → removal is rejected.
+    const removeLast = await harness.app.inject({
+      method: 'DELETE',
+      url: `/api/v1/clients/${clientA}/members/${firstAdmin}`,
+      headers: superAdminHeaders,
+    });
+    expect(removeLast.statusCode).toBe(422);
+    expect(removeLast.json<{ error: { code: string } }>().error.code).toBe(
+      'VALIDATION_FAILED',
+    );
+
+    // Demotion is removal in disguise — also rejected.
+    const demoteLast = await harness.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/clients/${clientA}/members/${firstAdmin}`,
+      headers: superAdminHeaders,
+      payload: { role: 'client_user' },
+    });
+    expect(demoteLast.statusCode).toBe(422);
+
+    // The membership is untouched.
+    const stillThere = await db.sql<{ archived_at: Date | null }[]>`
+      select archived_at from client_members
+      where client_id = ${clientA} and user_id = ${firstAdmin}
+    `;
+    expect(stillThere[0]!.archived_at).toBeNull();
+
+    // Add a second client_admin — now removing the first is legal…
+    const secondAdmin = await insertUser(db.sql);
+    await assignRole(db.sql, secondAdmin, 'client_admin', clientA);
+    await insertClientMember(db.sql, { clientId: clientA, userId: secondAdmin });
+
+    const removeFirst = await harness.app.inject({
+      method: 'DELETE',
+      url: `/api/v1/clients/${clientA}/members/${firstAdmin}`,
+      headers: superAdminHeaders,
+    });
+    expect(removeFirst.statusCode).toBe(204);
+
+    // …and the second is now the last one again.
+    const removeSecond = await harness.app.inject({
+      method: 'DELETE',
+      url: `/api/v1/clients/${clientA}/members/${secondAdmin}`,
+      headers: superAdminHeaders,
+    });
+    expect(removeSecond.statusCode).toBe(422);
+  });
 });

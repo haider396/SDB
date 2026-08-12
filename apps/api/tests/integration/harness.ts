@@ -102,6 +102,8 @@ export async function freshDb(
 export interface TestApp {
   app: FastifyInstance;
   auth: TestAuth;
+  /** The stubbed Supabase Admin port, exposed for call assertions. */
+  supabaseAdmin: ReturnType<typeof stubSupabaseAdmin>;
   /** Bearer header for a user id. */
   bearer(userId: string): Promise<Record<string, string>>;
 }
@@ -120,13 +122,14 @@ export async function buildTestApp(
   } = {},
 ): Promise<TestApp> {
   const auth = await createTestAuth();
+  const supabaseAdmin = stubSupabaseAdmin();
   const app = await buildApp({
     // DATABASE_URL is unused when `db` is injected; the rest are dummy values
     // (GHL etc.) that nothing in P0 dials out to.
     env: testEnv({ DATABASE_URL: db.url }),
     db: db.sql,
     jwtKeySource: auth.jwks,
-    supabaseAdmin: stubSupabaseAdmin(),
+    supabaseAdmin,
     ...(opts.now !== undefined ? { now: opts.now } : {}),
   });
   if (registerExtra !== undefined) {
@@ -136,6 +139,7 @@ export async function buildTestApp(
   return {
     app,
     auth,
+    supabaseAdmin,
     async bearer(userId: string) {
       return { authorization: `Bearer ${await auth.signToken(userId)}` };
     },

@@ -36,14 +36,17 @@ import {
   type ContextLoader,
 } from './middleware/load-context.js';
 import { authRoutes } from './routes/auth.js';
+import { clientRoutes } from './routes/clients.js';
 import { healthRoutes } from './routes/health.js';
 import { intakeRoutes } from './routes/intake.js';
 import { questionRoutes } from './routes/questions.js';
 import { requisitionRoutes } from './routes/requisitions.js';
 import { createAuthService } from './services/auth.service.js';
+import { createClientsService } from './services/clients.service.js';
 import { createIntakeFormService } from './services/intake-form.service.js';
 import { createIntakeSubmissionService } from './services/intake-submission.service.js';
 import { createQuestionsService } from './services/questions.service.js';
+import { createRequisitionsService } from './services/requisitions.service.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as {
   version: string;
@@ -206,6 +209,16 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   app.decorate('clearIntakeFormCache', () => intakeFormService.clearCache());
 
+  const clientsService = createClientsService({
+    db,
+    supabaseAdmin,
+    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+    publicAppUrl: env.PUBLIC_APP_URL,
+    invalidateUserContext: cachedLoader.invalidate,
+    logger,
+  });
+  const requisitionsService = createRequisitionsService({ db, logger });
+
   // --- routes ----------------------------------------------------------------
   await app.register(healthRoutes, {
     prefix: '/api/v1',
@@ -230,6 +243,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(requisitionRoutes, {
     prefix: '/api/v1',
     intakeSubmissionService,
+    requisitionsService,
+  });
+  await app.register(clientRoutes, {
+    prefix: '/api/v1',
+    clientsService,
   });
 
   // --- OpenAPI (04 §15) ------------------------------------------------------

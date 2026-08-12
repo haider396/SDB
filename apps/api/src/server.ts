@@ -3,6 +3,7 @@
  * listing the missing keys (AC-NFR-05) before anything else starts.
  */
 import { buildApp } from './app.js';
+import { createDb } from './lib/db.js';
 import { EnvValidationError, loadEnv } from './lib/env.js';
 import { createLogger } from './lib/logger.js';
 import { registerJobs } from './jobs/index.js';
@@ -26,8 +27,13 @@ async function main(): Promise<void> {
   }
 
   const logger = createLogger(env);
-  const app = await buildApp({ env, logger });
-  const jobs = registerJobs(logger);
+  // One pool shared by the app and the cron jobs; closed via app.onClose.
+  const db = createDb(env.DATABASE_URL);
+  const app = await buildApp({ env, logger, db });
+  app.addHook('onClose', async () => {
+    await db.end({ timeout: 5 });
+  });
+  const jobs = registerJobs({ logger, db });
 
   const shutdown = (signal: string): void => {
     app.log.info({ signal }, 'shutting down');

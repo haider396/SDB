@@ -165,7 +165,7 @@ function isQuestionVisible(
 // Validation pipeline (03 §3.3, in order, fail fast)
 // ---------------------------------------------------------------------------
 
-interface PreparedAnswer {
+export interface PreparedAnswer {
   question: FormQuestionRecord;
   valueText: string | null;
   valueNumber: number | null;
@@ -506,7 +506,7 @@ export function validateSubmission(
 // Snapshot (03 §1.4)
 // ---------------------------------------------------------------------------
 
-function buildSnapshot(
+export function buildSnapshot(
   question: FormQuestionRecord,
   capturedAt: string,
 ): Record<string, unknown> {

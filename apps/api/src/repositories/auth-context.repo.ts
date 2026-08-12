@@ -43,6 +43,7 @@ export async function getClientIdsForUser(
     select client_id
     from client_members
     where user_id = ${userId}
+      and archived_at is null
     order by created_at asc
   `;
   return rows.map((row) => row.client_id);
@@ -51,7 +52,9 @@ export async function getClientIdsForUser(
 /**
  * Single-use invitation acceptance: only flips `accepted_at` when it is still
  * null, so a replayed token affects zero rows and the service rejects it.
- * Returns the client_members id, or null when no unaccepted membership matched.
+ * `archived_at is null` additionally invalidates invitations expired by the
+ * expire-stale-invitations job (06 §5, AC-CL-05) and removed members.
+ * Returns the client_members id, or null when no acceptable membership matched.
  */
 export async function markInvitationAccepted(
   sql: Queryable,
@@ -64,6 +67,7 @@ export async function markInvitationAccepted(
     where client_id = ${clientId}
       and user_id = ${userId}
       and accepted_at is null
+      and archived_at is null
     returning id
   `;
   return rows[0]?.id ?? null;
