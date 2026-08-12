@@ -3,7 +3,7 @@
  * @sdb/contracts; these are display-only strings matching the StatusBadge
  * wording (components/patterns/status-badge.tsx).
  */
-import type { AssignmentStage } from "@sdb/contracts";
+import type { AssignmentStage, InterviewOutcome } from "@sdb/contracts";
 
 export const STAGE_LABELS: Record<AssignmentStage, string> = {
   sourced: "Sourced",
@@ -19,4 +19,13 @@ export const STAGE_LABELS: Record<AssignmentStage, string> = {
   rejected_by_client: "Rejected by client",
   withdrawn: "Withdrawn",
   closed_not_selected: "Not selected",
+};
+
+export const OUTCOME_LABELS: Record<InterviewOutcome, string> = {
+  pending: "Pending",
+  passed: "Passed",
+  failed: "Failed",
+  no_show: "No-show",
+  rescheduled: "Rescheduled",
+  cancelled: "Cancelled",
 };

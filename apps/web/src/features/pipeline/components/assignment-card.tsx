@@ -12,12 +12,13 @@
  * tooltip so admins don't over-trust it.
  */
 import { useDraggable } from "@dnd-kit/core";
-import { AlertTriangle, GripVertical } from "lucide-react";
+import { AlertTriangle, CalendarClock, ExternalLink, GripVertical } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type {
   AdminAssignmentRow,
   AssignmentStage,
   CandidateDetail,
+  Interview,
 } from "@sdb/contracts";
 import { cn } from "@/lib/utils";
 import { daysSince } from "@/lib/format";
@@ -26,8 +27,10 @@ import {
   LANGUAGE_LEVEL_LABELS,
   countryFlag,
 } from "@/features/candidates/labels";
+import { latestRecordedOutcome, nextPendingInterview } from "../api";
+import { formatInViewerTimezone, viewerTimezone } from "../interview-time";
 import { menuAdvanceTargets } from "../stage-machine";
-import { STAGE_LABELS } from "../labels";
+import { OUTCOME_LABELS, STAGE_LABELS } from "../labels";
 import { CardMenu, type CardMenuItem } from "./card-menu";
 
 export interface CardActions {
@@ -35,11 +38,16 @@ export interface CardActions {
   onAddNote: (row: AdminAssignmentRow) => void;
   onReject: (row: AdminAssignmentRow) => void;
   onPlace: (row: AdminAssignmentRow) => void;
+  onScheduleInterview: (row: AdminAssignmentRow) => void;
+  onRecordOutcome: (row: AdminAssignmentRow, interview: Interview) => void;
+  onCancelInterview: (row: AdminAssignmentRow, interview: Interview) => void;
 }
 
 export interface AssignmentCardProps {
   row: AdminAssignmentRow;
   candidate: CandidateDetail | undefined;
+  /** Hydrated for interview_scheduled / interviewed cards only. */
+  interviews?: Interview[];
   actions: CardActions;
   /** Multi-select mode is active on this card's column (vetted only). */
   isSelectable: boolean;
@@ -58,6 +66,7 @@ function initialsOf(row: AdminAssignmentRow): string {
 export function AssignmentCard({
   row,
   candidate,
+  interviews,
   actions,
   isSelectable,
   isSelected,
@@ -78,12 +87,43 @@ export function AssignmentCard({
   const consentMissing =
     row.stage === "vetted" && !row.candidate.hasConsentToShareProfile;
 
+  const pendingInterview =
+    row.stage === "interview_scheduled" ? nextPendingInterview(interviews) : null;
+  const recordedOutcome =
+    row.stage === "interviewed" ? latestRecordedOutcome(interviews) : null;
+
   const menuItems: CardMenuItem[] = [
     {
       key: "view",
       label: "View candidate",
       onSelect: () => navigate(`/admin/candidates/${row.candidateId}`),
     },
+    // The proper J7 path out of client_reviewing: an interview row, not a
+    // bare stage write, so the round + schedule are always recorded.
+    ...(row.stage === "client_reviewing"
+      ? [
+          {
+            key: "schedule-interview",
+            label: "Schedule interview…",
+            onSelect: () => actions.onScheduleInterview(row),
+          } satisfies CardMenuItem,
+        ]
+      : []),
+    ...(pendingInterview !== null
+      ? [
+          {
+            key: "record-outcome",
+            label: "Record outcome…",
+            onSelect: () => actions.onRecordOutcome(row, pendingInterview),
+          } satisfies CardMenuItem,
+          {
+            key: "cancel-interview",
+            label: "Cancel interview…",
+            destructive: true,
+            onSelect: () => actions.onCancelInterview(row, pendingInterview),
+          } satisfies CardMenuItem,
+        ]
+      : []),
     ...menuAdvanceTargets(row.stage).map(
       (target): CardMenuItem => ({
         key: `advance-${target}`,
@@ -220,6 +260,58 @@ export function AssignmentCard({
           {days}d in stage
         </span>
       </div>
+
+      {pendingInterview !== null ? (
+        <div className="mt-2 rounded-md bg-warning-subtle px-2 py-1.5 text-[11px] text-warning-text">
+          <p className="flex items-center gap-1 font-medium">
+            <CalendarClock aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            Round {pendingInterview.roundNumber}
+            {pendingInterview.scheduledAt !== null ? (
+              <time dateTime={pendingInterview.scheduledAt}>
+                {" — "}
+                {formatInViewerTimezone(pendingInterview.scheduledAt)}
+              </time>
+            ) : null}
+          </p>
+          <p className="mt-0.5">
+            Your timezone ({viewerTimezone()})
+            {pendingInterview.timezone !== null &&
+            pendingInterview.timezone !== viewerTimezone()
+              ? ` · scheduled in ${pendingInterview.timezone}`
+              : ""}
+          </p>
+          {pendingInterview.meetingUrl !== null ? (
+            <a
+              href={pendingInterview.meetingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 inline-flex items-center gap-1 font-medium underline hover:no-underline"
+            >
+              <ExternalLink aria-hidden="true" className="h-3 w-3" />
+              Join meeting
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+
+      {recordedOutcome !== null ? (
+        <div className="mt-2">
+          <span
+            className={cn(
+              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              recordedOutcome.outcome === "passed"
+                ? "bg-success-subtle text-success-text"
+                : recordedOutcome.outcome === "failed" ||
+                    recordedOutcome.outcome === "no_show"
+                  ? "bg-danger-subtle text-danger-text"
+                  : "bg-neutral-100 text-neutral-600",
+            )}
+          >
+            Round {recordedOutcome.roundNumber}:{" "}
+            {OUTCOME_LABELS[recordedOutcome.outcome]}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

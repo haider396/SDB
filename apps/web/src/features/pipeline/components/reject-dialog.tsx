@@ -1,10 +1,11 @@
 /**
- * Structured admin rejection (AC-PL-10/11): a reason from the seeded
- * admin-actor taxonomy OR free text when "Other", plus optional detail.
- * Submit maps to RejectBody: a real reasonId when the option carries one,
- * otherwise the reason label as reasonOther (see rejection-reasons.ts —
- * TODO(api-gap): no listing endpoint yet, so seeded ids are unknown).
- * The rejection actor is derived server-side from the caller — never sent.
+ * Structured admin rejection (AC-PL-10/11): a reason from the live
+ * GET /rejection-reasons taxonomy (actor=admin) OR free text when "Other",
+ * plus optional detail. Submit maps to RejectBody: the row's real
+ * `reasonId`; only when the taxonomy call failed and the seeded fallback is
+ * in use (id null — see rejection-reasons.ts) does the label go as
+ * `reasonOther` instead. The rejection actor is derived server-side from
+ * the caller — never sent.
  */
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -71,10 +72,17 @@ export function RejectDialog({ requisitionId, row, onClose }: RejectDialogProps)
     }
     setValidationError(null);
 
+    // A real row id always goes as reasonId; an "Other" choice ALSO carries
+    // the typed text as reasonOther so the report's free texts stay populated
+    // (both fields are legal together — RejectBodySchema). Only the seeded
+    // fallback (id null) sends the label as reasonOther instead.
     const body: RejectBody = {
-      ...(chosen.id !== null
-        ? { reasonId: chosen.id }
-        : { reasonOther: chosen.isOther ? otherText.trim() : chosen.label }),
+      ...(chosen.id !== null ? { reasonId: chosen.id } : {}),
+      ...(chosen.isOther
+        ? { reasonOther: otherText.trim() }
+        : chosen.id === null
+          ? { reasonOther: chosen.label }
+          : {}),
       ...(detail.trim() === "" ? {} : { detail: detail.trim() }),
     };
 

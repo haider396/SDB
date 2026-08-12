@@ -17,15 +17,25 @@ import {
   useAdvanceAssignment,
   useAssignments,
   useCandidateDetailsMap,
+  useInterviewsMap,
 } from "./api";
 import { STAGE_LABELS } from "./labels";
 import { AddCandidatesSheet } from "./components/add-candidates-sheet";
 import type { CardActions } from "./components/assignment-card";
+import {
+  CancelInterviewDialog,
+  type CancelInterviewTarget,
+} from "./components/cancel-interview-dialog";
 import { NoteDialog } from "./components/note-dialog";
+import {
+  OutcomeDialog,
+  type OutcomeDialogTarget,
+} from "./components/outcome-dialog";
 import { PipelineBoard } from "./components/pipeline-board";
 import { PlaceDialog } from "./components/place-dialog";
 import { PresentReviewSheet } from "./components/present-review-sheet";
 import { RejectDialog } from "./components/reject-dialog";
+import { ScheduleInterviewDialog } from "./components/schedule-interview-dialog";
 
 export interface PipelineTabProps {
   requisitionId: string;
@@ -42,6 +52,19 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
   );
   const candidateById = useCandidateDetailsMap(candidateIds);
 
+  // Interview hydration only where the card shows it (P6).
+  const interviewAssignmentIds = useMemo(
+    () =>
+      rows
+        .filter(
+          (row) =>
+            row.stage === "interview_scheduled" || row.stage === "interviewed",
+        )
+        .map((row) => row.id),
+    [rows],
+  );
+  const interviewsByAssignmentId = useInterviewsMap(interviewAssignmentIds);
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
@@ -55,6 +78,12 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
     null,
   );
   const [noteTarget, setNoteTarget] = useState<AdminAssignmentRow | null>(null);
+  const [scheduleTarget, setScheduleTarget] =
+    useState<AdminAssignmentRow | null>(null);
+  const [outcomeTarget, setOutcomeTarget] =
+    useState<OutcomeDialogTarget | null>(null);
+  const [cancelTarget, setCancelTarget] =
+    useState<CancelInterviewTarget | null>(null);
 
   const onAdvance = (row: AdminAssignmentRow, toStage: AssignmentStage) => {
     advance.mutate(
@@ -95,6 +124,9 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
     onAddNote: setNoteTarget,
     onReject: setRejectTarget,
     onPlace: setPlaceTarget,
+    onScheduleInterview: setScheduleTarget,
+    onRecordOutcome: (row, interview) => setOutcomeTarget({ row, interview }),
+    onCancelInterview: (row, interview) => setCancelTarget({ row, interview }),
   };
 
   const toggleSelect = (assignmentId: string) => {
@@ -187,6 +219,7 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
         <PipelineBoard
           rows={rows}
           candidateById={candidateById}
+          interviewsByAssignmentId={interviewsByAssignmentId}
           actions={actions}
           isSelectMode={isSelectMode}
           selectedIds={selectedIds}
@@ -231,6 +264,21 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
         requisitionId={requisitionId}
         row={noteTarget}
         onClose={() => setNoteTarget(null)}
+      />
+      <ScheduleInterviewDialog
+        requisitionId={requisitionId}
+        row={scheduleTarget}
+        onClose={() => setScheduleTarget(null)}
+      />
+      <OutcomeDialog
+        requisitionId={requisitionId}
+        target={outcomeTarget}
+        onClose={() => setOutcomeTarget(null)}
+      />
+      <CancelInterviewDialog
+        requisitionId={requisitionId}
+        target={cancelTarget}
+        onClose={() => setCancelTarget(null)}
       />
     </div>
   );

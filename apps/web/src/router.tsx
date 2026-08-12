@@ -26,7 +26,12 @@ import {
   RequisitionDetailPage,
   RequisitionsListPage,
 } from "@/features/requisitions";
-import { AttentionQueuePage, SettingsPage } from "@/routes/admin/index-pages";
+import {
+  AttentionQueuePage,
+  RejectionReasonsReportPage,
+  StatsPage,
+} from "@/features/admin-dashboard";
+import { SettingsPage } from "@/routes/admin/index-pages";
 import {
   ClientDashboardPage,
   ClientRequisitionDetailPage,
@@ -134,6 +139,24 @@ export const router = createBrowserRouter([
         element: (
           <RequirePermission permission="candidate.view">
             <CandidateDetailPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        // 04 §12: GET /admin/stats requires requisition.view.
+        path: "stats",
+        element: (
+          <RequirePermission permission="requisition.view">
+            <StatsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        // 04 §12: GET /reports/rejection-reasons requires event.view.
+        path: "reports/rejection-reasons",
+        element: (
+          <RequirePermission permission="event.view">
+            <RejectionReasonsReportPage />
           </RequirePermission>
         ),
       },

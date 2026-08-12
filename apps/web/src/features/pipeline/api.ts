@@ -23,6 +23,9 @@ import type {
   AssignmentStage,
   CandidateDetail,
   CreateAssignmentsBody,
+  CreateInterviewBody,
+  Interview,
+  OutcomeBody,
   Placement,
   PlaceBody,
   PresentBody,
@@ -35,6 +38,8 @@ import { requisitionKeys } from "@/features/requisitions/api";
 export const pipelineKeys = {
   assignments: (requisitionId: string) =>
     ["pipeline", "assignments", requisitionId] as const,
+  interviews: (assignmentId: string) =>
+    ["pipeline", "interviews", assignmentId] as const,
 };
 
 export function useAssignments(requisitionId: string) {
@@ -218,6 +223,137 @@ export function useRejectAssignment(requisitionId: string) {
         body,
       }),
     onSuccess: () => invalidate(),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Interviews (P6, docs/04-API.md §10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Interview hydration for cards at `interview_scheduled` / `interviewed`
+ * only — other stages have nothing to show, so their assignments are never
+ * queried. Keyed per assignment so an outcome write invalidates one list.
+ */
+export function useInterviewsMap(
+  assignmentIds: readonly string[],
+): Map<string, Interview[]> {
+  const results = useQueries({
+    queries: assignmentIds.map((assignmentId) => ({
+      queryKey: pipelineKeys.interviews(assignmentId),
+      queryFn: async () => {
+        const { data } = await apiFetchCollection<Interview>(
+          `/assignments/${assignmentId}/interviews`,
+        );
+        return { assignmentId, interviews: data };
+      },
+      staleTime: 30_000,
+    })),
+  });
+  const map = new Map<string, Interview[]>();
+  for (const result of results) {
+    if (result.data !== undefined) {
+      map.set(result.data.assignmentId, result.data.interviews);
+    }
+  }
+  return map;
+}
+
+/** The earliest still-pending interview — what the card shows and acts on. */
+export function nextPendingInterview(
+  interviews: Interview[] | undefined,
+): Interview | null {
+  const pending = (interviews ?? [])
+    .filter((interview) => interview.outcome === "pending")
+    .sort((a, b) => (a.scheduledAt ?? "").localeCompare(b.scheduledAt ?? ""));
+  return pending[0] ?? null;
+}
+
+/** The most recently recorded real outcome (not pending/cancelled). */
+export function latestRecordedOutcome(
+  interviews: Interview[] | undefined,
+): Interview | null {
+  const recorded = (interviews ?? [])
+    .filter(
+      (interview) =>
+        interview.outcome !== "pending" && interview.outcome !== "cancelled",
+    )
+    .sort((a, b) =>
+      (a.outcomeRecordedAt ?? "").localeCompare(b.outcomeRecordedAt ?? ""),
+    );
+  return recorded[recorded.length - 1] ?? null;
+}
+
+export interface CreateInterviewArgs {
+  assignmentId: string;
+  body: CreateInterviewBody;
+}
+
+/**
+ * POST /assignments/:id/interviews — THE stage gate: the assignment moves
+ * client_reviewing → interview_scheduled server-side (409 INVALID_TRANSITION
+ * from any other stage), and gated PII unlocks for the client.
+ */
+export function useCreateInterview(requisitionId: string) {
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidatePipeline(requisitionId);
+  return useMutation<Interview, unknown, CreateInterviewArgs>({
+    mutationFn: ({ assignmentId, body }) =>
+      apiFetch<Interview>(`/assignments/${assignmentId}/interviews`, {
+        method: "POST",
+        body,
+      }),
+    onSuccess: (interview) => {
+      void queryClient.invalidateQueries({
+        queryKey: pipelineKeys.interviews(interview.assignmentId),
+      });
+      invalidate();
+    },
+  });
+}
+
+export interface RecordOutcomeArgs {
+  interview: Interview;
+  body: OutcomeBody;
+}
+
+/**
+ * POST /interviews/:id/outcome. Non-`rescheduled` outcomes also advance the
+ * assignment to `interviewed` server-side; `rescheduled` keeps the stage.
+ */
+export function useRecordInterviewOutcome(requisitionId: string) {
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidatePipeline(requisitionId);
+  return useMutation<Interview, unknown, RecordOutcomeArgs>({
+    mutationFn: ({ interview, body }) =>
+      apiFetch<Interview>(`/interviews/${interview.id}/outcome`, {
+        method: "POST",
+        body,
+      }),
+    onSuccess: (interview) => {
+      void queryClient.invalidateQueries({
+        queryKey: pipelineKeys.interviews(interview.assignmentId),
+      });
+      invalidate();
+    },
+  });
+}
+
+/** POST /interviews/:id/cancel — outcome `cancelled`, stage NEVER changes. */
+export function useCancelInterview(requisitionId: string) {
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidatePipeline(requisitionId);
+  return useMutation<Interview, unknown, Interview>({
+    mutationFn: (interview) =>
+      apiFetch<Interview>(`/interviews/${interview.id}/cancel`, {
+        method: "POST",
+      }),
+    onSuccess: (interview) => {
+      void queryClient.invalidateQueries({
+        queryKey: pipelineKeys.interviews(interview.assignmentId),
+      });
+      invalidate();
+    },
   });
 }
 

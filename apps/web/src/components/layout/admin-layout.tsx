@@ -3,9 +3,11 @@
  * max 1440px with 32px gutters. Admin and client trees never share a layout.
  */
 import {
+  BarChart3,
   BellRing,
   Building2,
   ClipboardList,
+  FileText,
   ListChecks,
   Settings,
   Users,
@@ -20,6 +22,8 @@ const ADMIN_NAV: SidebarNavItem[] = [
   { label: "Requisitions", to: "/admin/requisitions", icon: ClipboardList },
   { label: "Candidates", to: "/admin/candidates", icon: Users },
   { label: "Questions", to: "/admin/questions", icon: ListChecks },
+  { label: "Stats", to: "/admin/stats", icon: BarChart3 },
+  { label: "Reports", to: "/admin/reports/rejection-reasons", icon: FileText },
   { label: "Settings", to: "/admin/settings", icon: Settings },
 ];
 

@@ -159,10 +159,17 @@ export function ClientRejectDialog({
     }
     setValidationError(null);
 
+    // A real row id always goes as reasonId; an "Other" choice ALSO carries
+    // the typed text as reasonOther so the report's free texts stay populated
+    // (both fields are legal together — RejectBodySchema). Only the seeded
+    // fallback (id null) sends the label as reasonOther instead.
     const body: RejectBody = {
-      ...(chosen.id !== null
-        ? { reasonId: chosen.id }
-        : { reasonOther: chosen.isOther ? otherText.trim() : chosen.label }),
+      ...(chosen.id !== null ? { reasonId: chosen.id } : {}),
+      ...(chosen.isOther
+        ? { reasonOther: otherText.trim() }
+        : chosen.id === null
+          ? { reasonOther: chosen.label }
+          : {}),
       ...(detail.trim() === "" ? {} : { detail: detail.trim() }),
     };
     const reasonLabel = chosen.isOther ? otherText.trim() : chosen.label;

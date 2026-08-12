@@ -25,6 +25,7 @@ import type {
   AdminAssignmentRow,
   AssignmentStage,
   CandidateDetail,
+  Interview,
 } from "@sdb/contracts";
 import {
   BOARD_STAGES,
@@ -39,6 +40,8 @@ import { TerminalRail } from "./terminal-rail";
 export interface PipelineBoardProps {
   rows: AdminAssignmentRow[];
   candidateById: Map<string, CandidateDetail>;
+  /** Interview lists for interview_scheduled / interviewed cards (P6). */
+  interviewsByAssignmentId: Map<string, Interview[]>;
   actions: CardActions;
   /** Multi-select (present) mode: checkboxes on vetted cards. */
   isSelectMode: boolean;
@@ -51,6 +54,7 @@ export interface PipelineBoardProps {
 export function PipelineBoard({
   rows,
   candidateById,
+  interviewsByAssignmentId,
   actions,
   isSelectMode,
   selectedIds,
@@ -123,6 +127,7 @@ export function PipelineBoard({
                     key={row.id}
                     row={row}
                     candidate={candidateById.get(row.candidateId)}
+                    interviews={interviewsByAssignmentId.get(row.id)}
                     actions={actions}
                     isSelectable={isSelectMode && stage === "vetted"}
                     isSelected={selectedIds.has(row.id)}
