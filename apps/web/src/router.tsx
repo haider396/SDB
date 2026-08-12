@@ -15,12 +15,15 @@ import { ClientLayout } from "@/components/layout/client-layout";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { useSession } from "@/lib/auth";
 import { homePathFor, useMe } from "@/lib/permissions";
+import { ClientDetailPage, ClientsListPage } from "@/features/clients";
 import { QuestionManagerPage } from "@/features/question-manager";
+import {
+  RequisitionDetailPage,
+  RequisitionsListPage,
+} from "@/features/requisitions";
 import {
   AttentionQueuePage,
   CandidatesPage,
-  ClientsPage,
-  RequisitionsPage,
   SettingsPage,
 } from "@/routes/admin/index-pages";
 import {
@@ -79,7 +82,15 @@ export const router = createBrowserRouter([
         path: "clients",
         element: (
           <RequirePermission permission="client.view">
-            <ClientsPage />
+            <ClientsListPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "clients/:id",
+        element: (
+          <RequirePermission permission="client.view">
+            <ClientDetailPage />
           </RequirePermission>
         ),
       },
@@ -87,7 +98,15 @@ export const router = createBrowserRouter([
         path: "requisitions",
         element: (
           <RequirePermission permission="requisition.view">
-            <RequisitionsPage />
+            <RequisitionsListPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "requisitions/:id",
+        element: (
+          <RequirePermission permission="requisition.view">
+            <RequisitionDetailPage />
           </RequirePermission>
         ),
       },

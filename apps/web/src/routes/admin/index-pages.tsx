@@ -2,13 +2,7 @@
  * P0 placeholder index pages for the admin tree. Real pages arrive in the
  * phases noted on each (CLAUDE.md build order).
  */
-import {
-  BellRing,
-  Building2,
-  ClipboardList,
-  Settings,
-  Users,
-} from "lucide-react";
+import { BellRing, Settings, Users } from "lucide-react";
 import { PlaceholderPage } from "@/components/patterns/placeholder-page";
 
 const HOME = { label: "Admin", to: "/admin" };
@@ -22,32 +16,6 @@ export function AttentionQueuePage() {
       icon={BellRing}
       phase="Phase P6"
       description="Items needing attention — stalled requisitions, pending approvals, and overdue interviews — will queue here."
-    />
-  );
-}
-
-export function ClientsPage() {
-  return (
-    <PlaceholderPage
-      breadcrumbs={[HOME, { label: "Clients" }]}
-      title="Clients"
-      subtitle="Client companies, members, and portal access"
-      icon={Building2}
-      phase="Phase P2"
-      description="Client management — companies, access granting, and the principal approval flow — will live here."
-    />
-  );
-}
-
-export function RequisitionsPage() {
-  return (
-    <PlaceholderPage
-      breadcrumbs={[HOME, { label: "Requisitions" }]}
-      title="Requisitions"
-      subtitle="Every open role across all clients"
-      icon={ClipboardList}
-      phase="Phase P2"
-      description="The full requisition list with filters by status, client, engine, and role category will live here."
     />
   );
 }
