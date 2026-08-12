@@ -107,14 +107,31 @@ import {
 } from '@sdb/contracts';
 import {
   AdvanceBodySchema,
+  AttentionQueueQuerySchema,
   CreateAssignmentsBodySchema,
+  CreateInterviewBodySchema,
+  ListEventsQuerySchema,
   ListPlacementsQuerySchema,
+  OutcomeBodySchema,
   PlaceBodySchema,
   PresentBodySchema,
   RejectBodySchema,
+  RejectionReasonsQuerySchema,
   UpdateAssignmentBodySchema,
+  UpdateInterviewBodySchema,
   UpdatePlacementBodySchema,
 } from '@sdb/contracts';
+import {
+  InterviewCollectionSchema,
+  InterviewEnvelopeSchema,
+} from '../schemas/interviews.js';
+import {
+  AdminStatsEnvelopeSchema,
+  AttentionQueueEnvelopeSchema,
+  ClientDashboardEnvelopeSchema,
+  GlobalEventCollectionSchema,
+  RejectionReasonsReportEnvelopeSchema,
+} from '../schemas/dashboard.js';
 import {
   AdminAssignmentCollectionSchema,
   AdminAssignmentEnvelopeSchema,
@@ -1371,6 +1388,150 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
       200: ok('Updated', PlacementEnvelopeSchema),
       401: errorResponse('Unauthenticated'),
       403: errorResponse('Missing client.update'),
+    },
+  });
+
+  // --- interviews (04 §10) ----------------------------------------------------
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/assignments/{id}/interviews',
+    summary:
+      'Create an interview; client_reviewing → interview_scheduled through the stage machine, unlocking gated PII; notifies client users and the creating admin',
+    tags: ['interviews'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(CreateInterviewBodySchema) },
+    responses: {
+      201: ok('Interview created', InterviewEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing interview.create'),
+      409: errorResponse('INVALID_TRANSITION — the machine has no edge into interview_scheduled from this stage'),
+      422: errorResponse('VALIDATION_FAILED — round already exists'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/assignments/{id}/interviews',
+    summary:
+      'List interviews of an assignment; client callers only for client-visible assignments of their own tenant',
+    tags: ['interviews'],
+    security: securedReq,
+    request: assignmentIdParams,
+    responses: {
+      200: ok('Interviews', InterviewCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found or not visible to this caller'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/interviews/{id}',
+    summary: 'Update schedule fields while the outcome is pending',
+    tags: ['interviews'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(UpdateInterviewBodySchema) },
+    responses: {
+      200: ok('Updated', InterviewEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse('Outcome already recorded'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/interviews/{id}/outcome',
+    summary:
+      'Record the outcome; interview_scheduled → interviewed when the resolved round leaves nothing pending',
+    tags: ['interviews'],
+    security: securedReq,
+    request: { ...assignmentIdParams, ...jsonBody(OutcomeBodySchema) },
+    responses: {
+      200: ok('Outcome recorded', InterviewEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse('Outcome already recorded'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/interviews/{id}/cancel',
+    summary:
+      'Cancel a pending interview (outcome = cancelled); the assignment stage is deliberately unchanged',
+    tags: ['interviews'],
+    security: securedReq,
+    request: assignmentIdParams,
+    responses: {
+      200: ok('Cancelled', InterviewEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      422: errorResponse('Outcome already recorded'),
+    },
+  });
+
+  // --- dashboards and reporting (04 §12) -------------------------------------
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/client/dashboard',
+    summary:
+      'Client landing page: own requisitions with client-visible stage summaries, pending actions, recent events',
+    tags: ['dashboards'],
+    security: securedReq,
+    responses: {
+      200: ok('Dashboard', ClientDashboardEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not a client-scoped caller'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/admin/attention-queue',
+    summary:
+      'The seven needs-attention buckets of 01 §6; cached by the 5-minute refresh job, ?refresh=true recomputes',
+    tags: ['dashboards'],
+    security: securedReq,
+    request: { query: AttentionQueueQuerySchema },
+    responses: {
+      200: ok('Attention queue', AttentionQueueEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not an admin-scoped caller'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/admin/stats',
+    summary:
+      'Open requisitions, candidates by stage, average days-to-present (90d), active placements',
+    tags: ['dashboards'],
+    security: securedReq,
+    responses: {
+      200: ok('Stats', AdminStatsEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not an admin-scoped caller'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/reports/rejection-reasons',
+    summary:
+      'Grouped rejection counts split by actor; free-text reasons listed under the other row',
+    tags: ['reports'],
+    security: securedReq,
+    request: { query: RejectionReasonsQuerySchema },
+    responses: {
+      200: ok('Report', RejectionReasonsReportEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing event.view'),
+      422: errorResponse('from after to'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/events',
+    summary:
+      'Queryable audit trail: filters + cursor pagination, app+trigger pairs de-duplicated (06 §2.3)',
+    tags: ['events'],
+    security: securedReq,
+    request: { query: ListEventsQuerySchema },
+    responses: {
+      200: ok('Events', GlobalEventCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing event.view'),
     },
   });
 

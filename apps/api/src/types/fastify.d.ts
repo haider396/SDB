@@ -7,6 +7,7 @@ import type { PermissionKey } from '@sdb/contracts';
 import type { RegisteredRoute } from '../app.js';
 import type { AuthenticateHook } from '../middleware/authenticate.js';
 import type { LoadContextHook, RequestContext } from '../middleware/load-context.js';
+import type { AttentionQueueService } from '../services/attention-queue.service.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -38,5 +39,11 @@ declare module 'fastify' {
     clearIntakeFormCache: () => void;
     /** Inventory of every registered route+method (see RegisteredRoute). */
     routeTable: readonly RegisteredRoute[];
+    /**
+     * The attention-queue service with its in-process cache — server.ts
+     * passes it to the refresh-attention-queue-cache cron job so the job
+     * warms the same cache the endpoint serves (06 §5).
+     */
+    attentionQueue: AttentionQueueService;
   }
 }

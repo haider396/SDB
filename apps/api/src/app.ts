@@ -43,13 +43,18 @@ import { assignmentRoutes } from './routes/assignments.js';
 import { authRoutes } from './routes/auth.js';
 import { candidateRoutes } from './routes/candidates.js';
 import { clientRoutes } from './routes/clients.js';
+import { dashboardRoutes } from './routes/dashboards.js';
+import { eventRoutes } from './routes/events.js';
 import { fileRoutes } from './routes/files.js';
 import { healthRoutes } from './routes/health.js';
 import { intakeRoutes } from './routes/intake.js';
+import { interviewRoutes } from './routes/interviews.js';
 import { placementRoutes } from './routes/placements.js';
 import { questionRoutes } from './routes/questions.js';
+import { reportRoutes } from './routes/reports.js';
 import { requisitionRoutes } from './routes/requisitions.js';
 import { createAssignmentsService } from './services/assignments.service.js';
+import { createAttentionQueueService } from './services/attention-queue.service.js';
 import { createAuthService } from './services/auth.service.js';
 import { createCandidateFilesService } from './services/candidate-files.service.js';
 import {
@@ -58,10 +63,13 @@ import {
 } from './services/candidate-webhook.service.js';
 import { createCandidatesService } from './services/candidates.service.js';
 import { createClientsService } from './services/clients.service.js';
+import { createDashboardService } from './services/dashboard.service.js';
 import { createIntakeFormService } from './services/intake-form.service.js';
 import { createIntakeSubmissionService } from './services/intake-submission.service.js';
+import { createInterviewsService } from './services/interviews.service.js';
 import { createPlacementsService } from './services/placements.service.js';
 import { createQuestionsService } from './services/questions.service.js';
+import { createReportingService } from './services/reporting.service.js';
 import { createRequisitionsService } from './services/requisitions.service.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as {
@@ -240,6 +248,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   const requisitionsService = createRequisitionsService({ db, logger });
   const assignmentsService = createAssignmentsService({ db, logger });
+  const interviewsService = createInterviewsService({ db, logger });
+  const dashboardService = createDashboardService({ db });
+  const attentionQueueService = createAttentionQueueService({ db });
+  const reportingService = createReportingService({ db });
+  // Exposed so server.ts can hand the SAME cache instance to the
+  // refresh-attention-queue-cache cron job (06 §5).
+  app.decorate('attentionQueue', attentionQueueService);
   const placementsService = createPlacementsService({ db });
   const candidatesService = createCandidatesService({ db });
   const candidateFilesService = createCandidateFilesService({ db, storage });
@@ -298,6 +313,24 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(placementRoutes, {
     prefix: '/api/v1',
     placementsService,
+  });
+  await app.register(interviewRoutes, {
+    prefix: '/api/v1',
+    interviewsService,
+  });
+  await app.register(dashboardRoutes, {
+    prefix: '/api/v1',
+    dashboardService,
+    attentionQueueService,
+    reportingService,
+  });
+  await app.register(reportRoutes, {
+    prefix: '/api/v1',
+    reportingService,
+  });
+  await app.register(eventRoutes, {
+    prefix: '/api/v1',
+    reportingService,
   });
 
   // --- OpenAPI (04 §15) ------------------------------------------------------

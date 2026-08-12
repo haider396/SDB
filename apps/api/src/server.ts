@@ -35,7 +35,12 @@ async function main(): Promise<void> {
   app.addHook('onClose', async () => {
     await db.end({ timeout: 5 });
   });
-  const jobs = registerJobs({ logger, db, storage });
+  const jobs = registerJobs({
+    logger,
+    db,
+    storage,
+    attentionQueue: app.attentionQueue,
+  });
 
   const shutdown = (signal: string): void => {
     app.log.info({ signal }, 'shutting down');

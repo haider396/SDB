@@ -10,9 +10,11 @@ import cron from 'node-cron';
 import type { Db } from '../lib/db.js';
 import type { Logger } from '../lib/logger.js';
 import type { SupabaseStoragePort } from '../lib/supabase-storage.js';
+import type { AttentionQueueService } from '../services/attention-queue.service.js';
 import { expireStaleInvitations } from './expire-stale-invitations.js';
 import { extractCvText } from './extract-cv-text.js';
 import { flagIncompleteCandidates } from './flag-incomplete-candidates.js';
+import { refreshAttentionQueueCache } from './refresh-attention-queue-cache.js';
 
 export interface ScheduledJobs {
   stop: () => void;
@@ -23,10 +25,16 @@ export interface JobDeps {
   db: Db;
   /** Storage port for CV downloads (extract-cv-text). */
   storage: SupabaseStoragePort;
+  /**
+   * The app's AttentionQueueService instance (buildApp decorates it on the
+   * Fastify instance) — the refresh job must warm the SAME in-process cache
+   * the endpoint serves, so server.ts passes `app.attentionQueue` here.
+   */
+  attentionQueue?: AttentionQueueService;
 }
 
 export function registerJobs(deps: JobDeps): ScheduledJobs {
-  const { logger, db, storage } = deps;
+  const { logger, db, storage, attentionQueue } = deps;
   const tasks: cron.ScheduledTask[] = [];
 
   // expire-stale-invitations — daily 02:00 UTC (06 §5, AC-CL-05).
@@ -73,6 +81,26 @@ export function registerJobs(deps: JobDeps): ScheduledJobs {
       { timezone: 'UTC' },
     ),
   );
+
+  // refresh-attention-queue-cache — every 5 minutes (06 §5, AC-PL-14).
+  if (attentionQueue !== undefined) {
+    tasks.push(
+      cron.schedule(
+        '*/5 * * * *',
+        () => {
+          refreshAttentionQueueCache(attentionQueue, { logger }).catch(
+            (error: unknown) => {
+              logger.error(
+                { job: 'refresh-attention-queue-cache', err: String(error) },
+                'job failed',
+              );
+            },
+          );
+        },
+        { timezone: 'UTC' },
+      ),
+    );
+  }
 
   logger.info({ scheduledJobs: tasks.length }, 'cron scheduler registered');
 

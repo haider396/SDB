@@ -12,5 +12,7 @@ export * from './requisitions.js';
 export * from './taxonomy.js';
 export * from './candidates.js';
 export * from './assignments.js';
+export * from './interviews.js';
+export * from './dashboard.js';
 export * from './auth.js';
 export * from './nfr.js';

@@ -171,6 +171,57 @@ export async function insertAssignment(
   return id;
 }
 
+export async function insertInterview(
+  sql: Queryable,
+  opts: {
+    id?: string;
+    assignmentId: string;
+    createdBy: string;
+    roundNumber?: number;
+    scheduledAt?: Date | null;
+    timezone?: string;
+    outcome?: string;
+  },
+): Promise<string> {
+  const id = opts.id ?? randomUUID();
+  await sql`
+    insert into interviews (id, assignment_id, round_number, scheduled_at,
+                            timezone, created_by, outcome)
+    values (${id}, ${opts.assignmentId}, ${opts.roundNumber ?? 1},
+            ${opts.scheduledAt === undefined ? new Date() : opts.scheduledAt},
+            ${opts.timezone ?? 'UTC'}, ${opts.createdBy},
+            ${opts.outcome ?? 'pending'}::interview_outcome)
+  `;
+  return id;
+}
+
+export async function insertEvent(
+  sql: Queryable,
+  opts: {
+    id?: string;
+    entityType: string;
+    entityId: string;
+    eventType: string;
+    actorId?: string | null;
+    fromValue?: string | null;
+    toValue?: string | null;
+    occurredAt?: Date;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<string> {
+  const id = opts.id ?? randomUUID();
+  await sql`
+    insert into events (id, entity_type, entity_id, event_type, actor_id,
+                        from_value, to_value, metadata, occurred_at)
+    values (${id}, ${opts.entityType}, ${opts.entityId}, ${opts.eventType},
+            ${opts.actorId ?? null}, ${opts.fromValue ?? null},
+            ${opts.toValue ?? null},
+            ${sql.json((opts.metadata ?? {}) as postgres.JSONValue)},
+            ${opts.occurredAt ?? new Date()})
+  `;
+  return id;
+}
+
 export async function insertQuestionCategory(
   sql: Queryable,
   opts: { id?: string; key?: string } = {},
