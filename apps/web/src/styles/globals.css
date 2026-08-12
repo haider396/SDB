@@ -1,0 +1,47 @@
+/* Self-hosted fonts (no CDN). */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    letter-spacing: var(--tracking-tight);
+  }
+
+  body {
+    @apply bg-surface-page text-neutral-900 font-sans antialiased;
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+  }
+
+  /* Visible keyboard focus everywhere — 05 §4.6 */
+  :focus-visible {
+    outline: 2px solid var(--brand-blue);
+    outline-offset: 2px;
+  }
+
+  /* Tabular numerals in tables and metrics — AC-UI-06 */
+  table,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
