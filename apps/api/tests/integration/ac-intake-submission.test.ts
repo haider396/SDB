@@ -465,13 +465,20 @@ describe('AC-IF-10/11/14/15 — a successful submission', () => {
       join roles r on r.id = ur.role_id
       where r.key in ('super_admin', 'admin') and u.is_active and u.archived_at is null
     `;
-    const notifications = await db.sql<{ status: string; event: string }[]>`
-      select status, event from notification_log
+    // Force the P7 post-commit drain so the status below is deterministic:
+    // this harness configures no GHL_WEBHOOK_URL_*, so enqueued rows are
+    // dispatched-and-failed with a clear error rather than staying 'queued'.
+    await harness.app.notificationDispatch.drainQueued();
+    const notifications = await db.sql<
+      { status: string; event: string; last_error: string | null }[]
+    >`
+      select status, event, last_error from notification_log
       where entity_type = 'requisition' and entity_id = ${requisitionId}
     `;
     expect(notifications).toHaveLength(Number(admins[0]?.count ?? 0));
     for (const notification of notifications) {
-      expect(notification.status).toBe('queued'); // dispatch itself is P7
+      expect(notification.status).toBe('failed'); // unset webhook URL (P7)
+      expect(notification.last_error).toBe('webhook url not configured');
       expect(notification.event).toBe('intake_submitted');
     }
   });

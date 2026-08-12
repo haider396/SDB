@@ -8,6 +8,7 @@ import type { RegisteredRoute } from '../app.js';
 import type { AuthenticateHook } from '../middleware/authenticate.js';
 import type { LoadContextHook, RequestContext } from '../middleware/load-context.js';
 import type { AttentionQueueService } from '../services/attention-queue.service.js';
+import type { NotificationDispatchService } from '../services/notification-dispatch.service.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -45,5 +46,12 @@ declare module 'fastify' {
      * warms the same cache the endpoint serves (06 §5).
      */
     attentionQueue: AttentionQueueService;
+    /**
+     * P7 notification dispatcher — server.ts passes it to the
+     * retry-failed-notifications cron job so the job shares the app's GHL
+     * client and drain coalescing (06 §5); tests await `.idle()` and call
+     * `.drainQueued()` / `.retryFailed()` directly.
+     */
+    notificationDispatch: NotificationDispatchService;
   }
 }

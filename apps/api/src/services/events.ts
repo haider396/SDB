@@ -26,7 +26,10 @@ export type EventEntityType =
   | 'skill'
   | 'industry'
   | 'disqualifier'
-  | 'rejection_reason';
+  | 'rejection_reason'
+  // Manual notification resend (P7, 06 §4.3) — an admin-actor state change
+  // on a notification_log row, so it writes an event like any other.
+  | 'notification';
 
 export interface EmitEventParams {
   entityType: EventEntityType;

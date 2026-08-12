@@ -11,10 +11,12 @@ import type { Db } from '../lib/db.js';
 import type { Logger } from '../lib/logger.js';
 import type { SupabaseStoragePort } from '../lib/supabase-storage.js';
 import type { AttentionQueueService } from '../services/attention-queue.service.js';
+import type { NotificationDispatchService } from '../services/notification-dispatch.service.js';
 import { expireStaleInvitations } from './expire-stale-invitations.js';
 import { extractCvText } from './extract-cv-text.js';
 import { flagIncompleteCandidates } from './flag-incomplete-candidates.js';
 import { refreshAttentionQueueCache } from './refresh-attention-queue-cache.js';
+import { retryFailedNotifications } from './retry-failed-notifications.js';
 
 export interface ScheduledJobs {
   stop: () => void;
@@ -31,10 +33,16 @@ export interface JobDeps {
    * the endpoint serves, so server.ts passes `app.attentionQueue` here.
    */
   attentionQueue?: AttentionQueueService;
+  /**
+   * The app's dispatch service instance (buildApp decorates it on the
+   * Fastify instance) — the retry job shares its GHL client, clock, and
+   * drain coalescing, so server.ts passes `app.notificationDispatch` here.
+   */
+  notificationDispatch?: NotificationDispatchService;
 }
 
 export function registerJobs(deps: JobDeps): ScheduledJobs {
-  const { logger, db, storage, attentionQueue } = deps;
+  const { logger, db, storage, attentionQueue, notificationDispatch } = deps;
   const tasks: cron.ScheduledTask[] = [];
 
   // expire-stale-invitations — daily 02:00 UTC (06 §5, AC-CL-05).
@@ -92,6 +100,26 @@ export function registerJobs(deps: JobDeps): ScheduledJobs {
             (error: unknown) => {
               logger.error(
                 { job: 'refresh-attention-queue-cache', err: String(error) },
+                'job failed',
+              );
+            },
+          );
+        },
+        { timezone: 'UTC' },
+      ),
+    );
+  }
+
+  // retry-failed-notifications — every 5 minutes (06 §5, AC-NT-04).
+  if (notificationDispatch !== undefined) {
+    tasks.push(
+      cron.schedule(
+        '*/5 * * * *',
+        () => {
+          retryFailedNotifications(notificationDispatch, { logger }).catch(
+            (error: unknown) => {
+              logger.error(
+                { job: 'retry-failed-notifications', err: String(error) },
                 'job failed',
               );
             },

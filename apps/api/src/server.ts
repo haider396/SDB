@@ -40,6 +40,7 @@ async function main(): Promise<void> {
     db,
     storage,
     attentionQueue: app.attentionQueue,
+    notificationDispatch: app.notificationDispatch,
   });
 
   const shutdown = (signal: string): void => {

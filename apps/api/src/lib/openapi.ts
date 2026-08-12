@@ -111,6 +111,7 @@ import {
   CreateAssignmentsBodySchema,
   CreateInterviewBodySchema,
   ListEventsQuerySchema,
+  ListNotificationsQuerySchema,
   ListPlacementsQuerySchema,
   OutcomeBodySchema,
   PlaceBodySchema,
@@ -169,6 +170,10 @@ import {
   GlobalEventCollectionSchema,
   RejectionReasonsReportEnvelopeSchema,
 } from '../schemas/dashboard.js';
+import {
+  NotificationCollectionSchema,
+  ResendEnvelopeSchema,
+} from '../schemas/notifications.js';
 import {
   AdminAssignmentCollectionSchema,
   AdminAssignmentEnvelopeSchema,
@@ -1888,6 +1893,37 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
       200: ok('Events', GlobalEventCollectionSchema),
       401: errorResponse('Unauthenticated'),
       403: errorResponse('Missing event.view'),
+    },
+  });
+
+  // --- admin notification log (P7, 06 §4.3) --------------------------------
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/admin/notifications',
+    summary:
+      'Notification dispatch log: status/event filters + cursor pagination (06 §4.3)',
+    tags: ['notifications'],
+    security: securedReq,
+    request: { query: ListNotificationsQuerySchema },
+    responses: {
+      200: ok('Notification log page', NotificationCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing event.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/admin/notifications/{id}/resend',
+    summary:
+      'Manual resend: re-queue with a fresh attempt budget and dispatch immediately (06 §4.3)',
+    tags: ['notifications'],
+    security: securedReq,
+    request: { params: z.object({ id: z.string().uuid() }) },
+    responses: {
+      200: ok('The row after the immediate dispatch attempt', ResendEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing settings.manage'),
+      404: errorResponse('Notification not found'),
     },
   });
 

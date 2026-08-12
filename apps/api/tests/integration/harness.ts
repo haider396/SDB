@@ -18,6 +18,7 @@ import type { FastifyInstance } from 'fastify';
 import postgres from 'postgres';
 import { expect, inject } from 'vitest';
 import { buildApp } from '../../src/app.js';
+import type { GhlFetch } from '../../src/integrations/gohighlevel.js';
 import type { Db } from '../../src/lib/db.js';
 import type { CvFetcher } from '../../src/services/candidate-webhook.service.js';
 import {
@@ -128,6 +129,10 @@ export async function buildTestApp(
     storage?: StorageStub;
     /** Webhook cvUrl fetcher override (P3 webhook tests). */
     cvFetcher?: CvFetcher;
+    /** GoHighLevel outbound fetch override (P7 notification tests). */
+    ghlFetch?: GhlFetch;
+    /** Extra env vars (e.g. GHL_WEBHOOK_URL_* for the P7 dispatcher). */
+    envOverrides?: Record<string, string>;
   } = {},
 ): Promise<TestApp> {
   const auth = await createTestAuth();
@@ -136,12 +141,13 @@ export async function buildTestApp(
   const app = await buildApp({
     // DATABASE_URL is unused when `db` is injected; the rest are dummy values
     // (GHL etc.) that nothing in P0 dials out to.
-    env: testEnv({ DATABASE_URL: db.url }),
+    env: testEnv({ DATABASE_URL: db.url, ...(opts.envOverrides ?? {}) }),
     db: db.sql,
     jwtKeySource: auth.jwks,
     supabaseAdmin,
     storage,
     ...(opts.cvFetcher !== undefined ? { cvFetcher: opts.cvFetcher } : {}),
+    ...(opts.ghlFetch !== undefined ? { ghlFetch: opts.ghlFetch } : {}),
     ...(opts.now !== undefined ? { now: opts.now } : {}),
   });
   if (registerExtra !== undefined) {

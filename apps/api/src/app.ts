@@ -19,6 +19,11 @@ import {
 } from 'fastify-type-provider-zod';
 import { createRemoteJWKSet, type JWTVerifyGetKey } from 'jose';
 import type { OpenAPIV3 } from 'openapi-types';
+import {
+  createGoHighLevelClient,
+  webhookUrlsFromEnv,
+  type GhlFetch,
+} from './integrations/gohighlevel.js';
 import { createDb, type Db } from './lib/db.js';
 import type { Env } from './lib/env.js';
 import { ApiError, registerErrorHandling } from './lib/errors.js';
@@ -49,6 +54,7 @@ import { fileRoutes } from './routes/files.js';
 import { healthRoutes } from './routes/health.js';
 import { intakeRoutes } from './routes/intake.js';
 import { interviewRoutes } from './routes/interviews.js';
+import { notificationRoutes } from './routes/notifications.js';
 import { placementRoutes } from './routes/placements.js';
 import { questionRoutes } from './routes/questions.js';
 import { reportRoutes } from './routes/reports.js';
@@ -68,6 +74,7 @@ import { createDashboardService } from './services/dashboard.service.js';
 import { createIntakeFormService } from './services/intake-form.service.js';
 import { createIntakeSubmissionService } from './services/intake-submission.service.js';
 import { createInterviewsService } from './services/interviews.service.js';
+import { createNotificationDispatchService } from './services/notification-dispatch.service.js';
 import { createPlacementsService } from './services/placements.service.js';
 import { createQuestionsService } from './services/questions.service.js';
 import { createReportingService } from './services/reporting.service.js';
@@ -111,6 +118,8 @@ export interface BuildAppOptions {
   storage?: SupabaseStoragePort;
   /** Webhook CV fetcher override; tests inject a canned/local fetcher. */
   cvFetcher?: CvFetcher;
+  /** GoHighLevel outbound fetch override; tests inject a recording mock. */
+  ghlFetch?: GhlFetch;
   logger?: Logger;
   /**
    * Injectable clock (epoch ms) for the intake-form cache TTL — integration
@@ -275,6 +284,50 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     ...(options.cvFetcher !== undefined ? { cvFetcher: options.cvFetcher } : {}),
   });
 
+  // --- GoHighLevel notification dispatch (P7, 06 §4) -------------------------
+  const ghlClient = createGoHighLevelClient({
+    webhookUrls: webhookUrlsFromEnv(env),
+    privateIntegrationToken: env.GHL_PRIVATE_INTEGRATION_TOKEN,
+    locationId: env.GHL_LOCATION_ID,
+    ...(options.ghlFetch !== undefined ? { fetchImpl: options.ghlFetch } : {}),
+  });
+  const notificationDispatch = createNotificationDispatchService({
+    db,
+    ghl: ghlClient,
+    publicAppUrl: env.PUBLIC_APP_URL,
+    logger,
+    ...(options.now !== undefined
+      ? { now: () => new Date(options.now!()) }
+      : {}),
+  });
+  // Exposed so server.ts can hand the SAME instance (clock, GHL client,
+  // drain coalescing) to the retry-failed-notifications cron job (06 §5).
+  app.decorate('notificationDispatch', notificationDispatch);
+
+  // Post-commit dispatch trigger (06 §4.3: enqueue inside the transaction,
+  // dispatch after commit). onResponse runs after the reply has been sent —
+  // every service transaction is already committed and no dispatch outcome
+  // can affect the user-facing response (AC-NT-03). scheduleDrain() is
+  // coalesced, deferred via setImmediate, and never throws; rows a drain
+  // misses (or that fail) are the retry cron's safety net.
+  app.addHook('onResponse', (request, reply, done) => {
+    if (
+      request.method !== 'GET' &&
+      request.method !== 'HEAD' &&
+      request.method !== 'OPTIONS' &&
+      reply.statusCode < 400
+    ) {
+      notificationDispatch.scheduleDrain();
+    }
+    done();
+  });
+
+  // Registered after the db-close hook (onClose runs LIFO): shutdown waits
+  // for in-flight dispatches before the pool goes away.
+  app.addHook('onClose', async () => {
+    await notificationDispatch.idle();
+  });
+
   // --- routes ----------------------------------------------------------------
   await app.register(healthRoutes, {
     prefix: '/api/v1',
@@ -344,6 +397,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(eventRoutes, {
     prefix: '/api/v1',
     reportingService,
+  });
+  await app.register(notificationRoutes, {
+    prefix: '/api/v1',
+    notificationDispatch,
   });
 
   // --- OpenAPI (04 §15) ------------------------------------------------------

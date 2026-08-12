@@ -154,14 +154,24 @@ describe('AC-CL-02 — grant-access writes user, member, role, event, and queued
     expect(events).toHaveLength(1);
     expect(events[0]!.actor_id).toBe(superAdmin);
 
+    // Force the P7 post-commit drain so the status below is deterministic:
+    // this harness configures no GHL_WEBHOOK_URL_*, so the enqueued row is
+    // dispatched-and-failed with a clear error rather than staying 'queued'.
+    await harness.app.notificationDispatch.drainQueued();
     const notifications = await db.sql<
-      { status: string; recipient_email: string; payload: { context: { actionUrl?: string } } }[]
+      {
+        status: string;
+        last_error: string | null;
+        recipient_email: string;
+        payload: { context: { actionUrl?: string } };
+      }[]
     >`
-      select status, recipient_email, payload from notification_log
+      select status, last_error, recipient_email, payload from notification_log
       where event = 'portal_invitation' and entity_id = ${client}
     `;
     expect(notifications).toHaveLength(1);
-    expect(notifications[0]!.status).toBe('queued');
+    expect(notifications[0]!.status).toBe('failed');
+    expect(notifications[0]!.last_error).toBe('webhook url not configured');
     expect(notifications[0]!.recipient_email).toBe(body.primaryContactEmail);
     expect(notifications[0]!.payload.context.actionUrl).toContain('token=');
 
