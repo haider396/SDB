@@ -15,11 +15,11 @@ import { ClientLayout } from "@/components/layout/client-layout";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { useSession } from "@/lib/auth";
 import { homePathFor, useMe } from "@/lib/permissions";
+import { QuestionManagerPage } from "@/features/question-manager";
 import {
   AttentionQueuePage,
   CandidatesPage,
   ClientsPage,
-  QuestionsPage,
   RequisitionsPage,
   SettingsPage,
 } from "@/routes/admin/index-pages";
@@ -103,7 +103,7 @@ export const router = createBrowserRouter([
         path: "questions",
         element: (
           <RequirePermission permission="question.view">
-            <QuestionsPage />
+            <QuestionManagerPage />
           </RequirePermission>
         ),
       },

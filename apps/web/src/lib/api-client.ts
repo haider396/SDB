@@ -165,3 +165,16 @@ export async function apiFetchCollection<T>(
   const payload = await request(path, options);
   return payload as Collection<T>;
 }
+
+/**
+ * Fetch the whole success envelope without unwrapping. For the few endpoints
+ * that return siblings next to `data` — e.g. `POST /questions/:id/deactivate`
+ * responds `{ data, warnings }` (AC-Q-09).
+ */
+export async function apiFetchEnvelope<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const payload = await request(path, options);
+  return payload as T;
+}

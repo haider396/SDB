@@ -6,7 +6,6 @@ import {
   BellRing,
   Building2,
   ClipboardList,
-  ListChecks,
   Settings,
   Users,
 } from "lucide-react";
@@ -62,19 +61,6 @@ export function CandidatesPage() {
       icon={Users}
       phase="Phase P3"
       description="Candidate profiles, file uploads, and the inbound webhook feed will live here."
-    />
-  );
-}
-
-export function QuestionsPage() {
-  return (
-    <PlaceholderPage
-      breadcrumbs={[HOME, { label: "Questions" }]}
-      title="Questions"
-      subtitle="Intake form questions and categories"
-      icon={ListChecks}
-      phase="Phase P1"
-      description="The two-pane question manager with drag reordering and live form preview will live here."
     />
   );
 }
