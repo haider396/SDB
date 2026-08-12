@@ -58,6 +58,12 @@ interface RequestOptions {
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
   signal?: AbortSignal;
+  /**
+   * Set to false for public endpoints (intake form, taxonomy). Skips the
+   * token lookup entirely so unauthenticated pages never initialise the
+   * Supabase client (AC-IF-17: the public form touches no browser storage).
+   */
+  auth?: boolean;
 }
 
 function baseUrl(): string {
@@ -83,7 +89,7 @@ async function request(path: string, options: RequestOptions): Promise<unknown> 
   }
 
   const headers = new Headers({ Accept: "application/json" });
-  const token = await getAccessToken();
+  const token = options.auth === false ? null : await getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");

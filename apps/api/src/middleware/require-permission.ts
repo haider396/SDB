@@ -12,8 +12,15 @@ import { ApiError } from '../lib/errors.js';
 
 type Guard = (request: FastifyRequest) => Promise<void>;
 
-export function requirePermission(key: PermissionKey): Guard {
-  return async function permissionGuard(request: FastifyRequest): Promise<void> {
+/** A permission guard carries its key so route-table tests can discover it. */
+export interface PermissionGuard extends Guard {
+  readonly requiredPermission: PermissionKey;
+}
+
+export function requirePermission(key: PermissionKey): PermissionGuard {
+  const guard = async function permissionGuard(
+    request: FastifyRequest,
+  ): Promise<void> {
     const ctx = request.ctx;
     if (ctx === null) {
       // loadContext must run first; treat its absence as unauthenticated.
@@ -25,6 +32,22 @@ export function requirePermission(key: PermissionKey): Guard {
       });
     }
   };
+  // Metadata for the generated permission-matrix test (AC-AUTH-04): the matrix
+  // cross-checks each route's declared `config.permission` against the guard
+  // actually attached, so a mismatch between the two is a test failure.
+  return Object.assign(guard, { requiredPermission: key });
+}
+
+/** Extract the permission key from a route preHandler, if it is one of ours. */
+export function getRequiredPermission(handler: unknown): PermissionKey | null {
+  if (
+    typeof handler === 'function' &&
+    'requiredPermission' in handler &&
+    typeof (handler as PermissionGuard).requiredPermission === 'string'
+  ) {
+    return (handler as PermissionGuard).requiredPermission;
+  }
+  return null;
 }
 
 export function requireClientScope(): Guard {

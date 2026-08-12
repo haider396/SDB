@@ -44,6 +44,22 @@ const pkg = createRequire(import.meta.url)('../package.json') as {
   version: string;
 };
 
+/**
+ * One entry per registered route+method, collected via the onRoute hook.
+ * Exists for testability: the route-table-driven auth tests (AC-AUTH-01) and
+ * the generated permission matrix (AC-AUTH-04) iterate this instead of
+ * parsing printRoutes(), and later phases get OpenAPI route-coverage
+ * assertions (AC-NFR-07) from the same table for free.
+ */
+export interface RegisteredRoute {
+  method: string;
+  url: string;
+  /** Route-level config, e.g. `{ permission: 'question.manage' }`. */
+  config: Record<string, unknown>;
+  /** preHandler guards as registered, for cross-checking declared permissions. */
+  preHandlers: readonly unknown[];
+}
+
 export interface BuildAppOptions {
   env: Env;
   /** Injected pool; buildApp creates (and owns closing) one when omitted. */
@@ -74,6 +90,29 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandling(app);
+
+  // Route inventory (see RegisteredRoute). Added before any route registration
+  // so every route — including plugin-registered ones — is captured.
+  const routeTable: RegisteredRoute[] = [];
+  app.addHook('onRoute', (route) => {
+    const methods = Array.isArray(route.method) ? route.method : [route.method];
+    const preHandler = route.preHandler;
+    const preHandlers =
+      preHandler === undefined
+        ? []
+        : Array.isArray(preHandler)
+          ? [...preHandler]
+          : [preHandler];
+    for (const method of methods) {
+      routeTable.push({
+        method,
+        url: route.url,
+        config: (route.config ?? {}) as Record<string, unknown>,
+        preHandlers,
+      });
+    }
+  });
+  app.decorate('routeTable', routeTable as readonly RegisteredRoute[]);
 
   if (ownsDb) {
     app.addHook('onClose', async () => {

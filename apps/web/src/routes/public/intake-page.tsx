@@ -1,19 +1,26 @@
 /**
- * Public intake form route. The dynamic form renderer (05-FRONTEND.md §5)
- * is delivered in P1; this P0 page establishes the public route tree.
+ * Public intake form route (05-FRONTEND.md §5, 01 §3 J1). Unauthenticated;
+ * the renderer talks to the two public endpoints only and never touches
+ * browser storage (AC-IF-17).
  */
-import { FileText } from "lucide-react";
-import { EmptyState } from "@/components/patterns/empty-state";
+import { IntakeForm } from "@/features/intake-form";
 
 export function IntakePage() {
   return (
-    <div className="mx-auto flex min-h-screen max-w-content items-center justify-center p-8">
-      <div className="w-full max-w-lg">
-        <EmptyState
-          icon={FileText}
-          title="Staffing intake form"
-          description="The intake form opens here in Phase P1. If you were sent a link early, check back shortly or contact your Staffing Done Better representative."
-        />
+    <div className="min-h-screen bg-surface-page">
+      <div className="mx-auto max-w-2xl px-4 py-10 sm:px-8">
+        <header className="mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight text-brand-navy-ink">
+            Tell us who you need
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            Answer a few questions about your business and the role. It takes
+            about five minutes, and nothing is saved on this device.
+          </p>
+        </header>
+        <main>
+          <IntakeForm />
+        </main>
       </div>
     </div>
   );

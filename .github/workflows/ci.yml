@@ -1,0 +1,51 @@
+# CI gates per docs/06-BACKEND.md §8: typecheck, lint, unit tests,
+# integration tests, build — all must pass before merge.
+#
+# Integration tests run against a real Postgres 15 via @testcontainers/postgresql
+# (Docker is available on GitHub-hosted runners; no TEST_DATABASE_URL needed).
+# The web bundle is built before the integration suite so the AC-AUTH-08
+# service-role-key grep runs against a real dist/.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # Version is read from packageManager in package.json.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Integration tests (real Postgres via testcontainers)
+        working-directory: apps/api
+        run: pnpm test:integration
