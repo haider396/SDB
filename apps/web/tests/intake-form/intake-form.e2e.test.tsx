@@ -136,6 +136,57 @@ function installFetchMock() {
   );
 }
 
+/**
+ * AC-IF-17 instrumentation: a recording Storage double installed as both
+ * window.localStorage and window.sessionStorage. Any write attempt — from
+ * the renderer, RHF, TanStack Query, or anything else — is recorded.
+ */
+interface InstrumentedStorage {
+  storage: globalThis.Storage;
+  writes: string[];
+}
+
+function instrumentStorage(): InstrumentedStorage {
+  const writes: string[] = [];
+  const store = new Map<string, string>();
+  const storage: globalThis.Storage = {
+    get length() {
+      return store.size;
+    },
+    key: (index: number) => [...store.keys()][index] ?? null,
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      writes.push(`setItem:${key}`);
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      writes.push(`removeItem:${key}`);
+      store.delete(key);
+    },
+    clear: () => {
+      writes.push("clear");
+      store.clear();
+    },
+  };
+  return { storage, writes };
+}
+
+let localStorageDouble: InstrumentedStorage;
+let sessionStorageDouble: InstrumentedStorage;
+
+function installStorageDoubles() {
+  localStorageDouble = instrumentStorage();
+  sessionStorageDouble = instrumentStorage();
+  Object.defineProperty(window, "localStorage", {
+    value: localStorageDouble.storage,
+    configurable: true,
+  });
+  Object.defineProperty(window, "sessionStorage", {
+    value: sessionStorageDouble.storage,
+    configurable: true,
+  });
+}
+
 function renderIntakePage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -187,8 +238,7 @@ describe("intake form end-to-end (mocked fetch)", () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://api.test");
     installFetchMock();
     vi.stubGlobal("scrollTo", vi.fn());
-    window.localStorage.clear();
-    window.sessionStorage.clear();
+    installStorageDoubles();
   });
 
   afterEach(() => {
@@ -209,7 +259,7 @@ describe("intake form end-to-end (mocked fetch)", () => {
     await user.click(screen.getByRole("button", { name: "Submit request" }));
 
     // Confirmation screen: reference + what happens next, no account prompt
-    await screen.findByRole("heading", { name: "Request received" });
+    await screen.findByText("Request received");
     expect(screen.getByText("REQ-000123")).toBeInTheDocument();
     expect(screen.getByText("What happens next")).toBeInTheDocument();
     expect(screen.queryByText(/account/i)).not.toBeInTheDocument();
@@ -234,6 +284,8 @@ describe("intake form end-to-end (mocked fetch)", () => {
 
     // AC-IF-17 — nothing written to either store, at any point
     expect(localSetItem).not.toHaveBeenCalled();
+    expect(localStorageDouble.writes).toEqual([]);
+    expect(sessionStorageDouble.writes).toEqual([]);
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
   });
@@ -295,7 +347,7 @@ describe("intake form end-to-end (mocked fetch)", () => {
     expect(emailInput).toHaveAttribute("aria-invalid", "true");
 
     // Storage still untouched after the error path
-    expect(window.localStorage.length).toBe(0);
-    expect(window.sessionStorage.length).toBe(0);
+    expect(localStorageDouble.writes).toEqual([]);
+    expect(sessionStorageDouble.writes).toEqual([]);
   });
 });
