@@ -1,25 +1,39 @@
 /**
- * Public intake form renderer — 05-FRONTEND.md §5, requirements 1–9.
+ * Intake form renderer — 05-FRONTEND.md §5, requirements 1–9.
  *
  * Multi-step: one "Role" step (cascading taxonomy selects) followed by one
  * step per question category. All answer state lives in react-hook-form,
  * in memory only — nothing is ever written to localStorage/sessionStorage
- * (AC-IF-17); both data hooks call the API with `auth: false` so the
- * Supabase client is never initialised on this page.
+ * (AC-IF-17); in the default public mode both data hooks call the API with
+ * `auth: false` so the Supabase client is never initialised on that page.
+ *
+ * One engine, two entry points (03 §3.5): `mode="portal"` renders the same
+ * form inside the authenticated client portal for a second hire — GETs
+ * carry a bearer token, `prefill` answers (company/contact, from the
+ * client record) render read-only, and submission goes to
+ * POST /requisitions, with `onSubmitted` receiving the new requisition.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import type { FieldErrors, Resolver } from "react-hook-form";
 import { FileQuestion } from "lucide-react";
 import type {
+  InPortalRequisitionResponse,
   IntakeFormCategory,
   IntakeFormQuestion,
   IntakeSubmissionResponse,
 } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { ErrorState } from "@/components/patterns/error-state";
-import { useIntakeForm, usePublicTaxonomy, useSubmitIntake } from "./api";
+import {
+  useIntakeForm,
+  usePublicTaxonomy,
+  useSubmitInPortalRequisition,
+  useSubmitIntake,
+} from "./api";
 import { isQuestionVisible, type IntakeValues } from "./conditional";
 import { mapSubmissionError, type SubmissionErrorMap } from "./error-map";
 import { validateIntakeValues } from "./schema-builder";
@@ -47,14 +61,56 @@ function bySortOrder<T extends { sortOrder: number }>(a: T, b: T): number {
   return a.sortOrder - b.sortOrder;
 }
 
-export function IntakeForm() {
-  const taxonomyQuery = usePublicTaxonomy();
+/** A prefilled answer rendered read-only (03 §3.5 in-portal mode). */
+function PrefilledField({
+  question,
+  value,
+}: {
+  question: IntakeFormQuestion;
+  value: string;
+}) {
+  const id = `field-${question.key}`;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{question.label}</Label>
+      <Input id={id} value={value} readOnly aria-describedby={`${id}-note`} />
+      <p id={`${id}-note`} className="text-xs text-neutral-500">
+        Prefilled from your account and cannot be edited here.
+      </p>
+    </div>
+  );
+}
+
+export interface IntakeFormProps {
+  /**
+   * "public" (default): unauthenticated, POST /intake-submissions.
+   * "portal": authenticated in-portal second hire (03 §3.5), POST
+   * /requisitions attaching to the caller's own client.
+   */
+  mode?: "public" | "portal";
+  /** Portal mode: read-only answers by questionKey (company/contact). */
+  prefill?: Readonly<Record<string, string>>;
+  /** Portal mode: called on success instead of the public confirmation. */
+  onSubmitted?: (result: InPortalRequisitionResponse) => void;
+}
+
+export function IntakeForm({
+  mode = "public",
+  prefill,
+  onSubmitted,
+}: IntakeFormProps = {}) {
+  const isPortal = mode === "portal";
+  const taxonomyQuery = usePublicTaxonomy(isPortal);
   const [selection, setSelection] = useState<TaxonomySelection>(
     EMPTY_TAXONOMY_SELECTION,
   );
   const [taxonomyErrors, setTaxonomyErrors] = useState<TaxonomyErrors>({});
-  const formQuery = useIntakeForm(selection.roleCategoryId);
+  const formQuery = useIntakeForm(selection.roleCategoryId, isPortal);
   const submitMutation = useSubmitIntake();
+  const submitInPortalMutation = useSubmitInPortalRequisition();
+  const isSubmitting = isPortal
+    ? submitInPortalMutation.isPending
+    : submitMutation.isPending;
 
   const [stepIndex, setStepIndex] = useState(0);
   const [announcement, setAnnouncement] = useState("");
@@ -111,7 +167,9 @@ export function IntakeForm() {
     mode: "onBlur",
     reValidateMode: "onBlur",
     resolver,
-    defaultValues: {},
+    // Prefilled (read-only) answers participate in validation, conditional
+    // visibility, and submission exactly like typed ones.
+    defaultValues: prefill === undefined ? {} : { ...prefill },
   });
   const values = form.watch();
   const { errors: fieldErrors, isDirty, isSubmitted } = form.formState;
@@ -199,6 +257,14 @@ export function IntakeForm() {
       parsedValues,
     );
     try {
+      if (isPortal) {
+        const result = await submitInPortalMutation.mutateAsync(submission);
+        setAnnouncement(
+          `Your request was submitted. Reference ${result.requisitionReference}.`,
+        );
+        onSubmitted?.(result);
+        return;
+      }
       const result = await submitMutation.mutateAsync(submission);
       setSubmitted(result);
       setAnnouncement(
@@ -363,22 +429,30 @@ export function IntakeForm() {
                 No questions in this section apply to your earlier answers.
               </p>
             ) : (
-              visibleByCategory(currentCategory).map((question) => (
-                <Controller
-                  key={question.id}
-                  control={form.control}
-                  name={question.key}
-                  render={({ field, fieldState }) => (
-                    <QuestionField
-                      question={question}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      error={fieldState.error?.message}
-                    />
-                  )}
-                />
-              ))
+              visibleByCategory(currentCategory).map((question) =>
+                prefill !== undefined && question.key in prefill ? (
+                  <PrefilledField
+                    key={question.id}
+                    question={question}
+                    value={prefill[question.key] ?? ""}
+                  />
+                ) : (
+                  <Controller
+                    key={question.id}
+                    control={form.control}
+                    name={question.key}
+                    render={({ field, fieldState }) => (
+                      <QuestionField
+                        question={question}
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        error={fieldState.error?.message}
+                      />
+                    )}
+                  />
+                ),
+              )
             )}
           </div>
         </section>
@@ -396,8 +470,8 @@ export function IntakeForm() {
         {isLastStep ? (
           // Disabled only while in flight — never for validation state
           // (05 §4.4): submit and show people what is wrong.
-          <Button type="submit" disabled={submitMutation.isPending}>
-            {submitMutation.isPending ? "Submitting…" : "Submit request"}
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Submitting…" : "Submit request"}
           </Button>
         ) : (
           <Button type="button" onClick={() => void handleNext()}>

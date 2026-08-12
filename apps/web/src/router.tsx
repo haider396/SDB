@@ -29,8 +29,10 @@ import {
 import { AttentionQueuePage, SettingsPage } from "@/routes/admin/index-pages";
 import {
   ClientDashboardPage,
+  ClientRequisitionDetailPage,
+  ClientRequisitionNewPage,
   ClientRequisitionsPage,
-} from "@/routes/client/index-pages";
+} from "@/features/client-portal";
 import { NotFoundPage } from "@/routes/not-found-page";
 import { AcceptInvitationPage } from "@/routes/public/accept-invitation-page";
 import { IntakePage } from "@/routes/public/intake-page";
@@ -167,6 +169,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <ClientDashboardPage /> },
       { path: "requisitions", element: <ClientRequisitionsPage /> },
+      { path: "requisitions/new", element: <ClientRequisitionNewPage /> },
+      { path: "requisitions/:id", element: <ClientRequisitionDetailPage /> },
     ],
   },
 

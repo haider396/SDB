@@ -1,31 +1,62 @@
 /**
- * Rejection reason options for the admin Reject dialog.
+ * Rejection reason options for the Reject dialogs (admin actor here; the
+ * client portal reuses the same machinery via
+ * features/client-portal/rejection-reasons.ts).
  *
- * TODO(api-gap): the API does not yet expose a rejection-reasons listing
- * route (docs/04-API.md §5 taxonomy-management reads are a known gap — no
- * GET /rejection-reasons exists in apps/api/src/routes as of P4). Until it
- * does, this file carries a static copy of the seeded reasons from
- * supabase/migrations/0011_seed_reference_data.sql. Because the seeded row
- * UUIDs are generated per environment, `id` is null here and the dialog
- * submits the reason LABEL as `reasonOther` (satisfying the DB
- * chk_reason_present constraint and AC-PL-11) instead of a `reasonId`.
- *
- * When the endpoint ships, replace the body of `fetchRejectionReasons` with:
- *   const { data } = await apiFetchCollection<RejectionReasonOption>("/rejection-reasons");
- *   return data.filter((reason) => reason.actor === "admin");
- * — nothing else in the feature needs to change: the dialog already prefers
- * `reasonId` whenever `id` is non-null.
+ * GET /rejection-reasons (04 §5 taxonomy reads) is the source of truth:
+ * options carry real row UUIDs, so the dialogs submit `reasonId`. The
+ * static seeded copies from 0011_seed_reference_data.sql remain ONLY as a
+ * fallback when the listing call fails — there `id` is null and the dialog
+ * submits the reason LABEL as `reasonOther` instead, which still satisfies
+ * the DB chk_reason_present constraint and AC-PL-11 (a decline must never
+ * dead-end on a taxonomy outage).
  */
-import type { RejectionActor } from "@sdb/contracts";
+import type { RejectionActor, RejectionReason } from "@sdb/contracts";
+import { apiFetchCollection } from "@/lib/api-client";
 
 export interface RejectionReasonOption {
-  /** Null until the listing endpoint provides real row UUIDs. */
+  /** Null only in the seeded fallback (row UUIDs differ per environment). */
   id: string | null;
   key: string;
   label: string;
   actor: RejectionActor;
   /** True for the free-text "Other" rows — requires typed text. */
   isOther: boolean;
+}
+
+/** The seeded "Other" rows are keyed other_admin / other_client. */
+function isOtherReason(reason: Pick<RejectionReason, "key" | "label">): boolean {
+  return (
+    reason.key.startsWith("other") ||
+    reason.label.trim().toLowerCase() === "other"
+  );
+}
+
+/**
+ * Active reasons for one actor from GET /rejection-reasons, sorted by
+ * sortOrder; the given seeded list on failure.
+ */
+export async function fetchRejectionReasonsFor(
+  actor: RejectionActor,
+  fallback: readonly RejectionReasonOption[],
+): Promise<RejectionReasonOption[]> {
+  try {
+    const { data } = await apiFetchCollection<RejectionReason>(
+      "/rejection-reasons",
+      { query: { actor, isActive: true } },
+    );
+    return [...data]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((reason) => ({
+        id: reason.id,
+        key: reason.key,
+        label: reason.label,
+        actor: reason.actor,
+        isOther: isOtherReason(reason),
+      }));
+  } catch {
+    return [...fallback];
+  }
 }
 
 /** Verbatim keys/labels from 0011_seed_reference_data.sql (actor = admin). */
@@ -41,5 +72,5 @@ const SEEDED_ADMIN_REASONS: readonly RejectionReasonOption[] = [
 
 /** Admin-actor reasons for the admin pipeline board's Reject dialog. */
 export function fetchRejectionReasons(): Promise<RejectionReasonOption[]> {
-  return Promise.resolve([...SEEDED_ADMIN_REASONS]);
+  return fetchRejectionReasonsFor("admin", SEEDED_ADMIN_REASONS);
 }

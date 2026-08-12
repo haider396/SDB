@@ -19,6 +19,8 @@ export interface SidebarNavItem {
   to: string;
   icon: LucideIcon;
   end?: boolean;
+  /** Pending-action count rendered as a pill; omitted or 0 renders nothing. */
+  badgeCount?: number;
 }
 
 export interface SidebarProps {
@@ -83,6 +85,22 @@ export function Sidebar({ items, areaLabel }: SidebarProps) {
                   <item.icon aria-hidden="true" className="h-5 w-5 shrink-0" />
                   {!isCollapsed ? <span className="truncate">{item.label}</span> : null}
                   {isCollapsed ? <span className="sr-only">{item.label}</span> : null}
+                  {item.badgeCount !== undefined && item.badgeCount > 0 ? (
+                    isCollapsed ? (
+                      <span className="sr-only">
+                        {item.badgeCount} pending action
+                        {item.badgeCount === 1 ? "" : "s"}
+                      </span>
+                    ) : (
+                      <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-brand-teal px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-brand-navy">
+                        {item.badgeCount}
+                        <span className="sr-only">
+                          {" "}
+                          pending action{item.badgeCount === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                    )
+                  ) : null}
                 </NavLink>
               );
 
