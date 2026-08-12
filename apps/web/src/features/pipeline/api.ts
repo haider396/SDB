@@ -24,6 +24,7 @@ import type {
   CandidateDetail,
   CreateAssignmentsBody,
   CreateInterviewBody,
+  EntityEvent,
   Interview,
   OutcomeBody,
   Placement,
@@ -38,6 +39,8 @@ import { requisitionKeys } from "@/features/requisitions/api";
 export const pipelineKeys = {
   assignments: (requisitionId: string) =>
     ["pipeline", "assignments", requisitionId] as const,
+  events: (assignmentId: string) =>
+    ["pipeline", "events", assignmentId] as const,
   interviews: (assignmentId: string) =>
     ["pipeline", "interviews", assignmentId] as const,
 };
@@ -95,6 +98,23 @@ function useInvalidatePipeline(requisitionId: string) {
       queryKey: requisitionKeys.events(requisitionId),
     });
   };
+}
+
+/**
+ * Full audit trail for one assignment (04 §9 GET /assignments/:id/events),
+ * fetched lazily — only while the history sheet is open.
+ */
+export function useAssignmentEvents(assignmentId: string | null) {
+  return useQuery<EntityEvent[]>({
+    queryKey: pipelineKeys.events(assignmentId ?? ""),
+    enabled: assignmentId !== null,
+    queryFn: async () => {
+      const { data } = await apiFetchCollection<EntityEvent>(
+        `/assignments/${assignmentId ?? ""}/events`,
+      );
+      return data;
+    },
+  });
 }
 
 export function useCreateAssignments(requisitionId: string) {

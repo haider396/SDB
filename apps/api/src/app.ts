@@ -332,10 +332,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(healthRoutes, {
     prefix: '/api/v1',
     db,
+    storage,
     version: pkg.version,
   });
   // Unprefixed alias so infrastructure probes can hit /health directly.
-  await app.register(healthRoutes, { db, version: pkg.version });
+  await app.register(healthRoutes, { db, storage, version: pkg.version });
 
   await app.register(authRoutes, { prefix: '/api/v1', authService });
 

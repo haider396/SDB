@@ -15,7 +15,9 @@ import {
   type RecordedRequest,
 } from "./helpers";
 
+// The list page's New-client gate (useCan → useMe) needs a live session.
 vi.mock("@/lib/auth", () => ({
+  useSession: () => ({ session: {}, isLoading: false }),
   getAccessToken: async () => "test-token",
 }));
 

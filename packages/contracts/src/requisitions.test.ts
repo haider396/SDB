@@ -27,6 +27,9 @@ const baseRequisition = {
   seniorityLevel: null,
   engagementType: null,
   hoursPerWeek: null,
+  overlapStart: null,
+  overlapEnd: null,
+  overlapTimezone: null,
   targetStartDate: null,
   urgency: null,
   principalUserId: null,
@@ -103,6 +106,32 @@ describe('UpdateRequisitionBodySchema (04 §7 PATCH)', () => {
   it('rejects an empty body and a zero headcount', () => {
     expect(UpdateRequisitionBodySchema.safeParse({}).success).toBe(false);
     expect(UpdateRequisitionBodySchema.safeParse({ headcount: 0 }).success).toBe(false);
+  });
+
+  it('accepts the overlap window as HH:MM (or HH:MM:SS) plus an IANA zone', () => {
+    expect(
+      UpdateRequisitionBodySchema.safeParse({
+        overlapStart: '09:00',
+        overlapEnd: '14:00:00',
+        overlapTimezone: 'America/Chicago',
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateRequisitionBodySchema.safeParse({
+        overlapStart: null,
+        overlapEnd: null,
+        overlapTimezone: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a malformed overlap time', () => {
+    expect(
+      UpdateRequisitionBodySchema.safeParse({ overlapStart: '9am' }).success,
+    ).toBe(false);
+    expect(
+      UpdateRequisitionBodySchema.safeParse({ overlapEnd: '25' }).success,
+    ).toBe(false);
   });
 });
 

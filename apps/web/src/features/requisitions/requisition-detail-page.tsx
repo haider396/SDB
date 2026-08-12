@@ -19,7 +19,7 @@ import { PipelineTab } from "@/features/pipeline";
 import { useRequisition, useRequisitionEvents } from "./api";
 import { AnswersCard } from "./components/answers-card";
 import { BriefCard } from "./components/brief-card";
-import { EventLogCard } from "./components/event-log-card";
+import { EventLogCard } from "@/components/patterns/event-log-card";
 import { FieldsCard } from "./components/fields-card";
 import { PrincipalApprovalCard } from "./components/principal-approval-card";
 import { StageTracker } from "./components/stage-tracker";
@@ -187,6 +187,7 @@ export function RequisitionDetailPage() {
               isError={eventsQuery.isError}
               error={eventsQuery.error}
               onRetry={() => void eventsQuery.refetch()}
+              emptyDescription="Every state change on this requisition is recorded here."
             />
           </div>
         </div>

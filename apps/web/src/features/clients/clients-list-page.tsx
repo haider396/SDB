@@ -4,7 +4,7 @@
  * navigate to the client detail workspace.
  */
 import type { ColumnDef } from "@tanstack/react-table";
-import { Building2, Check, Minus } from "lucide-react";
+import { Building2, Check, Minus, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Client, ClientStatus } from "@sdb/contracts";
@@ -12,12 +12,15 @@ import { ClientStatusSchema } from "@sdb/contracts";
 import { ClientStatusBadge } from "@/components/patterns/status-badge";
 import { DataTable, type DataTableColumnMeta } from "@/components/patterns/data-table";
 import { PageHeader } from "@/components/patterns/page-header";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatDate, SERVICE_TIER_LABELS } from "@/lib/format";
+import { useCan } from "@/lib/permissions";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useClients } from "./api";
+import { NewClientDialog } from "./components/new-client-dialog";
 
 const CLIENT_STATUSES = ClientStatusSchema.options;
 
@@ -120,6 +123,9 @@ export function ClientsListPage() {
     search: search === "" ? undefined : search,
     hasPendingAccess: hasPendingAccess || undefined,
   });
+  // POST /clients requires client.create — offer the action only then.
+  const { allowed: canCreate } = useCan("client.create");
+  const [isNewOpen, setIsNewOpen] = useState(false);
 
   const rows = useMemo(
     () => (query.data?.pages ?? []).flatMap((page) => page.data),
@@ -144,6 +150,14 @@ export function ClientsListPage() {
         breadcrumbs={[{ label: "Admin", to: "/admin" }, { label: "Clients" }]}
         title="Clients"
         subtitle="Client companies, members, and portal access"
+        actions={
+          canCreate ? (
+            <Button onClick={() => setIsNewOpen(true)}>
+              <Plus aria-hidden="true" />
+              New client
+            </Button>
+          ) : undefined
+        }
       />
 
       <div className="mb-4 flex flex-wrap items-end gap-4">
@@ -214,6 +228,8 @@ export function ClientsListPage() {
         isLoadingMore={query.isFetchingNextPage}
         footer={`${rows.length} client${rows.length === 1 ? "" : "s"} loaded`}
       />
+
+      <NewClientDialog open={isNewOpen} onClose={() => setIsNewOpen(false)} />
     </div>
   );
 }

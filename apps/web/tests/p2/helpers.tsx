@@ -118,6 +118,9 @@ export function makeRequisition(
     seniorityLevel: null,
     engagementType: null,
     hoursPerWeek: null,
+    overlapStart: null,
+    overlapEnd: null,
+    overlapTimezone: null,
     targetStartDate: null,
     urgency: null,
     principalUserId: null,
@@ -297,6 +300,39 @@ export function installApiMock(
       const collection = (data: unknown[]) =>
         jsonResponse({ data, meta: { count: data.length, nextCursor: null } });
       const path = url.pathname.replace(/^\/api\/v1/, "");
+
+      // ----- Auth (permission gates, e.g. the New-client button) -----
+      if (method === "GET" && path === "/auth/me") {
+        return jsonResponse({
+          data: {
+            user: {
+              id: "00000000-0000-4000-8000-999999999999",
+              email: "admin@sdb.test",
+              fullName: "Alex Admin",
+              phone: null,
+              avatarPath: null,
+              timezone: "UTC",
+              isActive: true,
+              lastLoginAt: null,
+            },
+            roles: ["super_admin"],
+            permissions: [
+              "client.view",
+              "client.create",
+              "client.update",
+              "requisition.view",
+              "event.view",
+              "settings.manage",
+            ],
+            clientId: null,
+          },
+        });
+      }
+
+      // ----- Global event log (client detail right rail) -----
+      if (method === "GET" && path === "/events") {
+        return collection([]);
+      }
 
       // ----- Clients -----
       if (method === "GET" && path === "/clients") {

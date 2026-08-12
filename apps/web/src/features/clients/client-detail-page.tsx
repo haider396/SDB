@@ -14,6 +14,7 @@ import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Client } from "@sdb/contracts";
 import { ErrorState } from "@/components/patterns/error-state";
+import { EventLogCard } from "@/components/patterns/event-log-card";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
 import { ClientStatusBadge } from "@/components/patterns/status-badge";
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatDate, formatDateTime, SERVICE_TIER_LABELS } from "@/lib/format";
-import { useClient, useRevokeAccess } from "./api";
+import { useClient, useClientEvents, useRevokeAccess } from "./api";
 import { ClientRequisitionsCard } from "./components/client-requisitions-card";
 import { ConfirmPaymentDialog } from "./components/confirm-payment-dialog";
 import { EditClientSheet } from "./components/edit-client-sheet";
@@ -73,6 +74,7 @@ export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const clientId = id ?? "";
   const query = useClient(clientId);
+  const eventsQuery = useClientEvents(clientId);
   const revokeAccess = useRevokeAccess();
 
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -237,6 +239,14 @@ export function ClientDetailPage() {
           </Card>
 
           <InternalNotesCard client={client} />
+          <EventLogCard
+            events={eventsQuery.data}
+            isLoading={eventsQuery.isPending}
+            isError={eventsQuery.isError}
+            error={eventsQuery.error}
+            onRetry={() => void eventsQuery.refetch()}
+            emptyDescription="Every state change on this client is recorded here."
+          />
         </div>
       </div>
 

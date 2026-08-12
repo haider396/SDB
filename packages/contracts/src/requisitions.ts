@@ -18,6 +18,9 @@ import {
 } from './enums.js';
 import { IntakeAnswerSchema, JsonValueSchema } from './intake.js';
 
+/** `time` columns (overlap_start/_end) — 'HH:MM' or 'HH:MM:SS'. */
+const timeOfDay = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/);
+
 // ---------------------------------------------------------------------------
 // Commercial fields (gated by requisition.view_commercials — AC-RQ-06)
 // ---------------------------------------------------------------------------
@@ -66,6 +69,10 @@ export const RequisitionSchema = z
     seniorityLevel: SeniorityLevelSchema.nullable(),
     engagementType: EngagementTypeSchema.nullable(),
     hoursPerWeek: z.number().int().nullable(),
+    /** Required working-hours overlap window (02 §7), e.g. 09:00–14:00. */
+    overlapStart: timeOfDay.nullable(),
+    overlapEnd: timeOfDay.nullable(),
+    overlapTimezone: z.string().nullable(),
     targetStartDate: z.string().nullable(),
     urgency: z.string().nullable(),
     principalUserId: z.string().uuid().nullable(),
@@ -163,6 +170,9 @@ export const UpdateRequisitionBodySchema = z
     seniorityLevel: SeniorityLevelSchema.nullable().optional(),
     engagementType: EngagementTypeSchema.nullable().optional(),
     hoursPerWeek: z.number().int().min(1).max(168).nullable().optional(),
+    overlapStart: timeOfDay.nullable().optional(),
+    overlapEnd: timeOfDay.nullable().optional(),
+    overlapTimezone: z.string().max(100).nullable().optional(),
     targetStartDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)

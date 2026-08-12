@@ -37,6 +37,9 @@ export interface RequisitionRecord {
   seniorityLevel: SeniorityLevel | null;
   engagementType: EngagementType | null;
   hoursPerWeek: number | null;
+  overlapStart: string | null;
+  overlapEnd: string | null;
+  overlapTimezone: string | null;
   targetStartDate: string | null;
   urgency: string | null;
   regionPreference: string | null;
@@ -74,6 +77,9 @@ interface RequisitionRow {
   seniority_level: SeniorityLevel | null;
   engagement_type: EngagementType | null;
   hours_per_week: number | null;
+  overlap_start: string | null;
+  overlap_end: string | null;
+  overlap_timezone: string | null;
   target_start_date: string | null;
   urgency: string | null;
   region_preference: string | null;
@@ -116,6 +122,9 @@ function mapRequisition(row: RequisitionRow): RequisitionRecord {
     seniorityLevel: row.seniority_level,
     engagementType: row.engagement_type,
     hoursPerWeek: row.hours_per_week,
+    overlapStart: row.overlap_start,
+    overlapEnd: row.overlap_end,
+    overlapTimezone: row.overlap_timezone,
     targetStartDate: row.target_start_date,
     urgency: row.urgency,
     regionPreference: row.region_preference,
@@ -144,6 +153,8 @@ const REQUISITION_COLUMNS = `
   r.engine_id, r.department_id, r.role_category_id,
   r.advertised_title, r.headcount, r.status,
   r.seniority_level, r.engagement_type, r.hours_per_week,
+  r.overlap_start::text as overlap_start, r.overlap_end::text as overlap_end,
+  r.overlap_timezone,
   r.target_start_date::text as target_start_date, r.urgency, r.region_preference,
   r.brief_markdown, r.principal_user_id, r.principal_approved_at,
   r.principal_change_request, r.intake_contact_name, r.intake_contact_email,
@@ -423,6 +434,9 @@ export interface RequisitionPatch {
   seniorityLevel?: SeniorityLevel | null;
   engagementType?: EngagementType | null;
   hoursPerWeek?: number | null;
+  overlapStart?: string | null;
+  overlapEnd?: string | null;
+  overlapTimezone?: string | null;
   targetStartDate?: string | null;
   urgency?: string | null;
   regionPreference?: string | null;
@@ -449,6 +463,11 @@ export async function updateRequisition(
   if (patch.seniorityLevel !== undefined) assignments['seniority_level'] = patch.seniorityLevel;
   if (patch.engagementType !== undefined) assignments['engagement_type'] = patch.engagementType;
   if (patch.hoursPerWeek !== undefined) assignments['hours_per_week'] = patch.hoursPerWeek;
+  if (patch.overlapStart !== undefined) assignments['overlap_start'] = patch.overlapStart;
+  if (patch.overlapEnd !== undefined) assignments['overlap_end'] = patch.overlapEnd;
+  if (patch.overlapTimezone !== undefined) {
+    assignments['overlap_timezone'] = patch.overlapTimezone;
+  }
   if (patch.targetStartDate !== undefined) assignments['target_start_date'] = patch.targetStartDate;
   if (patch.urgency !== undefined) assignments['urgency'] = patch.urgency;
   if (patch.regionPreference !== undefined) assignments['region_preference'] = patch.regionPreference;

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import {
   createTestAuth,
+  stubStorage,
   stubSupabaseAdmin,
   testEnv,
   type TestAuth,
@@ -22,6 +23,7 @@ describe('app', () => {
       env: testEnv(),
       jwtKeySource: auth.jwks,
       supabaseAdmin: stubSupabaseAdmin(),
+      storage: stubStorage(),
     });
     app.get('/api/v1/_test/boom', async () => {
       throw new Error('secret-internals-do-not-leak');
@@ -122,7 +124,7 @@ describe('app', () => {
       const body = res.json();
       expect(body.status).toBe('not_ready');
       expect(body.checks.database).toBe(false);
-      // Storage check is stubbed ok until P3.
+      // Storage probe succeeds against the stub port (reachable, object absent).
       expect(body.checks.storage).toBe(true);
     }, 15_000);
   });

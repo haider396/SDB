@@ -26,6 +26,7 @@ import type {
   CandidateFile,
   CreateCandidateBody,
   DataCompleteness,
+  EntityEvent,
   FileDownloadUrlResponse,
   LanguageLevel,
   PoolStatus,
@@ -63,6 +64,7 @@ export const candidateKeys = {
   list: (filters: CandidateListFilters) =>
     ["candidates", "list", filters] as const,
   detail: (id: string) => ["candidates", "detail", id] as const,
+  events: (id: string) => ["candidates", "events", id] as const,
   files: (id: string) => ["candidates", "files", id] as const,
   options: (kind: string) => ["candidates", "options", kind] as const,
 };
@@ -105,6 +107,22 @@ export function useCandidate(id: string) {
   return useQuery<CandidateDetail>({
     queryKey: candidateKeys.detail(id),
     queryFn: () => apiFetch<CandidateDetail>(`/candidates/${id}`),
+  });
+}
+
+/**
+ * Audit trail for one candidate via the global event log
+ * (04 §12 GET /events?entityType=candidate&entityId=…, 06 §7).
+ */
+export function useCandidateEvents(id: string) {
+  return useQuery<EntityEvent[]>({
+    queryKey: candidateKeys.events(id),
+    queryFn: async () => {
+      const { data } = await apiFetchCollection<EntityEvent>("/events", {
+        query: { entityType: "candidate", entityId: id, limit: 50 },
+      });
+      return data;
+    },
   });
 }
 

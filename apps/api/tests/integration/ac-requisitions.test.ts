@@ -416,6 +416,70 @@ describe('04 §7 — PATCH /requisitions/:id admin fields', () => {
     expect(events).toHaveLength(1);
   });
 
+  it('updates the overlap window (overlapStart/overlapEnd/overlapTimezone) and round-trips it', async () => {
+    const requisition = await insertRequisition(db.sql, { clientId: clientA });
+    const res = await harness.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/requisitions/${requisition}`,
+      headers: await harness.bearer(admin),
+      payload: {
+        overlapStart: '09:00',
+        overlapEnd: '14:30',
+        overlapTimezone: 'America/Chicago',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const { data } = res.json<{ data: Record<string, unknown> }>();
+    // Postgres renders `time` as HH:MM:SS.
+    expect(data['overlapStart']).toBe('09:00:00');
+    expect(data['overlapEnd']).toBe('14:30:00');
+    expect(data['overlapTimezone']).toBe('America/Chicago');
+
+    // Round-trips on the detail read and clears back to null.
+    const detail = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/requisitions/${requisition}`,
+      headers: await harness.bearer(admin),
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(
+      detail.json<{ data: Record<string, unknown> }>().data['overlapStart'],
+    ).toBe('09:00:00');
+
+    const cleared = await harness.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/requisitions/${requisition}`,
+      headers: await harness.bearer(admin),
+      payload: { overlapStart: null, overlapEnd: null, overlapTimezone: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(
+      cleared.json<{ data: Record<string, unknown> }>().data['overlapStart'],
+    ).toBeNull();
+
+    // Every state change writes an event row (CLAUDE.md rule 6).
+    const events = await db.sql`
+      select id from events
+      where entity_type = 'requisition' and entity_id = ${requisition}
+        and event_type = 'requisition_updated'
+    `;
+    expect(events).toHaveLength(2);
+  });
+
+  it('rejects a malformed overlap time', async () => {
+    const requisition = await insertRequisition(db.sql, { clientId: clientA });
+    const res = await harness.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/requisitions/${requisition}`,
+      headers: await harness.bearer(admin),
+      payload: { overlapStart: '9am' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe(
+      'MALFORMED_REQUEST',
+    );
+  });
+
   it('rejects a budget amount without a unit (02 §7)', async () => {
     const requisition = await insertRequisition(db.sql, { clientId: clientA });
     const res = await harness.app.inject({

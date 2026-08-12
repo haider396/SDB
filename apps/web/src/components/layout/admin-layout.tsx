@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileText,
   ListChecks,
+  Send,
   Settings,
   Users,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const ADMIN_NAV: SidebarNavItem[] = [
   { label: "Questions", to: "/admin/questions", icon: ListChecks },
   { label: "Stats", to: "/admin/stats", icon: BarChart3 },
   { label: "Reports", to: "/admin/reports/rejection-reasons", icon: FileText },
+  { label: "Notifications", to: "/admin/notifications", icon: Send },
   { label: "Settings", to: "/admin/settings", icon: Settings },
 ];
 

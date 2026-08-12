@@ -8,9 +8,10 @@
  */
 import { useParams } from "react-router-dom";
 import { ErrorState } from "@/components/patterns/error-state";
+import { EventLogCard } from "@/components/patterns/event-log-card";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
-import { useCandidate } from "./api";
+import { useCandidate, useCandidateEvents } from "./api";
 import { SUBMISSION_CHANNEL_LABELS } from "./labels";
 import { DirtyRegistryProvider } from "./components/section-form";
 import {
@@ -51,6 +52,7 @@ export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const candidateId = id ?? "";
   const query = useCandidate(candidateId);
+  const eventsQuery = useCandidateEvents(candidateId);
 
   if (query.isPending) {
     return (
@@ -133,6 +135,14 @@ export function CandidateDetailPage() {
             <ProfileRailCard candidate={candidate} />
             <QuickFactsCard candidate={candidate} />
             <FilesCard candidate={candidate} />
+            <EventLogCard
+              events={eventsQuery.data}
+              isLoading={eventsQuery.isPending}
+              isError={eventsQuery.isError}
+              error={eventsQuery.error}
+              onRetry={() => void eventsQuery.refetch()}
+              emptyDescription="Every state change on this candidate is recorded here."
+            />
             <ArchiveRailCard candidate={candidate} />
           </div>
         </div>

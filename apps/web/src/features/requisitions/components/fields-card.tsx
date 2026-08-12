@@ -27,6 +27,7 @@ import {
 } from "@/lib/format";
 import { useDirtyGuard } from "@/lib/use-dirty-guard";
 import { useClientMembers } from "@/features/clients/api";
+import { timezoneOptions } from "@/features/pipeline/interview-time";
 import { useUpdateRequisition } from "../api";
 
 const FormSchema = z
@@ -36,6 +37,9 @@ const FormSchema = z
     seniorityLevel: z.union([SeniorityLevelSchema, z.literal("")]),
     engagementType: z.union([EngagementTypeSchema, z.literal("")]),
     hoursPerWeek: z.string(),
+    overlapStart: z.string(),
+    overlapEnd: z.string(),
+    overlapTimezone: z.string(),
     targetStartDate: z.string(),
     urgency: z.string().max(200),
     regionPreference: z.string().max(500),
@@ -59,6 +63,14 @@ const FormSchema = z
         message: "Pick a unit — an amount without a unit is ambiguous.",
       });
     }
+    const hasOverlapTime = values.overlapStart !== "" || values.overlapEnd !== "";
+    if (hasOverlapTime && values.overlapTimezone === "") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["overlapTimezone"],
+        message: "Pick a timezone — an overlap window without one is ambiguous.",
+      });
+    }
   });
 type FormValues = z.infer<typeof FormSchema>;
 
@@ -76,6 +88,10 @@ function defaults(requisition: RequisitionDetail): FormValues {
     engagementType: requisition.engagementType ?? "",
     hoursPerWeek:
       requisition.hoursPerWeek === null ? "" : String(requisition.hoursPerWeek),
+    // Stored as 'HH:MM:SS'; <input type="time"> wants 'HH:MM'.
+    overlapStart: requisition.overlapStart?.slice(0, 5) ?? "",
+    overlapEnd: requisition.overlapEnd?.slice(0, 5) ?? "",
+    overlapTimezone: requisition.overlapTimezone ?? "",
     targetStartDate: requisition.targetStartDate ?? "",
     urgency: requisition.urgency ?? "",
     regionPreference: requisition.regionPreference ?? "",
@@ -120,6 +136,10 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
       engagementType:
         values.engagementType === "" ? null : values.engagementType,
       hoursPerWeek: toNumberOrNull(values.hoursPerWeek),
+      overlapStart: values.overlapStart === "" ? null : values.overlapStart,
+      overlapEnd: values.overlapEnd === "" ? null : values.overlapEnd,
+      overlapTimezone:
+        values.overlapTimezone === "" ? null : values.overlapTimezone,
       targetStartDate:
         values.targetStartDate === "" ? null : values.targetStartDate,
       urgency: values.urgency.trim() === "" ? null : values.urgency.trim(),
@@ -161,6 +181,8 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
   const members = (membersQuery.data ?? []).filter(
     (member) => member.isActive,
   );
+  // Same IANA zone list as the interview dialog (NFR-11).
+  const zones = timezoneOptions();
 
   return (
     <Card>
@@ -238,6 +260,42 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
                 type="date"
                 {...form.register("targetStartDate")}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="req-overlap-start">Overlap from</Label>
+              <Input
+                id="req-overlap-start"
+                type="time"
+                {...form.register("overlapStart")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="req-overlap-end">Overlap until</Label>
+              <Input
+                id="req-overlap-end"
+                type="time"
+                {...form.register("overlapEnd")}
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="req-overlap-timezone">Overlap timezone</Label>
+              <NativeSelect
+                id="req-overlap-timezone"
+                aria-invalid={errors.overlapTimezone !== undefined}
+                {...form.register("overlapTimezone")}
+              >
+                <option value="">Not set</option>
+                {zones.map((zone) => (
+                  <option key={zone} value={zone}>
+                    {zone}
+                  </option>
+                ))}
+              </NativeSelect>
+              {errors.overlapTimezone ? (
+                <p role="alert" className="text-xs text-danger-text">
+                  {errors.overlapTimezone.message}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="req-urgency">Urgency</Label>

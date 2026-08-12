@@ -35,6 +35,7 @@ import { CardMenu, type CardMenuItem } from "./card-menu";
 
 export interface CardActions {
   onAdvance: (row: AdminAssignmentRow, toStage: AssignmentStage) => void;
+  onViewHistory: (row: AdminAssignmentRow) => void;
   onAddNote: (row: AdminAssignmentRow) => void;
   onReject: (row: AdminAssignmentRow) => void;
   onPlace: (row: AdminAssignmentRow) => void;
@@ -97,6 +98,11 @@ export function AssignmentCard({
       key: "view",
       label: "View candidate",
       onSelect: () => navigate(`/admin/candidates/${row.candidateId}`),
+    },
+    {
+      key: "history",
+      label: "View history",
+      onSelect: () => actions.onViewHistory(row),
     },
     // The proper J7 path out of client_reviewing: an interview row, not a
     // bare stage write, so the round + schedule are always recorded.

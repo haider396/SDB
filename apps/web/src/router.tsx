@@ -31,6 +31,7 @@ import {
   RejectionReasonsReportPage,
   StatsPage,
 } from "@/features/admin-dashboard";
+import { NotificationsPage } from "@/features/notifications";
 import { SettingsPage } from "@/routes/admin/index-pages";
 import {
   ClientDashboardPage,
@@ -165,6 +166,16 @@ export const router = createBrowserRouter([
         element: (
           <RequirePermission permission="question.view">
             <QuestionManagerPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        // GET /admin/notifications requires event.view; the resend action
+        // inside additionally needs settings.manage and hides itself.
+        path: "notifications",
+        element: (
+          <RequirePermission permission="event.view">
+            <NotificationsPage />
           </RequirePermission>
         ),
       },

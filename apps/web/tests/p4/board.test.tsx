@@ -220,6 +220,7 @@ describe("pipeline board", () => {
       .map((item) => item.textContent);
     expect(items).toEqual([
       "View candidate",
+      "View history",
       "Advance to Presented",
       "Advance to Withdrawn",
       "Add note",

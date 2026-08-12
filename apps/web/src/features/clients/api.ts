@@ -21,6 +21,8 @@ import type {
   Client,
   ClientMember,
   ConfirmPaymentBody,
+  CreateClientBody,
+  EntityEvent,
   GrantAccessBody,
   InviteMemberBody,
   RevokeAccessResponse,
@@ -44,6 +46,7 @@ export const clientKeys = {
   root: ["clients"] as const,
   list: (filters: ClientListFilters) => ["clients", "list", filters] as const,
   detail: (id: string) => ["clients", "detail", id] as const,
+  events: (id: string) => ["clients", "events", id] as const,
   members: (id: string) => ["clients", "members", id] as const,
 };
 
@@ -76,6 +79,22 @@ export function useClient(id: string) {
   });
 }
 
+/**
+ * Audit trail for one client via the global event log
+ * (04 §12 GET /events?entityType=client&entityId=…, 06 §7).
+ */
+export function useClientEvents(id: string) {
+  return useQuery<EntityEvent[]>({
+    queryKey: clientKeys.events(id),
+    queryFn: async () => {
+      const { data } = await apiFetchCollection<EntityEvent>("/events", {
+        query: { entityType: "client", entityId: id, limit: 50 },
+      });
+      return data;
+    },
+  });
+}
+
 export function useClientMembers(id: string) {
   return useQuery<ClientMember[]>({
     queryKey: clientKeys.members(id),
@@ -97,6 +116,18 @@ function useInvalidateClient() {
       void queryClient.invalidateQueries({ queryKey: clientKeys.members(id) });
     }
   };
+}
+
+/** POST /clients — manual creation outside the intake funnel (04 §6). */
+export function useCreateClient() {
+  const queryClient = useQueryClient();
+  return useMutation<Client, unknown, CreateClientBody>({
+    mutationFn: (body) => apiFetch<Client>("/clients", { method: "POST", body }),
+    onSuccess: (created) => {
+      queryClient.setQueryData(clientKeys.detail(created.id), created);
+      void queryClient.invalidateQueries({ queryKey: ["clients", "list"] });
+    },
+  });
 }
 
 export function useUpdateClient() {

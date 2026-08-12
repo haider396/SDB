@@ -26,6 +26,7 @@ import {
   CancelInterviewDialog,
   type CancelInterviewTarget,
 } from "./components/cancel-interview-dialog";
+import { HistorySheet } from "./components/history-sheet";
 import { NoteDialog } from "./components/note-dialog";
 import {
   OutcomeDialog,
@@ -78,6 +79,8 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
     null,
   );
   const [noteTarget, setNoteTarget] = useState<AdminAssignmentRow | null>(null);
+  const [historyTarget, setHistoryTarget] =
+    useState<AdminAssignmentRow | null>(null);
   const [scheduleTarget, setScheduleTarget] =
     useState<AdminAssignmentRow | null>(null);
   const [outcomeTarget, setOutcomeTarget] =
@@ -121,6 +124,7 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
 
   const actions: CardActions = {
     onAdvance,
+    onViewHistory: setHistoryTarget,
     onAddNote: setNoteTarget,
     onReject: setRejectTarget,
     onPlace: setPlaceTarget,
@@ -264,6 +268,10 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
         requisitionId={requisitionId}
         row={noteTarget}
         onClose={() => setNoteTarget(null)}
+      />
+      <HistorySheet
+        row={historyTarget}
+        onClose={() => setHistoryTarget(null)}
       />
       <ScheduleInterviewDialog
         requisitionId={requisitionId}

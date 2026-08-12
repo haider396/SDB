@@ -324,6 +324,11 @@ export function installApiMock(
         jsonResponse({ data, meta: { count: data.length, nextCursor: null } });
       const path = url.pathname.replace(/^\/api\/v1/, "");
 
+      // ----- global event log (candidate detail right rail) -----
+      if (method === "GET" && path === "/events") {
+        return collection([]);
+      }
+
       // ----- taxonomy / option lists -----
       if (method === "GET" && path === "/taxonomy/public") {
         return jsonResponse({ data: state.taxonomy });

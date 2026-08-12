@@ -5,6 +5,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Db } from '../lib/db.js';
+import type { SupabaseStoragePort } from '../lib/supabase-storage.js';
 import {
   HealthResponseSchema,
   ReadyResponseSchema,
@@ -12,6 +13,7 @@ import {
 
 export interface HealthRoutesOptions {
   db: Db;
+  storage: SupabaseStoragePort;
   version: string;
 }
 
@@ -48,9 +50,15 @@ export async function healthRoutes(
         database = false;
       }
 
-      // TODO(P3): replace the stub with a real Storage reachability check when
-      // the Supabase Storage integration (file uploads, 06 §6) lands in P3.
-      const storage = true;
+      // Storage reachability: stat a probe path. A null result (object absent)
+      // still proves the bucket API answered; only a thrown error is a failure.
+      let storage = false;
+      try {
+        await opts.storage.statObject('.readiness-probe');
+        storage = true;
+      } catch {
+        storage = false;
+      }
 
       const ready = database && storage;
       return reply.code(ready ? 200 : 503).send({
