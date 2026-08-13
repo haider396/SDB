@@ -7,6 +7,7 @@ import {
   ClientMemberSchema,
   ClientSchema,
   CollectionResponseSchema,
+  EntityRefSchema,
   RevokeAccessResponseSchema,
   SingleResponseSchema,
 } from '@sdb/contracts';
@@ -30,9 +31,10 @@ export const RevokeAccessEnvelopeSchema = SingleResponseSchema(
   RevokeAccessResponseSchema,
 );
 
-export const ClientIdParamSchema = z.object({ id: z.string().uuid() });
+/** `:id` accepts the internal uuid OR the 12-char public_id (0015). */
+export const ClientIdParamSchema = z.object({ id: EntityRefSchema });
 
 export const MemberParamsSchema = z.object({
-  id: z.string().uuid(),
+  id: EntityRefSchema,
   userId: z.string().uuid(),
 });

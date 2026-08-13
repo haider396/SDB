@@ -17,6 +17,7 @@ import {
   UserRoleKeySchema,
 } from './enums.js';
 import { IntakeAnswerSchema, JsonValueSchema } from './intake.js';
+import { PublicIdSchema } from './public-ids.js';
 
 /** `time` columns (overlap_start/_end) — 'HH:MM' or 'HH:MM:SS'. */
 const timeOfDay = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/);
@@ -57,6 +58,8 @@ export type RequisitionCommercialKey =
 export const RequisitionSchema = z
   .object({
     id: z.string().uuid(),
+    /** DB-generated 12-char base62 URL handle (0015). Never writable. */
+    publicId: PublicIdSchema,
     reference: z.string(),
     clientId: z.string().uuid(),
     clientName: z.string(),

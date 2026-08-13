@@ -346,7 +346,10 @@ export function createAssignmentsService(
     // -----------------------------------------------------------------------
     async assign(requisitionId, body, actor) {
       assertAdminSurface(actor);
+      // requireRequisition accepts a uuid or a public_id (0015); everything
+      // below works with the internal uuid.
       const requisition = await requireRequisition(db, requisitionId);
+      requisitionId = requisition.id;
       const candidateIds = [...new Set(body.candidateIds)];
 
       const records = await getCandidatePresentability(db, candidateIds);
@@ -447,14 +450,14 @@ export function createAssignmentsService(
         // Tenant-filtered existence check, then the VIEW — never candidates
         // (CLAUDE.md rule 3; the repository queries client_visible_assignments
         // exclusively, so internal stages are structurally absent, AC-PL-07).
-        await requireRequisition(db, requisitionId, actor.ownClientId);
+        const scoped = await requireRequisition(db, requisitionId, actor.ownClientId);
         return withClientPhotoUrls(
-          await listClientVisibleAssignments(db, actor.ownClientId, requisitionId),
+          await listClientVisibleAssignments(db, actor.ownClientId, scoped.id),
         );
       }
-      await requireRequisition(db, requisitionId);
+      const requisition = await requireRequisition(db, requisitionId);
       return withAdminPhotoUrls(
-        await listAdminAssignmentsForRequisition(db, requisitionId),
+        await listAdminAssignmentsForRequisition(db, requisition.id),
       );
     },
 

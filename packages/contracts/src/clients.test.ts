@@ -16,6 +16,7 @@ const NOW = '2026-08-12T09:00:00.000Z';
 describe('ClientSchema', () => {
   const base = {
     id: UUID,
+    publicId: 'lSbqRVXPbTmC',
     companyName: 'Acme Inc.',
     website: null,
     industry: null,

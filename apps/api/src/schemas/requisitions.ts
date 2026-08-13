@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   CollectionResponseSchema,
   EntityEventSchema,
+  EntityRefSchema,
   RequisitionDetailSchema,
   RequisitionSchema,
   SingleResponseSchema,
@@ -29,4 +30,5 @@ export const EventCollectionSchema = z.object({
   }),
 });
 
-export const RequisitionIdParamSchema = z.object({ id: z.string().uuid() });
+/** `:id` accepts the internal uuid OR the 12-char public_id (0015). */
+export const RequisitionIdParamSchema = z.object({ id: EntityRefSchema });

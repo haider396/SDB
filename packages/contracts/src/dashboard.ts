@@ -21,6 +21,7 @@ import {
   RequisitionStatusSchema,
 } from './enums.js';
 import { ClientVisibleStageSchema } from './assignments.js';
+import { PublicIdSchema } from './public-ids.js';
 import { EntityEventSchema } from './requisitions.js';
 
 const isoTimestamp = z.string().datetime({ offset: true });
@@ -33,6 +34,8 @@ const count = z.number().int().nonnegative();
 /** One of the caller's requisitions with its client-visible stage summary. */
 export const ClientDashboardRequisitionSchema = z.object({
   id: z.string().uuid(),
+  /** DB-generated 12-char base62 URL handle (0015) — for short detail URLs. */
+  publicId: PublicIdSchema,
   reference: z.string(),
   advertisedTitle: z.string().nullable(),
   status: RequisitionStatusSchema,
@@ -142,6 +145,15 @@ export const AttentionQueueItemSchema = z.object({
    * the requisition's pipeline view directly. Absent for other entity types.
    */
   requisitionId: z.string().uuid().optional(),
+  /**
+   * Short-URL companion to the requisition context: the owning (or linked)
+   * requisition's public id. Present whenever the item involves a
+   * requisition — alongside `requisitionId` for assignment/interview items,
+   * and for requisition-shaped items (where `entityId` is the requisition's
+   * UUID) — so the web can build short deep links. `requisitionId` stays a
+   * UUID for compatibility.
+   */
+  requisitionPublicId: PublicIdSchema.optional(),
   /** Human reference of the linked object (REQ-…, CAN-…, company name). */
   reference: z.string(),
   /** One-line display label for the queue row. */

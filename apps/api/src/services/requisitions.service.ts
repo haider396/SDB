@@ -143,15 +143,18 @@ export function createRequisitionsService(
   /**
    * Tenant-filtered load: scoped callers only ever see their own client's
    * requisitions — anything else is a 404 (04 §1.3, AC-AUTH-05).
+   * `requisitionRef` accepts the internal uuid OR the 12-char public_id
+   * (0015); callers that keep using their `requisitionId` parameter after
+   * this reassign it to the returned record's `.id`.
    */
   async function load(
-    requisitionId: string,
+    requisitionRef: string,
     actor: RequisitionActor,
   ): Promise<RequisitionRecord> {
     const record =
       actor.ownClientId === null
-        ? await findRequisitionById(deps.db, requisitionId)
-        : await findRequisitionById(deps.db, requisitionId, actor.ownClientId);
+        ? await findRequisitionById(deps.db, requisitionRef)
+        : await findRequisitionById(deps.db, requisitionRef, actor.ownClientId);
     if (record === null) {
       throw new ApiError('NOT_FOUND', 'Requisition not found.');
     }
@@ -359,6 +362,7 @@ export function createRequisitionsService(
 
     async update(requisitionId, body, actor) {
       const record = await load(requisitionId, actor);
+      requisitionId = record.id;
 
       // 02 §7: budget_unit is mandatory whenever a budget amount is present —
       // checked against the MERGED row so partial updates stay coherent.
@@ -425,6 +429,7 @@ export function createRequisitionsService(
 
     async updateAnswers(requisitionId, answers, actor) {
       const record = await load(requisitionId, actor);
+      requisitionId = record.id;
 
       // Same six-step pipeline as intake (03 §3.3): validate the MERGED
       // answer set (stored + incoming) against the active scope, then write

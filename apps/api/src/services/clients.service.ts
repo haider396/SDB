@@ -53,6 +53,7 @@ import {
   type ClientMemberRecord,
   type ClientRecord,
 } from '../repositories/clients.repo.js';
+import { resolvePublicId } from '../repositories/public-ids.repo.js';
 import { emitEvent } from './events.js';
 import { issueInvitationToken } from './invitations.js';
 import { safeEnqueue, type EnqueueLogger } from './notifications.js';
@@ -167,13 +168,26 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
   const isAdmin = (actor: ClientActor): boolean => actor.ownClientId === null;
 
   /**
+   * Map a uuid-or-public-id client reference (0015) to the internal uuid
+   * BEFORE any tenancy comparison, so both address forms behave identically.
+   * Identity for uuids (no query); 404 for an unknown public_id.
+   */
+  async function resolveClientRef(clientRef: string): Promise<string> {
+    const clientId = await resolvePublicId(deps.db, 'clients', clientRef);
+    if (clientId === null) throw new ApiError('NOT_FOUND', 'Client not found.');
+    return clientId;
+  }
+
+  /**
    * Read addressing (04 §6): client users may only read their own client;
-   * anything else — existing or not — is a 404.
+   * anything else — existing or not — is a 404. Callers reassign their
+   * `clientId` parameter to the returned record's `.id` (the uuid).
    */
   async function loadForRead(
-    clientId: string,
+    clientRef: string,
     actor: ClientActor,
   ): Promise<ClientRecord> {
+    const clientId = await resolveClientRef(clientRef);
     if (!isAdmin(actor) && actor.ownClientId !== clientId) {
       throw new ApiError('NOT_FOUND', 'Client not found.');
     }
@@ -185,12 +199,14 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
   /**
    * Write addressing (04 §1.3, AC-AUTH-06): a scoped caller writing to a
    * foreign client gets 403 WRONG_TENANT when that client is known to exist,
-   * 404 otherwise.
+   * 404 otherwise. Callers reassign their `clientId` parameter to the
+   * returned record's `.id` (the uuid).
    */
   async function loadForWrite(
-    clientId: string,
+    clientRef: string,
     actor: ClientActor,
   ): Promise<ClientRecord> {
+    const clientId = await resolveClientRef(clientRef);
     if (!isAdmin(actor) && actor.ownClientId !== clientId) {
       const exists = await findClientById(deps.db, clientId);
       if (exists !== null) {
@@ -290,6 +306,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
 
     async update(clientId, body, actor) {
       const before = await loadForWrite(clientId, actor);
+      clientId = before.id;
       const client = await withTransaction(deps.db, async (tx) => {
         const updated = await updateClient(tx, clientId, body);
         if (updated === null) throw new ApiError('NOT_FOUND', 'Client not found.');
@@ -310,6 +327,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
 
     async confirmPayment(clientId, body, actor) {
       const before = await loadForWrite(clientId, actor);
+      clientId = before.id;
       const client = await withTransaction(deps.db, async (tx) => {
         const updated = await confirmClientPayment(tx, clientId, {
           paymentConfirmedAt: body.paymentConfirmedAt,
@@ -338,6 +356,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
 
     async grantAccess(clientId, body, actor) {
       const client = await loadForWrite(clientId, actor);
+      clientId = client.id;
       // J2 rule: no portal access while payment is unconfirmed (AC-CL-01).
       // The chk_access_requires_payment constraint backs this up in SQL.
       if (client.paymentConfirmedAt === null) {
@@ -413,7 +432,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
     },
 
     async revokeAccess(clientId, actor) {
-      await loadForWrite(clientId, actor);
+      clientId = (await loadForWrite(clientId, actor)).id;
       const members = await listMembers(deps.db, clientId);
       const deactivatedUserIds = await withTransaction(deps.db, async (tx) => {
         const cleared = await setPortalAccess(tx, clientId, null);
@@ -443,7 +462,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
     },
 
     async listMembers(clientId, actor) {
-      await loadForRead(clientId, actor);
+      clientId = (await loadForRead(clientId, actor)).id;
       return listMembers(deps.db, clientId);
     },
 
@@ -451,6 +470,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
       // AC-AUTH-06: a client_admin invites ONLY into their own client — a
       // foreign existing client is 403 WRONG_TENANT.
       const client = await loadForWrite(clientId, actor);
+      clientId = client.id;
 
       let invitedUserId = '';
       let memberId: string | null = null;
@@ -510,7 +530,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
     },
 
     async removeMember(clientId, userId, actor) {
-      await loadForWrite(clientId, actor);
+      clientId = (await loadForWrite(clientId, actor)).id;
       const member = await findMember(deps.db, clientId, userId);
       if (member === null) throw new ApiError('NOT_FOUND', 'Member not found.');
 
@@ -545,7 +565,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
     },
 
     async updateMember(clientId, userId, body, actor) {
-      await loadForWrite(clientId, actor);
+      clientId = (await loadForWrite(clientId, actor)).id;
       const member = await findMember(deps.db, clientId, userId);
       if (member === null) throw new ApiError('NOT_FOUND', 'Member not found.');
 

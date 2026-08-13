@@ -32,6 +32,7 @@ import {
   VettingStatusSchema,
   WorkspaceTypeSchema,
 } from './enums.js';
+import { PublicIdSchema } from './public-ids.js';
 
 // ---------------------------------------------------------------------------
 // Shared field fragments
@@ -68,6 +69,8 @@ export const ACCENT_STRENGTH_ORDER = [
 
 export const CandidateSchema = z.object({
   id: z.string().uuid(),
+  /** DB-generated 12-char base62 URL handle (0015). Never writable. */
+  publicId: PublicIdSchema,
   reference: z.string(),
   externalId: z.string().nullable(),
   firstName: z.string(),

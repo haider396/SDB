@@ -35,6 +35,7 @@ import {
   findCandidateById,
   setCvPrimaryFileIfUnset,
 } from '../repositories/candidates.repo.js';
+import { resolvePublicId } from '../repositories/public-ids.repo.js';
 import type { CandidateActor } from './candidates.service.js';
 import { emitEvent } from './events.js';
 
@@ -90,6 +91,19 @@ export function createCandidateFilesService(
     }
   }
 
+  /**
+   * Map a uuid-or-public-id candidate reference (0015) to the internal uuid.
+   * Identity for uuids (no existence check — parity with the previous
+   * behaviour); 404 for an unknown public_id.
+   */
+  async function resolveCandidateRef(ref: string): Promise<string> {
+    const candidateId = await resolvePublicId(db, 'candidates', ref);
+    if (candidateId === null) {
+      throw new ApiError('NOT_FOUND', 'Candidate not found.');
+    }
+    return candidateId;
+  }
+
   async function requireCandidate(sql: Db | Tx, candidateId: string): Promise<void> {
     const candidate = await findCandidateById(sql, candidateId);
     if (candidate === null) {
@@ -126,6 +140,7 @@ export function createCandidateFilesService(
           { sizeBytes: body.sizeBytes, maxBytes: MAX_FILE_SIZE_BYTES },
         );
       }
+      candidateId = await resolveCandidateRef(candidateId);
       await requireCandidate(db, candidateId);
 
       const fileId = randomUUID();
@@ -166,6 +181,7 @@ export function createCandidateFilesService(
 
     async confirmUpload(candidateId, fileId, actor) {
       assertAdminSurface(actor);
+      candidateId = await resolveCandidateRef(candidateId);
       const file = await requireFile(db, candidateId, fileId);
       if (file.virusScanStatus !== 'pending') {
         // Confirming twice is idempotent — return the completed row.
@@ -221,12 +237,14 @@ export function createCandidateFilesService(
 
     async list(candidateId, actor) {
       assertAdminSurface(actor);
+      candidateId = await resolveCandidateRef(candidateId);
       await requireCandidate(db, candidateId);
       return filesRepo.listFiles(db, candidateId);
     },
 
     async update(candidateId, fileId, body, actor) {
       assertAdminSurface(actor);
+      candidateId = await resolveCandidateRef(candidateId);
       return withTransaction(db, async (tx) => {
         const file = await requireFile(tx, candidateId, fileId);
         await filesRepo.updateFile(tx, fileId, {
@@ -259,6 +277,7 @@ export function createCandidateFilesService(
 
     async remove(candidateId, fileId, actor) {
       assertAdminSurface(actor);
+      candidateId = await resolveCandidateRef(candidateId);
       const file = await requireFile(db, candidateId, fileId);
       // Storage object first: if this fails the row survives and the delete
       // can be retried; the reverse would orphan the object forever.

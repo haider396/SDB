@@ -15,6 +15,7 @@ const NOW = '2026-08-12T09:00:00.000Z';
 
 const baseRequisition = {
   id: UUID,
+  publicId: 'lSbqRVXPbTmC',
   reference: 'REQ-000123',
   clientId: UUID,
   clientName: 'Acme Inc.',

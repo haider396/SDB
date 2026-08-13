@@ -38,6 +38,7 @@ import {
   ServiceTierSchema,
   VettingStatusSchema,
 } from './enums.js';
+import { PublicIdSchema } from './public-ids.js';
 import { CLIENT_VISIBLE_STAGES } from './stages.js';
 
 const isoTimestamp = z.string().datetime({ offset: true });
@@ -78,6 +79,8 @@ export const AdminAssignmentRowSchema = AssignmentSchema.extend({
   clientId: z.string().uuid(),
   candidate: z.object({
     id: z.string().uuid(),
+    /** DB-generated 12-char base62 URL handle (0015). */
+    publicId: PublicIdSchema,
     reference: z.string(),
     firstName: z.string(),
     lastName: z.string(),

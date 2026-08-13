@@ -42,6 +42,7 @@ interface AssignmentRowBase {
 interface AdminAssignmentJoinedRow extends AssignmentRowBase {
   requisition_reference: string;
   client_id: string;
+  c_public_id: string;
   c_reference: string;
   c_first_name: string;
   c_last_name: string;
@@ -83,6 +84,7 @@ function mapAdminRow(row: AdminAssignmentJoinedRow): AdminAssignmentRow {
     clientId: row.client_id,
     candidate: {
       id: row.candidate_id,
+      publicId: row.c_public_id,
       reference: row.c_reference,
       firstName: row.c_first_name,
       lastName: row.c_last_name,
@@ -108,6 +110,7 @@ const ADMIN_ROW_COLUMNS = `
   a.presented_at, a.client_decision_at, a.assigned_by, a.presented_by,
   a.admin_note, a.client_note, a.sort_order, a.created_at, a.updated_at,
   r.reference as requisition_reference, r.client_id,
+  c.public_id as c_public_id,
   c.reference as c_reference, c.first_name as c_first_name,
   c.last_name as c_last_name, c.display_name as c_display_name,
   c.photo_path as c_photo_path,

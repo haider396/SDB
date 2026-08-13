@@ -29,6 +29,7 @@ import type {
 } from '@sdb/contracts';
 import type postgres from 'postgres';
 import type { Queryable } from '../lib/db.js';
+import { resolvePublicId } from './public-ids.repo.js';
 
 // ---------------------------------------------------------------------------
 // Row mapping
@@ -41,6 +42,7 @@ const num = (value: string | null): number | null =>
 
 interface CandidateRow {
   id: string;
+  public_id: string;
   reference: string;
   external_id: string | null;
   first_name: string;
@@ -149,7 +151,7 @@ interface CandidateRow {
 }
 
 const CANDIDATE_COLUMNS = `
-  id, reference, external_id, first_name, last_name, preferred_name,
+  id, public_id, reference, external_id, first_name, last_name, preferred_name,
   display_name, email::text as email, phone, whatsapp, linkedin_url,
   portfolio_url, photo_path, country, region_state, city, timezone,
   nationality, relocation_status,
@@ -188,6 +190,7 @@ const CANDIDATE_COLUMNS = `
 function mapCandidate(row: CandidateRow): Candidate {
   return {
     id: row.id,
+    publicId: row.public_id,
     reference: row.reference,
     externalId: row.external_id,
     firstName: row.first_name,
@@ -527,11 +530,14 @@ export async function listCandidates(
   };
 }
 
+/** `candidateRef` is a uuid OR a public_id (0015) — resolved here. */
 export async function findCandidateById(
   sql: Queryable,
-  candidateId: string,
+  candidateRef: string,
   opts: { includeArchived?: boolean } = {},
 ): Promise<Candidate | null> {
+  const candidateId = await resolvePublicId(sql, 'candidates', candidateRef);
+  if (candidateId === null) return null;
   const rows = await sql<CandidateRow[]>`
     select ${sql.unsafe(CANDIDATE_COLUMNS)}
     from candidates

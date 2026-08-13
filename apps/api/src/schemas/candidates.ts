@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import {
   CandidateAssessmentSchema,
+  EntityRefSchema,
   CandidateCertificationSchema,
   CandidateDetailSchema,
   CandidateDisqualifierCheckSchema,
@@ -67,13 +68,14 @@ export const FileDownloadUrlEnvelopeSchema = SingleResponseSchema(
 );
 export const WebhookResponseEnvelopeSchema = WebhookResponseSchema;
 
-export const CandidateIdParamSchema = z.object({ id: z.string().uuid() });
+/** `:id` accepts the internal uuid OR the 12-char public_id (0015). */
+export const CandidateIdParamSchema = z.object({ id: EntityRefSchema });
 export const CandidateChildParamsSchema = z.object({
-  id: z.string().uuid(),
+  id: EntityRefSchema,
   entryId: z.string().uuid(),
 });
 export const CandidateFileParamsSchema = z.object({
-  id: z.string().uuid(),
+  id: EntityRefSchema,
   fileId: z.string().uuid(),
 });
 export const FileIdParamSchema = z.object({ fileId: z.string().uuid() });

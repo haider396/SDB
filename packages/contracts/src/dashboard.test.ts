@@ -20,6 +20,7 @@ describe('ClientDashboardSchema', () => {
       requisitions: [
         {
           id: uuid(),
+          publicId: 'lSbqRVXPbTmC',
           reference: 'REQ-000001',
           advertisedTitle: 'Executive Assistant',
           status: 'candidates_presented',
@@ -75,6 +76,7 @@ describe('ClientDashboardSchema', () => {
       requisitions: [
         {
           id: uuid(),
+          publicId: 'lSbqRVXPbTmC',
           reference: 'REQ-000001',
           advertisedTitle: null,
           status: 'sourcing',

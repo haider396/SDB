@@ -13,6 +13,7 @@ import type {
   UserRoleKey,
 } from '@sdb/contracts';
 import type { Queryable } from '../lib/db.js';
+import { resolvePublicId } from './public-ids.repo.js';
 
 function jsonb(sql: Queryable, value: unknown): postgres.Parameter {
   return sql.json(value as postgres.JSONValue);
@@ -25,6 +26,7 @@ function jsonb(sql: Queryable, value: unknown): postgres.Parameter {
 /** Full internal record — commercials included; the service strips them. */
 export interface RequisitionRecord {
   id: string;
+  publicId: string;
   reference: string;
   clientId: string;
   clientName: string;
@@ -65,6 +67,7 @@ export interface RequisitionRecord {
 
 interface RequisitionRow {
   id: string;
+  public_id: string;
   reference: string;
   client_id: string;
   client_name: string;
@@ -110,6 +113,7 @@ const num = (value: string | null): number | null =>
 function mapRequisition(row: RequisitionRow): RequisitionRecord {
   return {
     id: row.id,
+    publicId: row.public_id,
     reference: row.reference,
     clientId: row.client_id,
     clientName: row.client_name,
@@ -149,7 +153,7 @@ function mapRequisition(row: RequisitionRow): RequisitionRecord {
 }
 
 const REQUISITION_COLUMNS = `
-  r.id, r.reference, r.client_id, c.company_name as client_name,
+  r.id, r.public_id, r.reference, r.client_id, c.company_name as client_name,
   r.engine_id, r.department_id, r.role_category_id,
   r.advertised_title, r.headcount, r.status,
   r.seniority_level, r.engagement_type, r.hours_per_week,
@@ -224,12 +228,15 @@ export async function listRequisitions(
 /**
  * Single requisition; `clientId` (when given) is the mandatory tenant filter —
  * a cross-tenant id yields null, surfacing as 404 (04 §1.3).
+ * `requisitionRef` is a uuid OR a public_id (0015) — resolved here.
  */
 export async function findRequisitionById(
   sql: Queryable,
-  requisitionId: string,
+  requisitionRef: string,
   clientId?: string,
 ): Promise<RequisitionRecord | null> {
+  const requisitionId = await resolvePublicId(sql, 'requisitions', requisitionRef);
+  if (requisitionId === null) return null;
   const rows = await sql<RequisitionRow[]>`
     select ${sql.unsafe(REQUISITION_COLUMNS)}
     from requisitions r

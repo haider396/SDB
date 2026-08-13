@@ -13,6 +13,7 @@ import type { EventRecord } from './requisitions.repo.js';
 
 export interface ClientRequisitionSummaryRecord {
   id: string;
+  publicId: string;
   reference: string;
   advertisedTitle: string | null;
   status: RequisitionStatus;
@@ -28,6 +29,7 @@ export async function listClientRequisitionSummaries(
   const rows = await sql<
     {
       id: string;
+      public_id: string;
       reference: string;
       advertised_title: string | null;
       status: RequisitionStatus;
@@ -35,13 +37,14 @@ export async function listClientRequisitionSummaries(
       updated_at: Date;
     }[]
   >`
-    select id, reference, advertised_title, status, submitted_at, updated_at
+    select id, public_id, reference, advertised_title, status, submitted_at, updated_at
     from requisitions
     where client_id = ${clientId}
     order by created_at desc, id desc
   `;
   return rows.map((row) => ({
     id: row.id,
+    publicId: row.public_id,
     reference: row.reference,
     advertisedTitle: row.advertised_title,
     status: row.status,

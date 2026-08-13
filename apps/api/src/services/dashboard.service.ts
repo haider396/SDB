@@ -70,6 +70,7 @@ export function createDashboardService(
       return {
         requisitions: summaries.map((summary) => ({
           id: summary.id,
+          publicId: summary.publicId,
           reference: summary.reference,
           advertisedTitle: summary.advertisedTitle,
           status: summary.status,

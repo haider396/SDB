@@ -5,6 +5,7 @@
  */
 import type { ClientMemberRole, ClientStatus, ServiceTier } from '@sdb/contracts';
 import type { Queryable } from '../lib/db.js';
+import { resolvePublicId } from './public-ids.repo.js';
 
 // ---------------------------------------------------------------------------
 // Row shapes and mapping
@@ -12,6 +13,7 @@ import type { Queryable } from '../lib/db.js';
 
 export interface ClientRecord {
   id: string;
+  publicId: string;
   companyName: string;
   website: string | null;
   industry: string | null;
@@ -32,6 +34,7 @@ export interface ClientRecord {
 
 interface ClientRow {
   id: string;
+  public_id: string;
   company_name: string;
   website: string | null;
   industry: string | null;
@@ -56,6 +59,7 @@ const iso = (value: Date | null): string | null =>
 function mapClient(row: ClientRow): ClientRecord {
   return {
     id: row.id,
+    publicId: row.public_id,
     companyName: row.company_name,
     website: row.website,
     industry: row.industry,
@@ -76,7 +80,7 @@ function mapClient(row: ClientRow): ClientRecord {
 }
 
 const CLIENT_COLUMNS = `
-  id, company_name, website, industry, team_size_band, company_timezone,
+  id, public_id, company_name, website, industry, team_size_band, company_timezone,
   status, service_tier, payment_confirmed_at, invoice_reference,
   portal_access_enabled_at, portal_access_enabled_by,
   onboarding_readiness_note, internal_notes,
@@ -136,10 +140,13 @@ export async function listClients(
   };
 }
 
+/** `clientRef` is a uuid OR a public_id (0015) — resolved here. */
 export async function findClientById(
   sql: Queryable,
-  clientId: string,
+  clientRef: string,
 ): Promise<ClientRecord | null> {
+  const clientId = await resolvePublicId(sql, 'clients', clientRef);
+  if (clientId === null) return null;
   const rows = await sql<ClientRow[]>`
     select ${sql.unsafe(CLIENT_COLUMNS)}
     from clients

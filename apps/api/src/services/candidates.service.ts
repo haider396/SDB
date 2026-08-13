@@ -253,11 +253,16 @@ export function createCandidatesService(
     }
   }
 
+  /**
+   * `candidateRef` accepts the internal uuid OR the 12-char public_id
+   * (0015). Callers reassign their `candidateId` parameter to the returned
+   * record's `.id` so every downstream query works with the uuid.
+   */
   async function requireCandidate(
     sql: Db | Tx,
-    candidateId: string,
+    candidateRef: string,
   ): Promise<Candidate> {
-    const candidate = await repo.findCandidateById(sql, candidateId);
+    const candidate = await repo.findCandidateById(sql, candidateRef);
     if (candidate === null) {
       throw new ApiError('NOT_FOUND', 'Candidate not found.');
     }
@@ -394,6 +399,7 @@ export function createCandidatesService(
     async get(candidateId, actor) {
       assertAdminSurface(actor);
       const candidate = await requireCandidate(db, candidateId);
+      candidateId = candidate.id;
       const [
         languages,
         tools,
@@ -452,6 +458,7 @@ export function createCandidatesService(
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
         const existing = await requireCandidate(tx, candidateId);
+        candidateId = existing.id;
         const updated = await repo.updateCandidate(
           tx,
           candidateId,
@@ -535,7 +542,7 @@ export function createCandidatesService(
     async archive(candidateId, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const archived = await repo.archiveCandidate(tx, candidateId);
         if (!archived) throw new ApiError('NOT_FOUND', 'Candidate not found.');
         await emitEvent(tx, {
@@ -557,6 +564,7 @@ export function createCandidatesService(
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
         const existing = await requireCandidate(tx, candidateId);
+        candidateId = existing.id;
         await repo.setCandidateConsent(tx, candidateId, body);
         await emitEvent(tx, {
           entityType: 'candidate',
@@ -576,14 +584,14 @@ export function createCandidatesService(
 
     async listLanguages(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listLanguages(db, candidateId);
     },
 
     async addLanguage(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         try {
           const id = await repo.insertLanguage(tx, candidateId, body);
           await emitChildEvent(tx, candidateId, actor, 'language', 'added', {
@@ -600,7 +608,7 @@ export function createCandidatesService(
     async updateLanguage(candidateId, languageId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         let ok: boolean;
         try {
           ok = await repo.updateLanguage(tx, candidateId, languageId, body);
@@ -618,7 +626,7 @@ export function createCandidatesService(
     async removeLanguage(candidateId, languageId, actor) {
       assertAdminSurface(actor);
       await withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.deleteLanguage(tx, candidateId, languageId);
         if (!ok) throw new ApiError('NOT_FOUND', 'Language entry not found.');
         await emitChildEvent(tx, candidateId, actor, 'language', 'removed', {
@@ -631,14 +639,14 @@ export function createCandidatesService(
 
     async listTools(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listTools(db, candidateId);
     },
 
     async replaceTools(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         try {
           await repo.replaceTools(tx, candidateId, body.tools);
         } catch (error) {
@@ -653,14 +661,14 @@ export function createCandidatesService(
 
     async listSkills(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listSkills(db, candidateId);
     },
 
     async replaceSkills(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         try {
           await repo.replaceSkills(tx, candidateId, body.skills);
         } catch (error) {
@@ -677,14 +685,14 @@ export function createCandidatesService(
 
     async listEmployment(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listEmployment(db, candidateId);
     },
 
     async addEmployment(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const id = await repo.insertEmployment(
           tx,
           candidateId,
@@ -700,7 +708,7 @@ export function createCandidatesService(
     async updateEmployment(candidateId, entryId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.updateEmployment(
           tx,
           candidateId,
@@ -718,7 +726,7 @@ export function createCandidatesService(
     async removeEmployment(candidateId, entryId, actor) {
       assertAdminSurface(actor);
       await withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.deleteEmployment(tx, candidateId, entryId);
         if (!ok) throw new ApiError('NOT_FOUND', 'Employment entry not found.');
         await emitChildEvent(tx, candidateId, actor, 'employment', 'removed', {
@@ -731,14 +739,14 @@ export function createCandidatesService(
 
     async listEducation(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listEducation(db, candidateId);
     },
 
     async addEducation(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const id = await repo.insertEducation(
           tx,
           candidateId,
@@ -754,7 +762,7 @@ export function createCandidatesService(
     async updateEducation(candidateId, entryId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.updateEducation(
           tx,
           candidateId,
@@ -772,7 +780,7 @@ export function createCandidatesService(
     async removeEducation(candidateId, entryId, actor) {
       assertAdminSurface(actor);
       await withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.deleteEducation(tx, candidateId, entryId);
         if (!ok) throw new ApiError('NOT_FOUND', 'Education entry not found.');
         await emitChildEvent(tx, candidateId, actor, 'education', 'removed', {
@@ -785,14 +793,14 @@ export function createCandidatesService(
 
     async listCertifications(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listCertifications(db, candidateId);
     },
 
     async addCertification(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const id = await repo.insertCertification(
           tx,
           candidateId,
@@ -808,7 +816,7 @@ export function createCandidatesService(
     async updateCertification(candidateId, entryId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.updateCertification(
           tx,
           candidateId,
@@ -826,7 +834,7 @@ export function createCandidatesService(
     async removeCertification(candidateId, entryId, actor) {
       assertAdminSurface(actor);
       await withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.deleteCertification(tx, candidateId, entryId);
         if (!ok) throw new ApiError('NOT_FOUND', 'Certification not found.');
         await emitChildEvent(tx, candidateId, actor, 'certification', 'removed', {
@@ -839,14 +847,14 @@ export function createCandidatesService(
 
     async listReferences(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listReferences(db, candidateId);
     },
 
     async addReference(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const id = await repo.insertReference(
           tx,
           candidateId,
@@ -863,7 +871,7 @@ export function createCandidatesService(
     async updateReference(candidateId, entryId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.updateReference(
           tx,
           candidateId,
@@ -882,7 +890,7 @@ export function createCandidatesService(
     async removeReference(candidateId, entryId, actor) {
       assertAdminSurface(actor);
       await withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const ok = await repo.deleteReference(tx, candidateId, entryId);
         if (!ok) throw new ApiError('NOT_FOUND', 'Reference not found.');
         await emitChildEvent(tx, candidateId, actor, 'reference', 'removed', {
@@ -895,14 +903,14 @@ export function createCandidatesService(
 
     async listNotes(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listNotes(db, candidateId);
     },
 
     async addNote(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         const id = await repo.insertNote(tx, candidateId, {
           authorId: actor.userId,
           body: body.body,
@@ -922,14 +930,14 @@ export function createCandidatesService(
 
     async listDisqualifierChecks(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listDisqualifierChecks(db, candidateId);
     },
 
     async putDisqualifierChecks(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         try {
           for (const check of body.checks) {
             await repo.upsertDisqualifierCheck(tx, candidateId, {
@@ -953,14 +961,14 @@ export function createCandidatesService(
 
     async listAssessments(candidateId, actor) {
       assertAdminSurface(actor);
-      await requireCandidate(db, candidateId);
+      candidateId = (await requireCandidate(db, candidateId)).id;
       return repo.listAssessments(db, candidateId);
     },
 
     async addAssessment(candidateId, body, actor) {
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
-        await requireCandidate(tx, candidateId);
+        candidateId = (await requireCandidate(tx, candidateId)).id;
         try {
           const id = await repo.insertAssessment(tx, candidateId, {
             provider: body.provider,

@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { ClientStatusSchema, ServiceTierSchema } from './enums.js';
+import { PublicIdSchema } from './public-ids.js';
 
 // ---------------------------------------------------------------------------
 // Client resource
@@ -19,6 +20,8 @@ import { ClientStatusSchema, ServiceTierSchema } from './enums.js';
  */
 export const ClientSchema = z.object({
   id: z.string().uuid(),
+  /** DB-generated 12-char base62 URL handle (0015). Never writable. */
+  publicId: PublicIdSchema,
   companyName: z.string(),
   website: z.string().nullable(),
   industry: z.string().nullable(),

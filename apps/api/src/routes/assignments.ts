@@ -31,6 +31,7 @@ import {
   ClientVisibleAssignmentEnvelopeSchema,
   PlacementEnvelopeSchema,
 } from '../schemas/assignments.js';
+import { RequisitionIdParamSchema } from '../schemas/requisitions.js';
 import type {
   AssignmentActor,
   AssignmentsService,
@@ -77,7 +78,8 @@ export async function assignmentRoutes(
     {
       ...guarded('candidate.assign'),
       schema: {
-        params: AssignmentIdParamSchema,
+        // Requisition `:id` accepts a uuid or a public_id (0015).
+        params: RequisitionIdParamSchema,
         body: CreateAssignmentsBodySchema,
         response: { 201: AdminAssignmentCollectionSchema },
       },
@@ -99,7 +101,8 @@ export async function assignmentRoutes(
     {
       ...guarded('assignment.view'),
       schema: {
-        params: AssignmentIdParamSchema,
+        // Requisition `:id` accepts a uuid or a public_id (0015).
+        params: RequisitionIdParamSchema,
         response: { 200: AssignmentCollectionSchema },
       },
     },

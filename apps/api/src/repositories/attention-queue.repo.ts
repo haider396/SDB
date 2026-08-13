@@ -28,6 +28,13 @@ export interface QueueItemRecord {
    * the assignment- and interview-shaped buckets only.
    */
   requisitionId?: string;
+  /**
+   * Short-URL companion (0015): the involved requisition's public_id —
+   * populated by every requisition-linked bucket (requisition-shaped ones
+   * included, where entityId is the requisition's uuid). requisitionId stays
+   * a uuid for compatibility.
+   */
+  requisitionPublicId?: string;
   reference: string;
   label: string;
   since: string;
@@ -44,6 +51,7 @@ const ITEM_CAP = 50;
 interface BucketRow {
   entity_id: string;
   requisition_id?: string | null;
+  requisition_public_id?: string | null;
   reference: string;
   label: string;
   since: Date;
@@ -58,6 +66,10 @@ function mapBucket(rows: BucketRow[]): QueueBucketRecord {
       ...(row.requisition_id !== undefined && row.requisition_id !== null
         ? { requisitionId: row.requisition_id }
         : {}),
+      ...(row.requisition_public_id !== undefined &&
+      row.requisition_public_id !== null
+        ? { requisitionPublicId: row.requisition_public_id }
+        : {}),
       reference: row.reference,
       label: row.label,
       since: row.since.toISOString(),
@@ -70,7 +82,7 @@ export async function queueNewIntakeSubmissions(
   sql: Queryable,
 ): Promise<QueueBucketRecord> {
   const rows = await sql<BucketRow[]>`
-    select r.id as entity_id, r.reference,
+    select r.id as entity_id, r.public_id as requisition_public_id, r.reference,
            r.reference || coalesce(' — ' || r.advertised_title, '') as label,
            r.submitted_at as since,
            count(*) over ()::text as total
@@ -88,7 +100,7 @@ export async function queueAwaitingPrincipalApproval(
   thresholdDays: number,
 ): Promise<QueueBucketRecord> {
   const rows = await sql<BucketRow[]>`
-    select r.id as entity_id, r.reference,
+    select r.id as entity_id, r.public_id as requisition_public_id, r.reference,
            r.reference || coalesce(' — ' || r.advertised_title, '') as label,
            entered.since as since,
            count(*) over ()::text as total
@@ -136,7 +148,7 @@ export async function queueNoCandidatesPresented(
   thresholdDays: number,
 ): Promise<QueueBucketRecord> {
   const rows = await sql<BucketRow[]>`
-    select r.id as entity_id, r.reference,
+    select r.id as entity_id, r.public_id as requisition_public_id, r.reference,
            r.reference || coalesce(' — ' || r.advertised_title, '') as label,
            coalesce(r.sourcing_started_at, r.created_at) as since,
            count(*) over ()::text as total
@@ -156,7 +168,8 @@ export async function queueAwaitingClientFeedback(
   thresholdDays: number,
 ): Promise<QueueBucketRecord> {
   const rows = await sql<BucketRow[]>`
-    select a.id as entity_id, r.id as requisition_id, r.reference,
+    select a.id as entity_id, r.id as requisition_id,
+           r.public_id as requisition_public_id, r.reference,
            c.display_name || ' — ' || r.reference as label,
            a.presented_at as since,
            count(*) over ()::text as total
@@ -177,7 +190,8 @@ export async function queueInterviewWithoutOutcome(
   sql: Queryable,
 ): Promise<QueueBucketRecord> {
   const rows = await sql<BucketRow[]>`
-    select i.id as entity_id, r.id as requisition_id, r.reference,
+    select i.id as entity_id, r.id as requisition_id,
+           r.public_id as requisition_public_id, r.reference,
            c.display_name || ' — round ' || i.round_number || ' — ' || r.reference as label,
            i.scheduled_at as since,
            count(*) over ()::text as total

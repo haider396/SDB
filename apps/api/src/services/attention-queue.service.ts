@@ -109,6 +109,9 @@ export function createAttentionQueueService(
         ...(item.requisitionId !== undefined
           ? { requisitionId: item.requisitionId }
           : {}),
+        ...(item.requisitionPublicId !== undefined
+          ? { requisitionPublicId: item.requisitionPublicId }
+          : {}),
         reference: item.reference,
         label: item.label,
         since: item.since,
