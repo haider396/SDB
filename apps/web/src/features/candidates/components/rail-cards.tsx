@@ -75,11 +75,35 @@ export function ProfileRailCard({ candidate }: { candidate: CandidateDetail }) {
             <p className="font-mono text-xs text-neutral-500">
               {candidate.reference}
             </p>
-            <div className="mt-1 flex items-center gap-1.5">
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <VettingStatusBadge status={candidate.vettingStatus} />
               <DataCompletenessBadge completeness={candidate.dataCompleteness} />
             </div>
           </div>
+        </div>
+
+        {/* Consent state must be visible without scrolling (UX 2.5) — the
+            chip jumps to the consent card where it is captured. */}
+        <div className="mt-3">
+          <a
+            href="#candidate-section-consent"
+            onClick={(event) => {
+              event.preventDefault();
+              document
+                .getElementById("candidate-section-consent")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className={
+              candidate.hasConsentToShareProfile
+                ? "inline-flex items-center gap-1 rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text hover:underline"
+                : "inline-flex items-center gap-1 rounded-full bg-danger-subtle px-2 py-0.5 text-[11px] font-medium text-danger-text hover:underline"
+            }
+          >
+            {candidate.hasConsentToShareProfile
+              ? "Consent captured"
+              : "Consent missing"}
+            <span className="sr-only"> — go to the consent section</span>
+          </a>
         </div>
 
         <div className="mt-4 space-y-1.5">

@@ -13,7 +13,7 @@
  */
 import { useDraggable } from "@dnd-kit/core";
 import { AlertTriangle, CalendarClock, ExternalLink, GripVertical } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type {
   AdminAssignmentRow,
   AssignmentStage,
@@ -50,7 +50,7 @@ export interface AssignmentCardProps {
   /** Hydrated for interview_scheduled / interviewed cards only. */
   interviews?: Interview[];
   actions: CardActions;
-  /** Multi-select mode is active on this card's column (vetted only). */
+  /** Vetted cards always carry the present-selection checkbox. */
   isSelectable: boolean;
   isSelected: boolean;
   onToggleSelect: (assignmentId: string) => void;
@@ -133,7 +133,11 @@ export function AssignmentCard({
     ...menuAdvanceTargets(row.stage).map(
       (target): CardMenuItem => ({
         key: `advance-${target}`,
-        label: `Advance to ${STAGE_LABELS[target]}`,
+        // Withdrawing is an exit, not progress — label it as marking.
+        label:
+          target === "withdrawn"
+            ? "Mark as withdrawn"
+            : `Advance to ${STAGE_LABELS[target]}`,
         onSelect: () => actions.onAdvance(row, target),
       }),
     ),
@@ -234,15 +238,18 @@ export function AssignmentCard({
 
         <div className="flex items-center gap-1">
           {consentMissing ? (
-            <span
-              className="text-warning-text"
-              title="Consent to share profile is missing — cannot be presented"
+            // Links to the candidate page, where consent is captured.
+            <Link
+              to={`/admin/candidates/${row.candidateId}`}
+              className="rounded-sm text-warning-text hover:text-warning-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+              title="Consent to share profile is missing — capture it on the candidate page"
             >
               <AlertTriangle aria-hidden="true" className="h-4 w-4" />
               <span className="sr-only">
-                Consent missing — cannot be presented
+                Consent missing — cannot be presented. Open the candidate page
+                to capture consent.
               </span>
-            </span>
+            </Link>
           ) : null}
           <CardMenu label={`Actions for ${name}`} items={menuItems} />
         </div>

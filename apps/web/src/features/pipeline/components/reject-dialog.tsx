@@ -59,6 +59,10 @@ export function RejectDialog({ requisitionId, row, onClose }: RejectDialogProps)
 
   const reasons = reasonsQuery.data ?? [];
   const chosen = reasons.find((reason) => reason.key === reasonKey);
+  // Submit stays disabled until a reason is chosen — and, for "Other",
+  // until the free text is filled (AC-PL-10: a reason row is mandatory).
+  const canSubmit =
+    chosen !== undefined && (!chosen.isOther || otherText.trim() !== "");
 
   const submit = () => {
     if (row === null) return;
@@ -174,7 +178,7 @@ export function RejectDialog({ requisitionId, row, onClose }: RejectDialogProps)
           </Button>
           <Button
             variant="destructive"
-            disabled={reject.isPending}
+            disabled={!canSubmit || reject.isPending}
             onClick={submit}
           >
             {reject.isPending ? "Rejecting…" : "Reject candidate"}

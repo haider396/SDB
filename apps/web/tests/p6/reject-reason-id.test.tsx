@@ -138,12 +138,10 @@ describe("reject dialog with the live rejection-reasons taxonomy", () => {
       within(dialog).getByLabelText("Reason"),
       "other_admin",
     );
-    await user.click(
-      within(dialog).getByRole("button", { name: "Reject candidate" }),
-    );
+    // "Other" without text keeps the submit disabled (UX 1.10 check).
     expect(
-      within(dialog).getByText("Describe the reason when choosing Other."),
-    ).toBeInTheDocument();
+      within(dialog).getByRole("button", { name: "Reject candidate" }),
+    ).toBeDisabled();
 
     await user.type(
       within(dialog).getByLabelText("Describe the reason"),

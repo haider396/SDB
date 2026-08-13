@@ -13,6 +13,7 @@
 import {
   DndContext,
   DragOverlay,
+  MeasuringStrategy,
   PointerSensor,
   rectIntersection,
   useSensor,
@@ -43,11 +44,10 @@ export interface PipelineBoardProps {
   /** Interview lists for interview_scheduled / interviewed cards (P6). */
   interviewsByAssignmentId: Map<string, Interview[]>;
   actions: CardActions;
-  /** Multi-select (present) mode: checkboxes on vetted cards. */
-  isSelectMode: boolean;
+  /** Present multi-select: vetted cards always carry their checkbox. */
   selectedIds: ReadonlySet<string>;
   onToggleSelect: (assignmentId: string) => void;
-  /** Vetted column header slot (Select / Present controls). */
+  /** Vetted column header slot (selection count). */
   vettedHeaderAction?: React.ReactNode;
 }
 
@@ -56,7 +56,6 @@ export function PipelineBoard({
   candidateById,
   interviewsByAssignmentId,
   actions,
-  isSelectMode,
   selectedIds,
   onToggleSelect,
   vettedHeaderAction,
@@ -96,6 +95,9 @@ export function PipelineBoard({
     <DndContext
       sensors={sensors}
       collisionDetection={rectIntersection}
+      // Empty columns expand when hovered mid-drag; keep droppable rects
+      // fresh so collision detection tracks the layout shift.
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
@@ -129,10 +131,10 @@ export function PipelineBoard({
                     candidate={candidateById.get(row.candidateId)}
                     interviews={interviewsByAssignmentId.get(row.id)}
                     actions={actions}
-                    isSelectable={isSelectMode && stage === "vetted"}
+                    isSelectable={stage === "vetted"}
                     isSelected={selectedIds.has(row.id)}
                     onToggleSelect={onToggleSelect}
-                    isDraggable={!isSelectMode}
+                    isDraggable
                   />
                 ))
               )}

@@ -71,6 +71,35 @@ export function queueItemHref(
   }
 }
 
+/**
+ * Buckets whose membership is a full filtered list elsewhere in the admin —
+ * the header's "View all N" links there. Buckets without an equivalent
+ * filter (e.g. awaiting client feedback) have no entry.
+ */
+export const BUCKET_VIEW_ALL_HREF: Partial<
+  Record<AttentionQueueBucketKey, string>
+> = {
+  new_intake_submissions: "/admin/requisitions?status=submitted",
+  incomplete_webhook_candidates: "/admin/candidates?dataCompleteness=incomplete",
+  // The clients list reads `pendingAccess` (see clients-list-page.tsx).
+  payment_confirmed_access_not_granted: "/admin/clients?pendingAccess=true",
+};
+
+/**
+ * Waiting-time thresholds per bucket, in days. NOT in the API payload —
+ * these are the default trio from docs/01-PRODUCT-OVERVIEW.md §6 (principal
+ * approval > 3 days, sourcing with nothing presented > 5 days, client
+ * feedback > 3 days), hardcoded here until the API exposes the configured
+ * values. Buckets without a documented threshold are omitted.
+ */
+export const BUCKET_THRESHOLD_DAYS: Partial<
+  Record<AttentionQueueBucketKey, number>
+> = {
+  awaiting_principal_approval: 3,
+  no_candidates_presented: 5,
+  awaiting_client_feedback: 3,
+};
+
 export const OUTCOME_LABELS: Record<InterviewOutcome, string> = {
   pending: "Pending",
   passed: "Passed",

@@ -23,7 +23,7 @@ import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useChildWrite, useDisqualifierOptions } from "../api";
 import { VisibilityChip } from "./badges";
-import { useReportDirty } from "./section-form";
+import { useRegisterSectionSubmit, useReportDirty } from "./section-form";
 
 interface CheckDraft {
   result: DisqualifierCheckResult | "";
@@ -146,6 +146,7 @@ export function DisqualifiersCard({
       );
     }
   };
+  useRegisterSectionSubmit("disqualifiers", save);
 
   const checkedById = new Map(
     candidate.disqualifierChecks.map((check) => [check.disqualifierId, check]),

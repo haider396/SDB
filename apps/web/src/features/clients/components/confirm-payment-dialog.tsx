@@ -36,10 +36,13 @@ export function ConfirmPaymentDialog({
   client,
   open,
   onClose,
+  onConfirmed,
 }: {
   client: Client;
   open: boolean;
   onClose: () => void;
+  /** Fires after a successful confirm (e.g. to offer granting access next). */
+  onConfirmed?: () => void;
 }) {
   const confirmPayment = useConfirmPayment();
   const form = useForm<FormValues>({
@@ -68,6 +71,7 @@ export function ConfirmPaymentDialog({
         },
       });
       onClose();
+      onConfirmed?.();
     } catch (cause) {
       form.setError("root", {
         message:

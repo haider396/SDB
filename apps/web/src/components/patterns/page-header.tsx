@@ -5,6 +5,7 @@
 import { ChevronRight } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export interface Breadcrumb {
   label: string;
@@ -25,6 +26,8 @@ export function PageHeader({
   subtitle,
   actions,
 }: PageHeaderProps) {
+  // The document title follows the page's H1 (UX 1.10).
+  usePageTitle(title);
   return (
     <header className="mb-8">
       {breadcrumbs && breadcrumbs.length > 0 ? (

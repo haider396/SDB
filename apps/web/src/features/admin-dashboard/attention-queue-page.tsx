@@ -15,17 +15,34 @@ import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api-client";
-import { formatDateTime, formatRelative } from "@/lib/format";
+import { daysSince, formatDateTime, formatRelative } from "@/lib/format";
 import { useAttentionQueue, useRefreshAttentionQueue } from "./api";
 import {
   BUCKET_ALL_CLEAR,
   BUCKET_DISPLAY_ORDER,
   BUCKET_LABELS,
+  BUCKET_THRESHOLD_DAYS,
+  BUCKET_VIEW_ALL_HREF,
   queueItemHref,
 } from "./labels";
 
+/**
+ * Age display: relative time normally; once a bucket's waiting threshold is
+ * exceeded, days plus the overage ("6d · 3d over") so triage can sort by
+ * how late, not just how old.
+ */
+function ageText(since: string, thresholdDays: number | undefined): string {
+  const days = daysSince(since);
+  if (thresholdDays !== undefined && days > thresholdDays) {
+    return `${days}d · ${days - thresholdDays}d over`;
+  }
+  return formatRelative(since);
+}
+
 function BucketCard({ bucket }: { bucket: AttentionQueueBucket }) {
   const title = bucket.label || BUCKET_LABELS[bucket.key];
+  const viewAllHref = BUCKET_VIEW_ALL_HREF[bucket.key];
+  const thresholdDays = BUCKET_THRESHOLD_DAYS[bucket.key];
 
   if (bucket.count === 0) {
     return (
@@ -61,11 +78,21 @@ function BucketCard({ bucket }: { bucket: AttentionQueueBucket }) {
             item{bucket.count === 1 ? "" : "s"}
           </span>
         </span>
-        {bucket.count > bucket.items.length ? (
-          <span className="ml-auto text-xs text-neutral-500">
-            Showing the oldest {bucket.items.length}
-          </span>
-        ) : null}
+        <span className="ml-auto inline-flex items-center gap-3">
+          {bucket.count > bucket.items.length ? (
+            <span className="text-xs text-neutral-500">
+              Showing the oldest {bucket.items.length}
+            </span>
+          ) : null}
+          {viewAllHref !== undefined ? (
+            <Link
+              to={viewAllHref}
+              className="text-xs font-medium text-brand-blue hover:underline"
+            >
+              View all {bucket.count}
+            </Link>
+          ) : null}
+        </span>
       </header>
       <ul className="divide-y divide-neutral-100">
         {bucket.items.map((item) => (
@@ -85,7 +112,7 @@ function BucketCard({ bucket }: { bucket: AttentionQueueBucket }) {
                 title={formatDateTime(item.since)}
                 className="shrink-0 whitespace-nowrap text-xs tabular-nums text-neutral-500"
               >
-                {formatRelative(item.since)}
+                {ageText(item.since, thresholdDays)}
               </time>
             </Link>
           </li>

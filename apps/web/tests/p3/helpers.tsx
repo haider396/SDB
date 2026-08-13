@@ -174,6 +174,8 @@ export function makeDetail(
 ): CandidateDetail {
   return {
     ...candidate,
+    photoUrl: null,
+    missingFields: [],
     languages: [],
     tools: [],
     skills: [],

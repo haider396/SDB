@@ -50,6 +50,7 @@ export function PlaceDialog({ requisitionId, row, onClose }: PlaceDialogProps) {
   const [serviceTier, setServiceTier] = useState<"" | ServiceTier>("");
   const [guaranteeEndDate, setGuaranteeEndDate] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [unitError, setUnitError] = useState<string | null>(null);
   const [isPlaced, setIsPlaced] = useState(false);
 
   const place = usePlaceAssignment(requisitionId);
@@ -63,6 +64,7 @@ export function PlaceDialog({ requisitionId, row, onClose }: PlaceDialogProps) {
     setServiceTier("");
     setGuaranteeEndDate("");
     setValidationError(null);
+    setUnitError(null);
     setIsPlaced(false);
   }, [row?.id]);
 
@@ -77,6 +79,14 @@ export function PlaceDialog({ requisitionId, row, onClose }: PlaceDialogProps) {
       setValidationError("The rate must be a non-negative number.");
       return;
     }
+    // 02 §7 precedent (fields-card): a money amount without a unit is
+    // ambiguous — refuse it here before the API does. Unit without an
+    // amount is fine.
+    if (amount !== null && rateUnit === "") {
+      setUnitError("Pick a unit — an amount without a unit is ambiguous.");
+      return;
+    }
+    setUnitError(null);
     const hours = hoursPerWeek.trim() === "" ? null : Number(hoursPerWeek);
     if (
       hours !== null &&
@@ -178,9 +188,11 @@ export function PlaceDialog({ requisitionId, row, onClose }: PlaceDialogProps) {
                   <NativeSelect
                     id="place-rate-unit"
                     value={rateUnit}
-                    onChange={(event) =>
-                      setRateUnit(event.target.value as "" | RateUnit)
-                    }
+                    aria-invalid={unitError !== null || undefined}
+                    onChange={(event) => {
+                      setRateUnit(event.target.value as "" | RateUnit);
+                      if (event.target.value !== "") setUnitError(null);
+                    }}
                   >
                     <option value="">—</option>
                     {RATE_UNIT_OPTIONS.map((unit) => (
@@ -189,6 +201,11 @@ export function PlaceDialog({ requisitionId, row, onClose }: PlaceDialogProps) {
                       </option>
                     ))}
                   </NativeSelect>
+                  {unitError !== null ? (
+                    <p role="alert" className="text-xs text-danger-text">
+                      {unitError}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="place-rate-currency">Currency</Label>

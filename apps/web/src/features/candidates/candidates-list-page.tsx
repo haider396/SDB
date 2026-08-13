@@ -4,7 +4,7 @@
  * restores it. Admins see full PII here — this surface never feeds clients.
  */
 import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, Users } from "lucide-react";
+import { FilterX, Plus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type {
@@ -32,11 +32,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { formatDate, SENIORITY_LABELS } from "@/lib/format";
+import { SENIORITY_LABELS } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
-import { useCandidates, useTaxonomyOptions, useToolOptions } from "./api";
+import {
+  CANDIDATE_PAGE_SIZE,
+  useCandidates,
+  useTaxonomyOptions,
+  useToolOptions,
+} from "./api";
 import {
   ACCENT_LABELS,
+  COUNTRY_NAMES,
   countryFlag,
   formatRate,
   LANGUAGE_LEVEL_LABELS,
@@ -103,8 +109,10 @@ function buildColumns(
         ) : (
           <span>
             {flag !== null ? (
-              <span aria-hidden="true" className="mr-1.5">
-                {flag}
+              // A real space (not margin alone) so "🇨🇱 Chile" never renders
+              // flush and copies correctly.
+              <span aria-hidden="true" className="mr-1">
+                {flag}{" "}
               </span>
             ) : null}
             {row.original.country}
@@ -188,13 +196,9 @@ function buildColumns(
         <DataCompletenessBadge completeness={row.original.dataCompleteness} />
       ),
     },
-    {
-      id: "availableFrom",
-      accessorKey: "availableFrom",
-      header: "Available from",
-      meta: meta({ numeric: true }),
-      cell: ({ row }) => formatDate(row.original.availableFrom),
-    },
+    // "Available from" was dropped: the field is not captured by any intake
+    // channel today (seed data has zero values), so the column was always
+    // empty width. The value stays visible on the candidate detail page.
   ];
 }
 
@@ -286,17 +290,39 @@ export function CandidatesListPage() {
     );
   };
 
-  const hasFilters =
-    search !== "" ||
-    country !== "" ||
-    roleCategoryId !== undefined ||
-    englishSpokenLevel !== undefined ||
-    maxAccentStrength !== undefined ||
-    poolStatus !== undefined ||
-    vettingStatus !== undefined ||
-    rateFilterActive ||
-    toolIds.length > 0 ||
-    incompleteOnly;
+  // One count per logical filter (the rate ceiling counts once).
+  const activeFilterCount = [
+    search !== "",
+    country !== "",
+    roleCategoryId !== undefined,
+    englishSpokenLevel !== undefined,
+    maxAccentStrength !== undefined,
+    poolStatus !== undefined,
+    vettingStatus !== undefined,
+    rateMax !== undefined || rateUnit !== undefined,
+    toolIds.length > 0,
+    incompleteOnly,
+  ].filter(Boolean).length;
+  const hasFilters = activeFilterCount > 0;
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setCountryInput("");
+    setSearchParams(new URLSearchParams(), { replace: true });
+  };
+
+  const clearFiltersButton = (
+    <Button variant="secondary" size="sm" onClick={clearFilters}>
+      <FilterX aria-hidden="true" />
+      Clear filters ({activeFilterCount})
+    </Button>
+  );
+
+  // The server omits nextCursor on the final page, but a short page is
+  // already proof there is nothing more — hide "Load more" either way.
+  const lastPage = query.data?.pages.at(-1);
+  const lastPageFull =
+    lastPage !== undefined && lastPage.data.length >= CANDIDATE_PAGE_SIZE;
 
   return (
     <div>
@@ -349,11 +375,18 @@ export function CandidatesListPage() {
             id="candidates-country"
             value={countryInput}
             placeholder="e.g. Philippines"
+            list="candidates-country-options"
             onChange={(event) => {
               setCountryInput(event.target.value);
               setParam("country", event.target.value.trim());
             }}
           />
+          {/* Known pool countries as suggestions; free text stays allowed. */}
+          <datalist id="candidates-country-options">
+            {COUNTRY_NAMES.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </div>
         <div className="w-44 space-y-1.5">
           <Label htmlFor="candidates-english">English (spoken)</Label>
@@ -486,6 +519,7 @@ export function CandidatesListPage() {
           />
           Incomplete data only
         </label>
+        {hasFilters ? clearFiltersButton : null}
       </div>
 
       <DataTable
@@ -502,7 +536,9 @@ export function CandidatesListPage() {
           description: hasFilters
             ? "No candidates match these filters. Clear them to see the full pool."
             : "Candidates appear here when you add them manually or when they arrive via the sourcing webhook.",
-          action: (
+          action: hasFilters ? (
+            clearFiltersButton
+          ) : (
             <Button asChild>
               <Link to="/admin/candidates/new">
                 <Plus aria-hidden="true" />
@@ -513,7 +549,7 @@ export function CandidatesListPage() {
         }}
         getRowHref={(candidate) => `/admin/candidates/${candidate.id}`}
         onLoadMore={() => void query.fetchNextPage()}
-        hasMore={query.hasNextPage}
+        hasMore={query.hasNextPage && lastPageFull}
         isLoadingMore={query.isFetchingNextPage}
         footer={`${rows.length} candidate${rows.length === 1 ? "" : "s"} loaded`}
       />

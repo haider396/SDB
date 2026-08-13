@@ -76,33 +76,32 @@ describe("reject and place dialogs", () => {
     await user.click(screen.getByRole("menuitem", { name: "Reject…" }));
 
     const dialog = await screen.findByRole("dialog");
-    await user.click(
-      within(dialog).getByRole("button", { name: "Reject candidate" }),
-    );
+    // No reason chosen: the destructive submit is disabled outright.
     expect(
-      within(dialog).getByText("Choose a rejection reason."),
-    ).toBeInTheDocument();
+      within(dialog).getByRole("button", { name: "Reject candidate" }),
+    ).toBeDisabled();
     expect(
       mock.requests.some((request) => request.pathname.endsWith("/reject")),
     ).toBe(false);
 
-    // Choosing "Other" without text is also rejected.
+    // Choosing "Other" without text keeps it disabled.
     await user.selectOptions(
       within(dialog).getByLabelText("Reason"),
       "other_admin",
     );
-    await user.click(
-      within(dialog).getByRole("button", { name: "Reject candidate" }),
-    );
     expect(
-      within(dialog).getByText("Describe the reason when choosing Other."),
-    ).toBeInTheDocument();
+      within(dialog).getByRole("button", { name: "Reject candidate" }),
+    ).toBeDisabled();
 
-    // With text it submits reasonOther + optional detail, no actor field.
+    // With text it enables and submits reasonOther + optional detail,
+    // no actor field.
     await user.type(
       within(dialog).getByLabelText("Describe the reason"),
       "Portfolio mismatch",
     );
+    expect(
+      within(dialog).getByRole("button", { name: "Reject candidate" }),
+    ).toBeEnabled();
     await user.type(
       within(dialog).getByLabelText("Detail (optional)"),
       "Notes here",
@@ -175,6 +174,20 @@ describe("reject and place dialogs", () => {
       "2026-09-01",
     );
     await user.type(within(dialog).getByLabelText("Rate"), "1500");
+
+    // Money safety (UX 1.9): an amount without a unit is refused inline.
+    await user.click(
+      within(dialog).getByRole("button", { name: "Place candidate" }),
+    );
+    expect(
+      within(dialog).getByText(
+        "Pick a unit — an amount without a unit is ambiguous.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      mock.requests.some((request) => request.pathname.endsWith("/place")),
+    ).toBe(false);
+
     await user.selectOptions(within(dialog).getByLabelText("Per"), "monthly");
     await user.type(within(dialog).getByLabelText("Hours / week"), "40");
     await user.selectOptions(

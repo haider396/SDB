@@ -65,12 +65,18 @@ function MappedLock({ label }: { label: string }) {
 
 function QuestionRow({
   question,
+  isHighlighted,
   onEdit,
+  onDuplicated,
   onArchive,
   onToggleActive,
 }: {
   question: Question;
+  /** Search-result focus: the row the page-level search jumped to. */
+  isHighlighted: boolean;
   onEdit: () => void;
+  /** Open the editor on the freshly created copy. */
+  onDuplicated: (duplicate: Question) => void;
   onArchive: () => void;
   onToggleActive: (isActive: boolean) => void;
 }) {
@@ -78,7 +84,13 @@ function QuestionRow({
   const isMapped = isMappedQuestionKey(question.key);
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pr-1">
+    <div
+      className={
+        isHighlighted
+          ? "flex min-w-0 flex-1 items-center gap-3 rounded-md bg-brand-blue-subtle py-2 pr-1 ring-1 ring-brand-blue"
+          : "flex min-w-0 flex-1 items-center gap-3 py-2 pr-1"
+      }
+    >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium text-neutral-800">
@@ -111,10 +123,14 @@ function QuestionRow({
           aria-label={`Duplicate ${question.label}`}
           disabled={duplicateQuestion.isPending}
           onClick={() =>
-            duplicateQuestion.mutate({
-              id: question.id,
-              categoryId: question.categoryId,
-            })
+            duplicateQuestion.mutate(
+              { id: question.id, categoryId: question.categoryId },
+              {
+                // Duplicating is almost always "copy, then tweak" — open
+                // the editor on the new copy straight away.
+                onSuccess: (duplicated) => onDuplicated(duplicated),
+              },
+            )
           }
         >
           <Copy aria-hidden="true" />
@@ -165,12 +181,15 @@ export function QuestionPane({
   categoryId,
   categoryLabel,
   questions,
+  highlightedQuestionId,
   onCreate,
   onEdit,
 }: {
   categoryId: string;
   categoryLabel: string;
   questions: Question[];
+  /** Row to highlight after a cross-category search jump. */
+  highlightedQuestionId?: string | null;
   onCreate: () => void;
   onEdit: (question: Question) => void;
 }) {
@@ -219,7 +238,9 @@ export function QuestionPane({
         renderItem={(question) => (
           <QuestionRow
             question={question}
+            isHighlighted={question.id === highlightedQuestionId}
             onEdit={() => onEdit(question)}
+            onDuplicated={onEdit}
             onArchive={() => setArchiveTarget(question)}
             onToggleActive={(isActive) => toggleActive(question, isActive)}
           />

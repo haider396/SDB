@@ -3,7 +3,7 @@
  * current state by the 01 §4 adjacency map, and a server 409
  * INVALID_TRANSITION surfaces with its from/to detail.
  */
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RequisitionStatus } from "@sdb/contracts";
@@ -66,7 +66,11 @@ describe("stage tracker transitions", () => {
   it.each(cases)("renders only the allowed targets from %s", async (status) => {
     const { state } = setup(status);
     installApiMock(state);
-    renderAdmin(`/admin/requisitions/${state.requisitions[0]?.id ?? ""}`);
+    // ?tab=overview pins the Overview tab: active-phase statuses now
+    // default to the Pipeline tab (UX 2.3), and the tracker lives here.
+    renderAdmin(
+      `/admin/requisitions/${state.requisitions[0]?.id ?? ""}?tab=overview`,
+    );
 
     const labels = await moveToButtons();
     const expected = allowedTransitions(status).map(
@@ -116,7 +120,7 @@ describe("stage tracker transitions", () => {
           )
         : undefined,
     );
-    renderAdmin(`/admin/requisitions/${requisition.id}`);
+    renderAdmin(`/admin/requisitions/${requisition.id}?tab=overview`);
 
     await user.click(
       await screen.findByRole("button", { name: "Candidates presented" }),
@@ -128,11 +132,46 @@ describe("stage tracker transitions", () => {
     ).toBeInTheDocument();
   });
 
+  it("closed_unfilled goes through the typed-name confirm (UX 2.2)", async () => {
+    const user = userEvent.setup();
+    const { state, requisition } = setup("sourcing");
+    const mock = installApiMock(state);
+    renderAdmin(`/admin/requisitions/${requisition.id}?tab=overview`);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Closed unfilled" }),
+    );
+    // No transition yet — the typed confirm intercepts.
+    expect(
+      mock.requests.some((request) => request.pathname.endsWith("/transition")),
+    ).toBe(false);
+
+    const dialog = await screen.findByRole("dialog");
+    const confirm = within(dialog).getByRole("button", {
+      name: "Close unfilled",
+    });
+    expect(confirm).toBeDisabled();
+
+    await user.type(
+      within(dialog).getByLabelText(/Type/),
+      requisition.reference,
+    );
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+
+    await waitFor(() => {
+      const post = mock.requests.find((request) =>
+        request.pathname.endsWith("/transition"),
+      );
+      expect(post?.body).toEqual({ toStatus: "closed_unfilled" });
+    });
+  });
+
   it("applies a successful transition and updates the badge", async () => {
     const user = userEvent.setup();
     const { state, requisition } = setup("sourcing");
     const mock = installApiMock(state);
-    renderAdmin(`/admin/requisitions/${requisition.id}`);
+    renderAdmin(`/admin/requisitions/${requisition.id}?tab=overview`);
 
     await user.click(
       await screen.findByRole("button", { name: "Candidates presented" }),

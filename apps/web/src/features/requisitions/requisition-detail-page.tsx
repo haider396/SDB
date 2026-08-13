@@ -4,12 +4,15 @@
  * fields left; status tracker, approval, event log in a sticky rail — 05
  * §4.1) and "Pipeline" is the P4 kanban board (05 §4.7).
  *
- * Tab state lives in the URL as `?tab=pipeline` (useSearchParams) so board
- * links are shareable; any other/absent value means Overview. The tablist
- * follows the WAI-ARIA tabs pattern with arrow-key navigation.
+ * Tab state lives in the URL as `?tab=…` (useSearchParams) so board links
+ * are shareable; the URL always wins. With no tab param the default is
+ * status-aware: requisitions in an active sourcing/interviewing phase land
+ * on Pipeline (that is where the work is), everything else on Overview.
+ * The tablist follows the WAI-ARIA tabs pattern with arrow-key navigation.
  */
 import { useId, type KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import type { RequisitionStatus } from "@sdb/contracts";
 import { ErrorState } from "@/components/patterns/error-state";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -31,6 +34,14 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "pipeline", label: "Pipeline" },
 ];
 
+/** Statuses whose day-to-day work happens on the board, not the overview. */
+const PIPELINE_FIRST_STATUSES: readonly RequisitionStatus[] = [
+  "sourcing",
+  "candidates_presented",
+  "interviewing",
+  "offer_extended",
+];
+
 export function RequisitionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const requisitionId = id ?? "";
@@ -39,14 +50,26 @@ export function RequisitionDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabsId = useId();
 
+  // URL param wins; without one the status decides the default tab.
+  const defaultTab: TabKey =
+    query.data !== undefined &&
+    PIPELINE_FIRST_STATUSES.includes(query.data.status)
+      ? "pipeline"
+      : "overview";
+  const tabParam = searchParams.get("tab");
   const activeTab: TabKey =
-    searchParams.get("tab") === "pipeline" ? "pipeline" : "overview";
+    tabParam === "pipeline"
+      ? "pipeline"
+      : tabParam === "overview"
+        ? "overview"
+        : defaultTab;
 
   const selectTab = (tab: TabKey) => {
     setSearchParams(
       (params) => {
         const next = new URLSearchParams(params);
-        if (tab === "overview") next.delete("tab");
+        // The status-derived default needs no param; the other tab does.
+        if (tab === defaultTab) next.delete("tab");
         else next.set("tab", tab);
         return next;
       },

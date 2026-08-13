@@ -12,9 +12,9 @@
  * that still slips through (raced consent change) maps offender ids back to
  * names inline.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Lock } from "lucide-react";
+import { ChevronDown, Lock } from "lucide-react";
 import { GATED_PII_FIELDS, type GatedPiiField } from "@sdb/contracts";
 import type { AdminAssignmentRow, CandidateDetail } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
@@ -201,6 +201,25 @@ export function PresentReviewSheet({
 }: PresentReviewSheetProps) {
   const [clientNote, setClientNote] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
+  // Collapsed-by-default rows; the first candidate starts expanded so the
+  // admin sees a full preview without an extra click.
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const firstRowId = rows[0]?.id;
+  useEffect(() => {
+    if (isOpen) {
+      setExpandedIds(new Set(firstRowId === undefined ? [] : [firstRowId]));
+    }
+  }, [isOpen, firstRowId]);
+  const toggleExpanded = (rowId: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
   const present = usePresentAssignments(requisitionId);
 
   const missingConsent = rows.filter(
@@ -305,12 +324,14 @@ export function PresentReviewSheet({
               const candidate = candidateById.get(row.candidateId);
               const clientVisibleFiles =
                 candidate?.files.filter((file) => file.isClientVisible) ?? [];
+              const isExpanded = expandedIds.has(row.id);
               return (
                 <li
                   key={row.id}
                   aria-label={`Client preview for ${row.candidate.displayName}`}
                   className="rounded-lg border border-border-default bg-surface-raised p-4 shadow-xs"
                 >
+                  {/* ----- Header row: always visible ----- */}
                   <div className="flex items-center gap-3">
                     {candidate?.photoPath != null ? (
                       <img
@@ -337,17 +358,60 @@ export function PresentReviewSheet({
                       </p>
                     </div>
                     {!row.candidate.hasConsentToShareProfile ? (
-                      <span className="ml-auto rounded-full bg-danger-subtle px-2 py-0.5 text-[11px] font-medium text-danger-text">
+                      <span className="ml-auto shrink-0 rounded-full bg-danger-subtle px-2 py-0.5 text-[11px] font-medium text-danger-text">
                         Consent missing
                       </span>
                     ) : (
-                      <span className="ml-auto rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text">
+                      <span className="ml-auto shrink-0 rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text">
                         Consent on file
                       </span>
                     )}
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-label={`${isExpanded ? "Collapse" : "Expand"} preview for ${row.candidate.displayName}`}
+                      onClick={() => toggleExpanded(row.id)}
+                      className="shrink-0 rounded-sm p-1 text-neutral-500 hover:text-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+                    >
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={
+                          isExpanded
+                            ? "h-4 w-4 rotate-180 transition-transform duration-fast"
+                            : "h-4 w-4 transition-transform duration-fast"
+                        }
+                      />
+                    </button>
                   </div>
 
-                  {candidate === undefined ? (
+                  {/* Gated PII stays visible in the header region even when
+                      collapsed — listed, locked, never previewed with values. */}
+                  <div className="mt-2">
+                    <p className="text-xs font-medium text-neutral-500">
+                      Withheld until an interview is scheduled
+                    </p>
+                    <ul
+                      aria-label={`Fields withheld from the client for ${row.candidate.displayName}`}
+                      className="mt-1 flex flex-wrap gap-1.5"
+                    >
+                      {GATED_PII_FIELDS.map((field) => (
+                        <li key={field}>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+                            <Lock aria-hidden="true" className="h-3 w-3" />
+                            <span className="line-through">
+                              {GATED_FIELD_LABELS[field]}
+                            </span>
+                            <span className="sr-only">
+                              — withheld until interview
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* ----- Expandable detail ----- */}
+                  {!isExpanded ? null : candidate === undefined ? (
                     <div className="mt-3">
                       <LoadingSkeleton
                         variant="card"
@@ -356,8 +420,8 @@ export function PresentReviewSheet({
                       />
                     </div>
                   ) : (
-                    <>
-                      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                    <div className="mt-3 border-t border-border-default pt-3">
+                      <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
                         {previewFields(candidate).map((field) => (
                           <div
                             key={field.label}
@@ -418,33 +482,8 @@ export function PresentReviewSheet({
                           </ul>
                         )}
                       </div>
-                    </>
+                    </div>
                   )}
-
-                  {/* Gated PII — listed, locked, never previewed with values. */}
-                  <div className="mt-3 border-t border-border-default pt-2">
-                    <p className="text-xs font-medium text-neutral-500">
-                      Withheld until an interview is scheduled
-                    </p>
-                    <ul
-                      aria-label={`Fields withheld from the client for ${row.candidate.displayName}`}
-                      className="mt-1 flex flex-wrap gap-1.5"
-                    >
-                      {GATED_PII_FIELDS.map((field) => (
-                        <li key={field}>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
-                            <Lock aria-hidden="true" className="h-3 w-3" />
-                            <span className="line-through">
-                              {GATED_FIELD_LABELS[field]}
-                            </span>
-                            <span className="sr-only">
-                              — withheld until interview
-                            </span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
                 </li>
               );
             })}

@@ -40,17 +40,36 @@ import { visibilityOf, type FieldVisibility } from "../visibility";
 import { VisibilityChip } from "./badges";
 
 // ---------------------------------------------------------------------------
-// Dirty registry — one navigation guard for all cards
+// Dirty registry — one navigation guard for all cards, plus per-section
+// submit handlers so the page's "Save all" bar can flush every dirty card
+// sequentially through the same forms (UX 2.5).
 // ---------------------------------------------------------------------------
 
-const DirtyContext = createContext<
-  ((id: string, dirty: boolean) => void) | null
->(null);
+interface DirtyRegistryHandle {
+  report: (id: string, dirty: boolean) => void;
+  registerSubmit: (id: string, submit: (() => Promise<void>) | null) => void;
+}
+
+export interface DirtySectionsState {
+  /** Section ids currently dirty, in card registration (display) order. */
+  dirtyIds: readonly string[];
+  isSavingAll: boolean;
+  /** Submit every dirty section's own form, one at a time, in order. */
+  saveAll: () => Promise<void>;
+}
+
+const DirtyContext = createContext<DirtyRegistryHandle | null>(null);
+const DirtySectionsContext = createContext<DirtySectionsState | null>(null);
 
 export function DirtyRegistryProvider({ children }: { children: ReactNode }) {
   const [dirtyIds, setDirtyIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  // Map preserves insertion order — sections register in render order, so
+  // "Save all" flushes top-to-bottom.
+  const submitsRef = useRef<Map<string, () => Promise<void>>>(new Map());
+
   const report = useCallback((id: string, dirty: boolean) => {
     setDirtyIds((previous) => {
       if (previous.has(id) === dirty) return previous;
@@ -60,16 +79,79 @@ export function DirtyRegistryProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  const registerSubmit = useCallback(
+    (id: string, submit: (() => Promise<void>) | null) => {
+      if (submit === null) submitsRef.current.delete(id);
+      else submitsRef.current.set(id, submit);
+    },
+    [],
+  );
+
+  const orderedDirtyIds = [
+    ...[...submitsRef.current.keys()].filter((id) => dirtyIds.has(id)),
+    // Dirty reporters without a registered submit still count as unsaved.
+    ...[...dirtyIds].filter((id) => !submitsRef.current.has(id)),
+  ];
+
+  const saveAll = useCallback(async () => {
+    setIsSavingAll(true);
+    try {
+      for (const [id, submit] of submitsRef.current) {
+        if (dirtyIds.has(id)) {
+          await submit();
+        }
+      }
+    } finally {
+      setIsSavingAll(false);
+    }
+  }, [dirtyIds]);
+
   useDirtyGuard(dirtyIds.size > 0);
-  return <DirtyContext.Provider value={report}>{children}</DirtyContext.Provider>;
+
+  const handle = useMemo(
+    () => ({ report, registerSubmit }),
+    [report, registerSubmit],
+  );
+
+  return (
+    <DirtyContext.Provider value={handle}>
+      <DirtySectionsContext.Provider
+        value={{ dirtyIds: orderedDirtyIds, isSavingAll, saveAll }}
+      >
+        {children}
+      </DirtySectionsContext.Provider>
+    </DirtyContext.Provider>
+  );
 }
 
 export function useReportDirty(id: string, dirty: boolean): void {
-  const report = useContext(DirtyContext);
+  const handle = useContext(DirtyContext);
+  const report = handle?.report;
   useEffect(() => {
     report?.(id, dirty);
     return () => report?.(id, false);
   }, [report, id, dirty]);
+}
+
+/** Register the section's own submit for the page-level "Save all". */
+export function useRegisterSectionSubmit(
+  id: string,
+  submit: () => Promise<void>,
+): void {
+  const handle = useContext(DirtyContext);
+  const registerSubmit = handle?.registerSubmit;
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    registerSubmit?.(id, () => submitRef.current());
+    return () => registerSubmit?.(id, null);
+  }, [registerSubmit, id]);
+}
+
+/** Dirty-section state for the sticky save bar; null outside the provider. */
+export function useDirtySections(): DirtySectionsState | null {
+  return useContext(DirtySectionsContext);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +260,20 @@ export function bodyFor(
   return body as unknown as UpdateCandidateBody;
 }
 
-function validationSchema(fields: readonly FieldDescriptor[]) {
+/**
+ * Money safety (02 §7 precedent, as in requisition fields-card): when the
+ * amount field is filled, the paired unit field is mandatory. The reverse —
+ * a unit without an amount — is fine.
+ */
+export interface AmountUnitRule {
+  amountField: WritableField;
+  unitField: WritableField;
+}
+
+function validationSchema(
+  fields: readonly FieldDescriptor[],
+  amountUnitRules: readonly AmountUnitRule[] = [],
+) {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const field of fields) {
     if (field.kind === "checkbox") {
@@ -205,7 +300,23 @@ function validationSchema(fields: readonly FieldDescriptor[]) {
       shape[field.name] = z.string();
     }
   }
-  return z.object(shape);
+  const base = z.object(shape);
+  if (amountUnitRules.length === 0) return base;
+  return base.superRefine((values, context) => {
+    for (const rule of amountUnitRules) {
+      const amount = values[rule.amountField];
+      const unit = values[rule.unitField];
+      const hasAmount = typeof amount === "string" && amount.trim() !== "";
+      const hasUnit = typeof unit === "string" && unit !== "";
+      if (hasAmount && !hasUnit) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [rule.unitField],
+          message: "Pick a unit — an amount without a unit is ambiguous.",
+        });
+      }
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +395,8 @@ export interface SectionCardProps {
   footer?: ReactNode;
   /** Card-level chip shown next to the title. */
   titleChip?: ReactNode;
+  /** Amount⇒unit pairings enforced on save (money safety, 02 §7). */
+  amountUnitRules?: readonly AmountUnitRule[];
 }
 
 export function SectionCard({
@@ -296,12 +409,16 @@ export function SectionCard({
   readOnly = false,
   footer,
   titleChip,
+  amountUnitRules,
 }: SectionCardProps) {
   const updateCandidate = useUpdateCandidate();
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const savedTimer = useRef<number | null>(null);
 
-  const schema = useMemo(() => validationSchema(fields), [fields]);
+  const schema = useMemo(
+    () => validationSchema(fields, amountUnitRules ?? []),
+    [fields, amountUnitRules],
+  );
   const defaults = useMemo(
     () => defaultsFor(candidate, fields),
     [candidate, fields],
@@ -343,6 +460,7 @@ export function SectionCard({
       });
     }
   });
+  useRegisterSectionSubmit(sectionId, () => submit());
 
   const fieldId = (name: string) => `${sectionId}-${name}`;
 

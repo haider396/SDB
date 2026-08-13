@@ -69,7 +69,9 @@ export const candidateKeys = {
   options: (kind: string) => ["candidates", "options", kind] as const,
 };
 
-const PAGE_SIZE = 25;
+/** List page size — exported so the UI can detect a short (final) page. */
+export const CANDIDATE_PAGE_SIZE = 25;
+const PAGE_SIZE = CANDIDATE_PAGE_SIZE;
 
 export function useCandidates(
   filters: CandidateListFilters,

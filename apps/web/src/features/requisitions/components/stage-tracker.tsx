@@ -13,8 +13,10 @@ import {
   REQUISITION_STATUS_META,
   RequisitionStatusBadge,
 } from "@/components/patterns/status-badge";
+import { TypedConfirmDialog } from "@/components/patterns/typed-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { ApiError } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useTransitionRequisition } from "../api";
@@ -53,10 +55,20 @@ export function StageTracker({
   const [pendingTarget, setPendingTarget] = useState<RequisitionStatus | null>(
     null,
   );
+  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
 
   const current = requisition.status;
   const resumeTarget = resumeTargetFromEvents(events);
   const targets = allowedTransitions(current, resumeTarget);
+  // Happy-path-first: forward moves render on top, the pause/terminate
+  // detours sit below a divider so they are never mistaken for progress.
+  const detourTargets = targets.filter(
+    (target): target is "on_hold" | "closed_unfilled" =>
+      target === "on_hold" || target === "closed_unfilled",
+  );
+  const forwardTargets = targets.filter(
+    (target) => target !== "on_hold" && target !== "closed_unfilled",
+  );
 
   const currentHappyIndex = HAPPY_PATH.indexOf(current);
   const isDetour = currentHappyIndex === -1;
@@ -164,7 +176,25 @@ export function StageTracker({
               Move to
             </p>
             <div className="flex flex-col gap-2">
-              {targets.map((target) => (
+              {forwardTargets.map((target) => (
+                <Button
+                  key={target}
+                  variant="secondary"
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => void runTransition(target)}
+                  disabled={transition.isPending}
+                >
+                  <ArrowRight aria-hidden="true" />
+                  {pendingTarget === target
+                    ? "Moving…"
+                    : REQUISITION_STATUS_META[target].label}
+                </Button>
+              ))}
+              {forwardTargets.length > 0 && detourTargets.length > 0 ? (
+                <Separator className="my-1" />
+              ) : null}
+              {detourTargets.map((target) => (
                 <Button
                   key={target}
                   variant={
@@ -172,7 +202,15 @@ export function StageTracker({
                   }
                   size="sm"
                   className="justify-start"
-                  onClick={() => void runTransition(target)}
+                  onClick={() => {
+                    // Closing unfilled is terminal — typed-name confirm
+                    // (AC-UI-10) instead of a bare one-click transition.
+                    if (target === "closed_unfilled") {
+                      setIsCloseConfirmOpen(true);
+                    } else {
+                      void runTransition(target);
+                    }
+                  }}
                   disabled={transition.isPending}
                 >
                   <ArrowRight aria-hidden="true" />
@@ -191,6 +229,22 @@ export function StageTracker({
           </p>
         ) : null}
       </CardContent>
+
+      <TypedConfirmDialog
+        open={isCloseConfirmOpen}
+        onClose={() => setIsCloseConfirmOpen(false)}
+        title={`Close ${requisition.reference} unfilled?`}
+        description="This is a terminal status — the requisition cannot be reopened and no further candidates can be presented on it."
+        confirmName={requisition.reference}
+        confirmLabel="Close unfilled"
+        pendingLabel="Closing…"
+        onConfirm={async () => {
+          await transition.mutateAsync({
+            id: requisition.id,
+            body: { toStatus: "closed_unfilled" },
+          });
+        }}
+      />
     </Card>
   );
 }

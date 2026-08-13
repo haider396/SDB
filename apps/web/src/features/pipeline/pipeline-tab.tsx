@@ -67,7 +67,6 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
   const interviewsByAssignmentId = useInterviewsMap(interviewAssignmentIds);
 
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
@@ -142,8 +141,7 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
     });
   };
 
-  const exitSelectMode = () => {
-    setIsSelectMode(false);
+  const clearSelection = () => {
     setSelectedIds(new Set());
   };
 
@@ -176,37 +174,21 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Button onClick={() => setIsAddOpen(true)}>Add candidates</Button>
-        {isSelectMode ? (
+        {selectedRows.length >= 1 ? (
           <>
-            <Button
-              variant="primary"
-              disabled={selectedRows.length === 0}
-              onClick={() => setIsReviewOpen(true)}
-            >
+            <Button variant="primary" onClick={() => setIsReviewOpen(true)}>
               Present {selectedRows.length} candidate
               {selectedRows.length === 1 ? "" : "s"}
             </Button>
-            <Button variant="secondary" onClick={exitSelectMode}>
-              Cancel selection
+            <Button variant="ghost" onClick={clearSelection}>
+              Clear selection
             </Button>
           </>
-        ) : (
-          <Button
-            variant="secondary"
-            disabled={vettedRows.length === 0}
-            onClick={() => setIsSelectMode(true)}
-            title={
-              vettedRows.length === 0
-                ? "No vetted candidates to present"
-                : undefined
-            }
-          >
-            Select to present
-          </Button>
-        )}
+        ) : null}
         <p className="ml-auto text-xs text-neutral-500">
-          Drag a card to advance it — columns it cannot legally reach are
-          disabled while you drag. Or use a card's menu.
+          Tick vetted candidates to present them. Drag a card to advance it —
+          columns it cannot legally reach are disabled while you drag. Or use
+          a card's menu.
         </p>
       </div>
 
@@ -225,11 +207,10 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
           candidateById={candidateById}
           interviewsByAssignmentId={interviewsByAssignmentId}
           actions={actions}
-          isSelectMode={isSelectMode}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           vettedHeaderAction={
-            isSelectMode ? (
+            selectedRows.length > 0 ? (
               <span className="text-[11px] font-medium text-brand-blue">
                 {selectedRows.length} selected
               </span>
@@ -251,7 +232,7 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
         candidateById={candidateById}
         isOpen={isReviewOpen && selectedRows.length > 0}
         onClose={() => setIsReviewOpen(false)}
-        onPresented={exitSelectMode}
+        onPresented={clearSelection}
       />
 
       <RejectDialog

@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { signInWithPassword } from "@/lib/auth";
 import { fetchMe, homePathFor, ME_QUERY_KEY } from "@/lib/permissions";
 import { queryClient } from "@/lib/query-client";
+import { usePageTitle } from "@/lib/use-page-title";
 import logoUrl from "@/assets/logo.png";
 
 const loginSchema = z.object({
@@ -31,6 +32,7 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
+  usePageTitle("Sign in");
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
   const {

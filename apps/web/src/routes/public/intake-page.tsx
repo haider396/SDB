@@ -4,8 +4,10 @@
  * browser storage (AC-IF-17).
  */
 import { IntakeForm } from "@/features/intake-form";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export function IntakePage() {
+  usePageTitle("Tell us who you need");
   return (
     <div className="min-h-screen bg-surface-page">
       <div className="mx-auto max-w-2xl px-4 py-10 sm:px-8">

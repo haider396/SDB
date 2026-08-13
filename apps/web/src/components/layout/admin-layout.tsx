@@ -16,6 +16,7 @@ import {
 import { Outlet } from "react-router-dom";
 import { Sidebar, type SidebarNavItem } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
+import { useAttentionQueueTotal } from "@/features/admin-dashboard";
 
 const ADMIN_NAV: SidebarNavItem[] = [
   { label: "Attention queue", to: "/admin", icon: BellRing, end: true },
@@ -30,9 +31,16 @@ const ADMIN_NAV: SidebarNavItem[] = [
 ];
 
 export function AdminLayout() {
+  // Pending-work pill on the queue nav item (renders only when > 0).
+  const queueTotal = useAttentionQueueTotal();
+  const nav = ADMIN_NAV.map((item) =>
+    item.to === "/admin" && queueTotal !== undefined && queueTotal > 0
+      ? { ...item, badgeCount: queueTotal }
+      : item,
+  );
   return (
     <div className="flex h-screen overflow-hidden bg-surface-page">
-      <Sidebar items={ADMIN_NAV} areaLabel="Admin" />
+      <Sidebar items={nav} areaLabel="Admin" />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
         <main className="flex-1 overflow-y-auto">

@@ -1,8 +1,8 @@
 /**
  * Brief editor: plain-text markdown source in a textarea with a preview
- * toggle. The preview is a deliberately minimal renderer — paragraphs split
- * on blank lines, line breaks preserved — no markdown library, no HTML
- * injection surface. Dirty-guarded (AC-UI-09).
+ * toggle. The preview goes through the shared SimpleMarkdown renderer
+ * (lib/simple-markdown.tsx) — headings, bullets, bold; no markdown library,
+ * no HTML injection surface. Dirty-guarded (AC-UI-09).
  */
 import { Eye, PenLine } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -12,29 +12,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api-client";
+import { SimpleMarkdown } from "@/lib/simple-markdown";
 import { useDirtyGuard } from "@/lib/use-dirty-guard";
 import { useUpdateRequisition } from "../api";
 
-/** Minimal, safe "markdown" preview: paragraphs + preserved line breaks. */
+/** Safe markdown-subset preview shared with the client portal brief. */
 export function BriefPreview({ source }: { source: string }) {
-  const paragraphs = source
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter((block) => block.length > 0);
-  if (paragraphs.length === 0) {
-    return <p className="text-sm text-neutral-500">Nothing drafted yet.</p>;
-  }
   return (
-    <div className="space-y-3">
-      {paragraphs.map((paragraph, index) => (
-        <p
-          key={index}
-          className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800"
-        >
-          {paragraph}
-        </p>
-      ))}
-    </div>
+    <SimpleMarkdown
+      source={source}
+      emptyFallback={
+        <p className="text-sm text-neutral-500">Nothing drafted yet.</p>
+      }
+    />
   );
 }
 

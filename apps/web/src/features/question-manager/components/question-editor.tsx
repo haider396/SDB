@@ -24,6 +24,14 @@ import {
   type UpdateQuestionBody,
 } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -197,22 +205,29 @@ export function QuestionEditor({
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
+  // Discard-confirmation via the app's dialog pattern (05 §4.4) — never
+  // window.confirm. `discardPrompt` holds what to do on either choice.
+  const [discardPrompt, setDiscardPrompt] = useState<{
+    discard: () => void;
+    keepEditing: () => void;
+  } | null>(null);
+
   const blocker = useBlocker(isDirty);
   useEffect(() => {
     if (blocker.state === "blocked") {
-      if (window.confirm("You have unsaved changes. Discard them?")) {
-        blocker.proceed();
-      } else {
-        blocker.reset();
-      }
+      setDiscardPrompt({
+        discard: () => blocker.proceed(),
+        keepEditing: () => blocker.reset(),
+      });
     }
   }, [blocker]);
 
   const requestClose = () => {
-    if (
-      isDirty &&
-      !window.confirm("You have unsaved changes. Discard them?")
-    ) {
+    if (isDirty) {
+      setDiscardPrompt({
+        discard: onClose,
+        keepEditing: () => undefined,
+      });
       return;
     }
     onClose();
@@ -659,6 +674,47 @@ export function QuestionEditor({
             </Button>
           </SheetFooter>
         </form>
+
+        <Dialog
+          open={discardPrompt !== null}
+          onOpenChange={(open) => {
+            if (!open && discardPrompt !== null) {
+              discardPrompt.keepEditing();
+              setDiscardPrompt(null);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Discard unsaved changes?</DialogTitle>
+              <DialogDescription>
+                This question has edits that have not been saved. Discarding
+                cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  discardPrompt?.keepEditing();
+                  setDiscardPrompt(null);
+                }}
+              >
+                Keep editing
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  const prompt = discardPrompt;
+                  setDiscardPrompt(null);
+                  prompt?.discard();
+                }}
+              >
+                Discard changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SheetContent>
     </Sheet>
   );

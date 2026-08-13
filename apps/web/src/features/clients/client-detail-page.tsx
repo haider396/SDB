@@ -5,11 +5,12 @@
  */
 import {
   CircleDollarSign,
+  ExternalLink,
   KeyRound,
   Pencil,
   ShieldOff,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Client } from "@sdb/contracts";
@@ -31,13 +32,18 @@ import { GrantAccessDialog } from "./components/grant-access-dialog";
 import { InternalNotesCard } from "./components/internal-notes-card";
 import { MembersCard } from "./components/members-card";
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
       <dt className="shrink-0 text-sm text-neutral-500">{label}</dt>
       <dd className="text-right text-sm text-neutral-800">{value}</dd>
     </div>
   );
+}
+
+/** The stored website is free text; give hrefs a scheme when it lacks one. */
+function websiteHref(website: string): string {
+  return /^https?:\/\//i.test(website) ? website : `https://${website}`;
 }
 
 function CompanyInfoCard({ client }: { client: Client }) {
@@ -48,7 +54,25 @@ function CompanyInfoCard({ client }: { client: Client }) {
       </CardHeader>
       <CardContent>
         <dl>
-          <InfoRow label="Website" value={client.website ?? "—"} />
+          <InfoRow
+            label="Website"
+            value={
+              client.website === null ? (
+                "—"
+              ) : (
+                <a
+                  href={websiteHref(client.website)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-brand-blue hover:underline"
+                >
+                  {client.website}
+                  <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )
+            }
+          />
           <InfoRow label="Industry" value={client.industry ?? "—"} />
           <InfoRow label="Team size" value={client.teamSizeBand ?? "—"} />
           <InfoRow label="Timezone" value={client.companyTimezone ?? "—"} />
@@ -259,6 +283,16 @@ export function ClientDetailPage() {
         client={client}
         open={isPaymentOpen}
         onClose={() => setIsPaymentOpen(false)}
+        onConfirmed={() => {
+          // Funnel continuation (J2): a freshly paid client's next step is
+          // portal access — open the grant dialog straight from success.
+          if (!hasPortalAccess) {
+            toast.success("Payment confirmed. Grant portal access now?");
+            setIsGrantOpen(true);
+          } else {
+            toast.success("Payment updated.");
+          }
+        }}
       />
       <GrantAccessDialog
         client={client}

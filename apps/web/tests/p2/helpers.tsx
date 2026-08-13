@@ -200,6 +200,7 @@ export function makeEvent(
     entityType: "requisition",
     eventType: "status_changed",
     actorId: testUuid(),
+    actorName: null,
     actorRole: "admin",
     fromValue: null,
     toValue: null,

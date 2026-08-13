@@ -167,6 +167,14 @@ describe("pipeline board", () => {
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
     }
 
+    // Empty columns collapse to slim strips (UX 2.4) yet stay labelled
+    // regions and droppables; populated ones render expanded.
+    expect(screen.getByRole("region", { name: "Offer column" })).toHaveAttribute(
+      "data-collapsed",
+      "true",
+    );
+    expect(vettedColumn).not.toHaveAttribute("data-collapsed");
+
     // English + accent chips hydrate from the candidate detail.
     expect(
       await within(vettedColumn).findByText("Professional English"),
@@ -183,11 +191,15 @@ describe("pipeline board", () => {
       within(vettedColumn).getAllByText(/\d+d in stage/).length,
     ).toBeGreaterThan(0);
 
-    // Consent-missing warning only on the unconsented vetted card.
+    // Consent-missing warning only on the unconsented vetted card — and it
+    // links to the candidate page where consent gets captured (UX 2.4).
     const consentWarnings = within(vettedColumn).getAllByText(
-      "Consent missing — cannot be presented",
+      /Consent missing — cannot be presented/,
     );
     expect(consentWarnings).toHaveLength(1);
+    const warningLink = consentWarnings[0]?.closest("a");
+    expect(warningLink).not.toBeNull();
+    expect(warningLink?.getAttribute("href")).toMatch(/^\/admin\/candidates\//);
 
     // Terminal group is a collapsed side list with counts.
     const closed = screen.getByRole("complementary", {
@@ -222,7 +234,7 @@ describe("pipeline board", () => {
       "View candidate",
       "View history",
       "Advance to Presented",
-      "Advance to Withdrawn",
+      "Mark as withdrawn",
       "Add note",
       "Reject…",
     ]);

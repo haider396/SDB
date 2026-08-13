@@ -46,6 +46,21 @@ export function useAttentionQueue() {
   });
 }
 
+/**
+ * Total queue size for the sidebar badge. Shares the queue's cache entry;
+ * the long staleTime keeps navigation from hammering the endpoint (the
+ * queue itself is served from a 5-minute server cache anyway, 06 §5).
+ */
+export function useAttentionQueueTotal(): number | undefined {
+  const query = useQuery<AttentionQueue>({
+    queryKey: adminDashboardKeys.attentionQueue,
+    queryFn: () => apiFetch<AttentionQueue>("/admin/attention-queue"),
+    staleTime: 5 * 60_000,
+  });
+  if (query.data === undefined) return undefined;
+  return query.data.buckets.reduce((total, bucket) => total + bucket.count, 0);
+}
+
 /** Manual refresh: bypasses the server cache with `?refresh=true`. */
 export function useRefreshAttentionQueue() {
   const queryClient = useQueryClient();

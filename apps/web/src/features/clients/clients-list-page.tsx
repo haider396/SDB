@@ -62,36 +62,32 @@ const columns: ColumnDef<Client, unknown>[] = [
         : SERVICE_TIER_LABELS[row.original.serviceTier],
   },
   {
-    id: "paymentConfirmedAt",
-    accessorKey: "paymentConfirmedAt",
-    header: "Payment",
+    // The onboarding funnel in one cell: awaiting payment → payment
+    // confirmed → portal live. The two date columns it replaces told the
+    // same story in twice the width.
+    id: "onboarding",
+    accessorFn: (row) =>
+      row.portalAccessEnabledAt !== null
+        ? 2
+        : row.paymentConfirmedAt !== null
+          ? 1
+          : 0,
+    header: "Onboarding",
     cell: ({ row }) =>
-      row.original.paymentConfirmedAt === null ? (
-        <span className="inline-flex items-center gap-1 text-neutral-500">
-          <Minus aria-hidden="true" className="h-3.5 w-3.5" />
-          Not confirmed
-        </span>
-      ) : (
+      row.original.portalAccessEnabledAt !== null ? (
         <span className="inline-flex items-center gap-1 text-success-text">
           <Check aria-hidden="true" className="h-3.5 w-3.5" />
-          {formatDate(row.original.paymentConfirmedAt)}
+          Portal live {formatDate(row.original.portalAccessEnabledAt)}
         </span>
-      ),
-  },
-  {
-    id: "portalAccessEnabledAt",
-    accessorKey: "portalAccessEnabledAt",
-    header: "Portal access",
-    cell: ({ row }) =>
-      row.original.portalAccessEnabledAt === null ? (
-        <span className="inline-flex items-center gap-1 text-neutral-500">
-          <Minus aria-hidden="true" className="h-3.5 w-3.5" />
-          None
+      ) : row.original.paymentConfirmedAt !== null ? (
+        <span className="inline-flex items-center gap-1 text-neutral-800">
+          <Check aria-hidden="true" className="h-3.5 w-3.5 text-success-text" />
+          Payment confirmed {formatDate(row.original.paymentConfirmedAt)}
         </span>
       ) : (
-        <span className="inline-flex items-center gap-1 text-success-text">
-          <Check aria-hidden="true" className="h-3.5 w-3.5" />
-          {formatDate(row.original.portalAccessEnabledAt)}
+        <span className="inline-flex items-center gap-1 text-neutral-500">
+          <Minus aria-hidden="true" className="h-3.5 w-3.5" />
+          Awaiting payment
         </span>
       ),
   },

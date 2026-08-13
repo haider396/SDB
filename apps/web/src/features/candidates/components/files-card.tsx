@@ -2,7 +2,10 @@
  * Files card (04 §8.1): list with type badge, client-visible toggle
  * (optimistic PATCH), fresh signed download URLs (300 s, 06 §6), typed-name
  * delete, and the upload flow — validate → upload-url → direct PUT with
- * progress → confirm → refresh.
+ * progress → confirm → refresh. Upload success reports inline (next to the
+ * control that caused it), not as a toast. CV rows can be promoted to the
+ * profile's primary CV; photo rows can become the profile photo — a photo
+ * upload fills an empty photoPath automatically.
  */
 import { Download, FileText, Trash2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
@@ -30,6 +33,7 @@ import {
   useCandidateFiles,
   useDeleteFile,
   useInvalidateFiles,
+  useUpdateCandidate,
   useUpdateFile,
 } from "../api";
 import { FILE_TYPE_LABELS, formatBytes } from "../labels";
@@ -43,11 +47,13 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
   const filesQuery = useCandidateFiles(candidate.id);
   const updateFile = useUpdateFile(candidate.id);
   const deleteFile = useDeleteFile(candidate.id);
+  const updateCandidate = useUpdateCandidate();
   const invalidateFiles = useInvalidateFiles();
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileType, setFileType] = useState<CandidateFileType>("cv");
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [deleting, setDeleting] = useState<CandidateFile | null>(null);
@@ -59,17 +65,31 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
       return;
     }
     setUploadError(null);
+    setUploadSuccess(null);
     setIsUploading(true);
     setProgress({ loaded: 0, total: file.size });
     try {
-      await uploadCandidateFile({
+      const uploaded = await uploadCandidateFile({
         candidateId: candidate.id,
         file,
         fileType,
         onProgress: setProgress,
       });
+      // A photo upload fills an empty profile photo automatically.
+      let becameProfilePhoto = false;
+      if (fileType === "photo" && candidate.photoPath === null) {
+        await updateCandidate.mutateAsync({
+          id: candidate.id,
+          body: { photoPath: uploaded.storagePath },
+        });
+        becameProfilePhoto = true;
+      }
       invalidateFiles(candidate.id);
-      toast.success(`${file.name} uploaded.`);
+      setUploadSuccess(
+        becameProfilePhoto
+          ? `${file.name} uploaded and set as the profile photo.`
+          : `${file.name} uploaded.`,
+      );
     } catch (cause) {
       setUploadError(
         cause instanceof ApiError || cause instanceof Error
@@ -81,6 +101,36 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
       setProgress(null);
       if (fileInputRef.current !== null) fileInputRef.current.value = "";
     }
+  };
+
+  const setPrimaryCv = (file: CandidateFile) => {
+    updateCandidate.mutate(
+      { id: candidate.id, body: { cvPrimaryFileId: file.id } },
+      {
+        onError: (cause) => {
+          toast.error(
+            cause instanceof ApiError
+              ? cause.message
+              : "Could not set the primary CV.",
+          );
+        },
+      },
+    );
+  };
+
+  const makeProfilePhoto = (file: CandidateFile) => {
+    updateCandidate.mutate(
+      { id: candidate.id, body: { photoPath: file.storagePath } },
+      {
+        onError: (cause) => {
+          toast.error(
+            cause instanceof ApiError
+              ? cause.message
+              : "Could not set the profile photo.",
+          );
+        },
+      },
+    );
   };
 
   const download = async (file: CandidateFile) => {
@@ -175,6 +225,11 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
           {uploadError !== null ? (
             <p role="alert" className="text-xs text-danger-text">
               {uploadError}
+            </p>
+          ) : null}
+          {uploadSuccess !== null ? (
+            <p aria-live="polite" className="text-xs text-success-text">
+              {uploadSuccess}
             </p>
           ) : null}
         </div>
@@ -281,6 +336,32 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
                     Client-visible
                   </label>
                 </div>
+                {file.fileType === "cv" &&
+                candidate.cvPrimaryFileId !== file.id ? (
+                  <div className="pl-6">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-brand-blue hover:underline disabled:opacity-50"
+                      disabled={updateCandidate.isPending}
+                      onClick={() => setPrimaryCv(file)}
+                    >
+                      Set as primary CV
+                    </button>
+                  </div>
+                ) : null}
+                {file.fileType === "photo" &&
+                candidate.photoPath !== file.storagePath ? (
+                  <div className="pl-6">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-brand-blue hover:underline disabled:opacity-50"
+                      disabled={updateCandidate.isPending}
+                      onClick={() => makeProfilePhoto(file)}
+                    >
+                      Use as profile photo
+                    </button>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

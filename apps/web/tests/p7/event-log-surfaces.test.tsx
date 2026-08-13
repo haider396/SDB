@@ -51,6 +51,7 @@ function makeEvent(
   return {
     id: testUuid(),
     actorId: testUuid(),
+    actorName: null,
     actorRole: "admin",
     fromValue: null,
     toValue: null,

@@ -49,9 +49,7 @@ describe("validation rules adapt to the question type", () => {
     // short_text (default): length + pattern rules, nothing scale-ish.
     expect(screen.getByLabelText("Minimum length")).toBeInTheDocument();
     expect(screen.getByLabelText("Maximum length")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Pattern (regular expression)"),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Pattern")).toBeInTheDocument();
     expect(screen.queryByLabelText("Scale minimum")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Maximum file size (MB)"),
@@ -62,9 +60,7 @@ describe("validation rules adapt to the question type", () => {
     expect(screen.getByLabelText("Scale minimum")).toBeInTheDocument();
     expect(screen.getByLabelText("Scale maximum")).toBeInTheDocument();
     expect(screen.getByLabelText("Label at minimum")).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Pattern (regular expression)"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Pattern")).not.toBeInTheDocument();
 
     // multi_select: selection bounds, and the options section appears.
     await user.selectOptions(typeSelect, "multi_select");
@@ -74,11 +70,13 @@ describe("validation rules adapt to the question type", () => {
       screen.getByRole("button", { name: /Add option/ }),
     ).toBeInTheDocument();
 
-    // file_upload: file rules only.
+    // file_upload: file rules only — MIME types as labelled checkboxes
+    // from the NFR-5 list, never a free-typed string.
     await user.selectOptions(typeSelect, "file_upload");
-    expect(
-      screen.getByLabelText("Accepted file types (comma separated)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Accepted file types")).toBeInTheDocument();
+    expect(screen.getByLabelText("PDF")).toBeInTheDocument();
+    expect(screen.getByLabelText("Word document (DOCX)")).toBeInTheDocument();
+    expect(screen.getByLabelText("MP3 audio")).toBeInTheDocument();
     expect(screen.getByLabelText("Maximum file size (MB)")).toBeInTheDocument();
     expect(screen.queryByLabelText("Minimum selections")).not.toBeInTheDocument();
 
@@ -87,5 +85,30 @@ describe("validation rules adapt to the question type", () => {
     expect(
       screen.getByText(/has no configurable validation rules/),
     ).toBeInTheDocument();
+  });
+
+  it("pattern presets: URL preset fills the regex and the probe tests values live", async () => {
+    const user = userEvent.setup();
+    await openEditor(user);
+
+    const preset = screen.getByLabelText("Pattern");
+    // No pattern yet — no probe, no raw regex input.
+    expect(screen.queryByLabelText("Test a value")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Regular expression"),
+    ).not.toBeInTheDocument();
+
+    // Picking a preset stores its regex and reveals the live probe.
+    await user.selectOptions(preset, "url");
+    const probe = screen.getByLabelText("Test a value");
+    await user.type(probe, "https://example.com");
+    expect(screen.getByText("Pass")).toBeInTheDocument();
+    await user.clear(probe);
+    await user.type(probe, "not a url");
+    expect(screen.getByText("Fail")).toBeInTheDocument();
+
+    // Custom exposes the raw regex input.
+    await user.selectOptions(preset, "custom");
+    expect(screen.getByLabelText("Regular expression")).toBeInTheDocument();
   });
 });

@@ -129,6 +129,8 @@ export function makeAssignment({
     candidate: {
       id: candidate.id,
       reference: candidate.reference,
+      photoPath: null,
+      photoUrl: null,
       firstName: candidate.firstName,
       lastName: candidate.lastName,
       displayName: candidate.displayName,

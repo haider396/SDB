@@ -420,6 +420,12 @@ const COMPENSATION_FIELDS: readonly FieldDescriptor[] = [
   },
 ];
 
+/** Money safety: an expected/current rate amount requires its unit (02 §7). */
+const COMPENSATION_AMOUNT_UNIT_RULES = [
+  { amountField: "expectedRateAmount", unitField: "expectedRateUnit" },
+  { amountField: "currentRateAmount", unitField: "currentRateUnit" },
+] as const;
+
 export function CompensationSection({ candidate }: SectionProps) {
   return (
     <SectionCard
@@ -428,6 +434,7 @@ export function CompensationSection({ candidate }: SectionProps) {
       candidate={candidate}
       fields={COMPENSATION_FIELDS}
       defaultVisibility="internal"
+      amountUnitRules={COMPENSATION_AMOUNT_UNIT_RULES}
     />
   );
 }

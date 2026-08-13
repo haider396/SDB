@@ -87,7 +87,9 @@ describe("present flow", () => {
     vi.unstubAllEnvs();
   });
 
-  async function enterSelectModeAndSelectAll(): Promise<
+  // No "select mode" any more (UX 2.1): vetted cards always carry their
+  // checkbox, and the Present button appears once anything is ticked.
+  async function selectAllVetted(): Promise<
     ReturnType<typeof userEvent.setup>
   > {
     const user = userEvent.setup();
@@ -95,9 +97,6 @@ describe("present flow", () => {
       name: "Vetted column",
     });
     await within(vettedColumn).findByText("Maria G.");
-    await user.click(
-      screen.getByRole("button", { name: "Select to present" }),
-    );
     for (const checkbox of within(vettedColumn).getAllByRole("checkbox")) {
       await user.click(checkbox);
     }
@@ -107,7 +106,7 @@ describe("present flow", () => {
   it("renders the exact client preview: visible fields, withheld PII, files", async () => {
     setup(false);
     renderPipeline(requisition.id);
-    const user = await enterSelectModeAndSelectAll();
+    const user = await selectAllVetted();
 
     await user.click(
       screen.getByRole("button", { name: "Present 1 candidate" }),
@@ -166,7 +165,7 @@ describe("present flow", () => {
   it("one confirm posts the exact body and presents", async () => {
     setup(false);
     renderPipeline(requisition.id);
-    const user = await enterSelectModeAndSelectAll();
+    const user = await selectAllVetted();
     await user.click(
       screen.getByRole("button", { name: "Present 1 candidate" }),
     );
@@ -207,7 +206,7 @@ describe("present flow", () => {
   it("blocks the confirm while any selected candidate lacks consent", async () => {
     setup(true);
     renderPipeline(requisition.id);
-    const user = await enterSelectModeAndSelectAll();
+    const user = await selectAllVetted();
     await user.click(
       screen.getByRole("button", { name: "Present 2 candidates" }),
     );
@@ -237,7 +236,7 @@ describe("present flow", () => {
     renderPipeline(requisition.id);
     // Force the server to reject despite the local consent flag: reinstall
     // the mock with an override that 422s the present call.
-    const user = await enterSelectModeAndSelectAll();
+    const user = await selectAllVetted();
     const state = mock.state;
     mock = installPipelineApiMock(state, (request) => {
       if (

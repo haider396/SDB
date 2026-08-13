@@ -29,7 +29,7 @@ import {
   useToolOptions,
   type ToolOption,
 } from "../api";
-import { useReportDirty } from "./section-form";
+import { useRegisterSectionSubmit, useReportDirty } from "./section-form";
 import { MultiSelectCombobox } from "./multi-select-combobox";
 
 interface Entry {
@@ -97,6 +97,7 @@ function PickerCard({
       );
     }
   };
+  useRegisterSectionSubmit(sectionId, save);
 
   return (
     <Card>

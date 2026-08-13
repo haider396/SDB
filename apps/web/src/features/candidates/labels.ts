@@ -205,6 +205,22 @@ const COUNTRY_ISO: Record<string, string> = {
   vietnam: "VN",
 };
 
+/**
+ * Display-cased country names backing the country filter's datalist
+ * (free text stays allowed — the map is a convenience, not a constraint).
+ */
+export const COUNTRY_NAMES: readonly string[] = Object.keys(COUNTRY_ISO)
+  .filter((name) => name.length > 2 || name === "uk")
+  .map((name) =>
+    name === "uk"
+      ? "United Kingdom"
+      : name === "usa"
+        ? "United States"
+        : name.replace(/\b[a-z]/g, (letter) => letter.toUpperCase()),
+  )
+  .filter((name, index, all) => all.indexOf(name) === index)
+  .sort();
+
 const REGIONAL_INDICATOR_OFFSET = 0x1f1e6 - "A".charCodeAt(0);
 
 export function countryFlag(country: string | null): string | null {
