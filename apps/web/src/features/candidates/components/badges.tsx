@@ -88,35 +88,37 @@ export function DataCompletenessBadge({
  * what the client can see.
  */
 export function VisibilityChip({ visibility }: { visibility: FieldVisibility }) {
+  // Deliberately quiet: these sit beside every field label, so they whisper
+  // ("Gated") and the title tooltip carries the full explanation.
   if (visibility === "gated") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-info-subtle px-1.5 py-0.5 text-2xs font-medium text-info"
-        title="Clients see this only once an interview is scheduled"
+        className="inline-flex items-center gap-0.5 rounded-full bg-info-subtle px-1.5 py-px text-2xs font-normal text-info"
+        title="Gated until interview — clients see this only once an interview is scheduled"
       >
-        <Lock aria-hidden="true" className="h-3 w-3" />
-        Gated until interview
+        <Lock aria-hidden="true" className="h-2.5 w-2.5" />
+        Gated
       </span>
     );
   }
   if (visibility === "internal") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-1.5 py-0.5 text-2xs font-medium text-neutral-600"
-        title="Never shown to clients"
+        className="inline-flex items-center gap-0.5 rounded-full bg-neutral-100 px-1.5 py-px text-2xs font-normal text-neutral-600"
+        title="Internal — never shown to clients"
       >
-        <EyeOff aria-hidden="true" className="h-3 w-3" />
+        <EyeOff aria-hidden="true" className="h-2.5 w-2.5" />
         Internal
       </span>
     );
   }
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-success-subtle px-1.5 py-0.5 text-2xs font-medium text-success-text"
-      title="Shown to clients from the presented stage"
+      className="inline-flex items-center gap-0.5 rounded-full bg-success-subtle px-1.5 py-px text-2xs font-normal text-success-text"
+      title="Client-visible — shown to clients from the presented stage"
     >
-      <Eye aria-hidden="true" className="h-3 w-3" />
-      Client-visible
+      <Eye aria-hidden="true" className="h-2.5 w-2.5" />
+      Visible
     </span>
   );
 }
