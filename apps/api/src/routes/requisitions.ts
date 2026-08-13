@@ -82,11 +82,18 @@ export async function requisitionRoutes(
       },
     },
     async (request) => {
-      const { data, nextCursor } = await requisitionsService.list(
+      const { data, nextCursor, total } = await requisitionsService.list(
         request.query,
         actorOf(request),
       );
-      return { data, meta: { count: data.length, nextCursor } };
+      return {
+        data,
+        meta: {
+          count: data.length,
+          nextCursor,
+          ...(total !== undefined ? { total } : {}),
+        },
+      };
     },
   );
 

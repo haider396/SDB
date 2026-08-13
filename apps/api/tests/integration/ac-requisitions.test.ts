@@ -345,6 +345,49 @@ describe('AC-RQ-06 — commercial fields are omitted, not nulled, without the pe
   });
 });
 
+describe('UX 2.9 — GET /requisitions meta.total', () => {
+  it('first pages total the full filtered set; cursored pages omit total', async () => {
+    const dbCount = await db.sql<{ count: string }[]>`
+      select count(*) as count from requisitions where archived_at is null
+    `;
+    const first = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/requisitions?limit=1',
+      headers: await harness.bearer(admin),
+    });
+    expect(first.statusCode).toBe(200);
+    const meta = first.json<{
+      meta: { count: number; nextCursor: string | null; total?: number };
+    }>().meta;
+    expect(meta.total).toBe(Number(dbCount[0]!.count));
+
+    if (meta.nextCursor !== null) {
+      const second = await harness.app.inject({
+        method: 'GET',
+        url: `/api/v1/requisitions?limit=1&cursor=${encodeURIComponent(meta.nextCursor)}`,
+        headers: await harness.bearer(admin),
+      });
+      expect(
+        second.json<{ meta: { total?: number } }>().meta.total,
+      ).toBeUndefined();
+    }
+
+    // A client-scoped caller's total covers only their own tenant.
+    const tenantCount = await db.sql<{ count: string }[]>`
+      select count(*) as count from requisitions
+      where archived_at is null and client_id = ${clientA}
+    `;
+    const scoped = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/requisitions',
+      headers: await harness.bearer(principalA),
+    });
+    expect(scoped.json<{ meta: { total?: number } }>().meta.total).toBe(
+      Number(tenantCount[0]!.count),
+    );
+  });
+});
+
 describe('AC-RQ-07 — REQ-NNNNNN uniqueness under 50 concurrent creations', () => {
   it('creates 50 requisitions concurrently with unique, well-formed references', async () => {
     const taxonomy = await insertTaxonomyChain(db.sql);
@@ -665,7 +708,7 @@ describe('06 §2.3 — the event log read de-duplicates app+trigger pairs', () =
     });
     expect(res.statusCode).toBe(200);
     const { data } = res.json<{
-      data: { eventType: string; fromValue: string | null; toValue: string | null; actorId: string | null; occurredAt: string }[];
+      data: { eventType: string; fromValue: string | null; toValue: string | null; actorId: string | null; actorName: string | null; occurredAt: string }[];
     }>();
     const statusEvents = data.filter(
       (event) =>
@@ -675,6 +718,13 @@ describe('06 §2.3 — the event log read de-duplicates app+trigger pairs', () =
     );
     expect(statusEvents).toHaveLength(1);
     expect(statusEvents[0]!.actorId).toBe(admin); // the app event won
+    // UX 2.10: the actor's full name is joined onto the read model.
+    const adminName = (
+      await db.sql<{ full_name: string }[]>`
+        select full_name from users where id = ${admin}
+      `
+    )[0]!.full_name;
+    expect(statusEvents[0]!.actorName).toBe(adminName);
 
     // Chronological ordering.
     const times = data.map((event) => new Date(event.occurredAt).getTime());

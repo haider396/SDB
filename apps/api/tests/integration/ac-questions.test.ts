@@ -233,6 +233,97 @@ describe('AC-Q-04 — category deactivation hides questions without touching the
   });
 });
 
+describe('UX 2.7 — category deactivation warns about cross-category conditional dependents', () => {
+  it('lists ACTIVE questions in OTHER categories whose controller lives in this category', async () => {
+    const controllerCategory = await insertQuestionCategory(db.sql);
+    const otherCategory = await insertQuestionCategory(db.sql);
+    const controllerId = await insertQuestion(db.sql, {
+      categoryId: controllerCategory,
+      questionType: 'yes_no',
+      key: 'q_ux27_controller',
+      label: 'Controller question',
+    });
+    // Cross-category ACTIVE dependent — must be warned about.
+    const crossDependent = await insertQuestion(db.sql, {
+      categoryId: otherCategory,
+      questionType: 'short_text',
+      key: 'q_ux27_cross_dep',
+      label: 'Cross dependent',
+    });
+    // Cross-category INACTIVE dependent — not warned (already hidden).
+    const inactiveDependent = await insertQuestion(db.sql, {
+      categoryId: otherCategory,
+      questionType: 'short_text',
+      key: 'q_ux27_inactive_dep',
+      isActive: false,
+    });
+    // SAME-category dependent — not warned (it disappears with the category).
+    const sameCategoryDependent = await insertQuestion(db.sql, {
+      categoryId: controllerCategory,
+      questionType: 'short_text',
+      key: 'q_ux27_same_dep',
+    });
+    await db.sql`
+      update questions
+      set conditional_on_question_id = ${controllerId},
+          conditional_operator = 'is_true'
+      where id in ${db.sql([crossDependent, inactiveDependent, sameCategoryDependent])}
+    `;
+
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/question-categories/${controllerCategory}/deactivate`,
+      headers: await harness.bearer(superAdmin),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      data: { id: string; isActive: boolean };
+      warnings: {
+        code: string;
+        message: string;
+        dependent: { id: string; key: string; label: string; isActive: boolean };
+      }[];
+    }>();
+    expect(body.data.isActive).toBe(false);
+    expect(body.warnings).toHaveLength(1);
+    expect(body.warnings[0]!.code).toBe('CONDITIONAL_DEPENDENT');
+    expect(body.warnings[0]!.dependent).toMatchObject({
+      id: crossDependent,
+      key: 'q_ux27_cross_dep',
+      isActive: true,
+    });
+    expect(body.warnings[0]!.message).toContain('q_ux27_cross_dep');
+    expect(body.warnings[0]!.message).toContain('q_ux27_controller');
+
+    // Reactivation carries no warnings and the plain envelope.
+    const activate = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/question-categories/${controllerCategory}/activate`,
+      headers: await harness.bearer(superAdmin),
+    });
+    expect(activate.statusCode).toBe(200);
+    expect(activate.json<Record<string, unknown>>()).not.toHaveProperty(
+      'warnings',
+    );
+  });
+
+  it('a category with no cross-category dependents deactivates with warnings: []', async () => {
+    const categoryId = await insertQuestionCategory(db.sql);
+    await insertQuestion(db.sql, {
+      categoryId,
+      questionType: 'short_text',
+      key: 'q_ux27_lone',
+    });
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/question-categories/${categoryId}/deactivate`,
+      headers: await harness.bearer(superAdmin),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ warnings: unknown[] }>().warnings).toEqual([]);
+  });
+});
+
 describe('AC-Q-05 — questionType change on an answered question → 409 QUESTION_TYPE_LOCKED', () => {
   it('rejects the change and leaves the type intact', async () => {
     const categoryId = await insertQuestionCategory(db.sql);

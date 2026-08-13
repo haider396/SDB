@@ -247,10 +247,38 @@ describe('GET /client/dashboard — shape and scoping', () => {
     );
     expect(presentedEvents).toHaveLength(1);
     expect(presentedEvents[0]!.actorId).toBe(admin);
+    // UX 2.10 + 1.3: the actor's full name rides along for the feed sentence.
+    const adminName = (
+      await db.sql<{ full_name: string }[]>`
+        select full_name from users where id = ${admin}
+      `
+    )[0]!.full_name;
+    expect(presentedEvents[0]!.actorName).toBe(adminName);
     // Tenant B's event never crosses.
     expect(
       dashboard.recentEvents.some((event) => event.entityId === reqB),
     ).toBe(false);
+  });
+
+  it('feed entries carry requisition context for a human sentence (UX 1.3)', async () => {
+    const dashboard = await fetchDashboard(clientUserA);
+    const reference = (
+      await db.sql<{ reference: string }[]>`
+        select reference from requisitions where id = ${presentedReqA}
+      `
+    )[0]!.reference;
+    const event = dashboard.recentEvents.find(
+      (entry) => entry.entityId === presentedReqA,
+    )!;
+    expect(event.requisitionReference).toBe(reference);
+    // advertised_title is unset in the fixture — nullable, never absent.
+    expect(event.requisitionTitle).toBeNull();
+    // Trigger-sourced events (no actor) carry a null actorName, not a crash.
+    for (const entry of dashboard.recentEvents) {
+      expect(entry).toHaveProperty('actorName');
+      expect(entry.requisitionReference).toMatch(/^REQ-/);
+      if (entry.actorId === null) expect(entry.actorName).toBeNull();
+    }
   });
 
   it('tenant B sees only its own world', async () => {

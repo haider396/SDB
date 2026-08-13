@@ -138,11 +138,18 @@ export async function candidateRoutes(
       },
     },
     async (request) => {
-      const { data, nextCursor } = await candidatesService.list(
+      const { data, nextCursor, total } = await candidatesService.list(
         request.query,
         candidateActorOf(request),
       );
-      return { data, meta: { count: data.length, nextCursor } };
+      return {
+        data,
+        meta: {
+          count: data.length,
+          nextCursor,
+          ...(total !== undefined ? { total } : {}),
+        },
+      };
     },
   );
 

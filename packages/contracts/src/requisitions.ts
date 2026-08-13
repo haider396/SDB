@@ -222,6 +222,14 @@ export const EntityEventSchema = z.object({
   entityId: z.string().uuid(),
   eventType: z.string(),
   actorId: z.string().uuid().nullable(),
+  /**
+   * The acting user's full_name, joined from `users` at read time (UX 2.10 —
+   * "named humans build trust"). Null for system/trigger-sourced events or
+   * when the user row is gone. On client-facing surfaces these are
+   * requisition-level events already visible to the client; exposing the
+   * name is approved product behaviour.
+   */
+  actorName: z.string().nullable(),
   actorRole: UserRoleKeySchema.nullable(),
   fromValue: z.string().nullable(),
   toValue: z.string().nullable(),

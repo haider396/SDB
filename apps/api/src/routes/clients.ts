@@ -77,10 +77,17 @@ export async function clientRoutes(
       const actor = actorOf(request);
       if (actor.ownClientId !== null) {
         const own = await clientsService.get(actor.ownClientId, actor);
-        return { data: [own], meta: { count: 1, nextCursor: null } };
+        return { data: [own], meta: { count: 1, nextCursor: null, total: 1 } };
       }
-      const { data, nextCursor } = await clientsService.list(request.query);
-      return { data, meta: { count: data.length, nextCursor } };
+      const { data, nextCursor, total } = await clientsService.list(request.query);
+      return {
+        data,
+        meta: {
+          count: data.length,
+          nextCursor,
+          ...(total !== undefined ? { total } : {}),
+        },
+      };
     },
   );
 

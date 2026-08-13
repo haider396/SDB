@@ -617,6 +617,45 @@ describe('04 §6 — member management behaviours', () => {
   });
 });
 
+describe('UX 2.9 — GET /clients meta.total', () => {
+  it('an admin first page totals the full filtered set; the scoped list totals 1', async () => {
+    const dbCount = await db.sql<{ count: string }[]>`
+      select count(*) as count from clients where archived_at is null
+    `;
+    const asAdmin = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/clients?limit=1',
+      headers: await harness.bearer(admin),
+    });
+    expect(asAdmin.statusCode).toBe(200);
+    const meta = asAdmin.json<{
+      meta: { count: number; nextCursor: string | null; total?: number };
+    }>().meta;
+    expect(meta.count).toBe(1);
+    expect(meta.total).toBe(Number(dbCount[0]!.count));
+
+    // Cursored pages omit total.
+    if (meta.nextCursor !== null) {
+      const second = await harness.app.inject({
+        method: 'GET',
+        url: `/api/v1/clients?limit=1&cursor=${encodeURIComponent(meta.nextCursor)}`,
+        headers: await harness.bearer(admin),
+      });
+      expect(
+        second.json<{ meta: { total?: number } }>().meta.total,
+      ).toBeUndefined();
+    }
+
+    // A client-scoped caller's "list" is their own client — total 1.
+    const asClient = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/clients',
+      headers: await harness.bearer(clientAdminA),
+    });
+    expect(asClient.json<{ meta: { total?: number } }>().meta.total).toBe(1);
+  });
+});
+
 describe('AC-AUTH-05 — tenant isolation across the P2 client endpoints', () => {
   it("client A admin listing clients sees only client A, never B", async () => {
     const res = await harness.app.inject({

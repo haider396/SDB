@@ -43,7 +43,9 @@ let freshPendingReq: string;
 let unGrantedClient: string;
 let staleSourcingReq: string;
 let staleAssignment: string;
+let presentedReq: string;
 let overdueInterview: string;
+let interviewReq: string;
 let incompleteCandidate: string;
 
 beforeAll(async () => {
@@ -121,7 +123,7 @@ beforeAll(async () => {
   `;
 
   // 5 — awaiting_client_feedback: presented > 3 days; a 1-day-old one not.
-  const presentedReq = await insertRequisition(db.sql, {
+  presentedReq = await insertRequisition(db.sql, {
     clientId: tenant,
     status: 'candidates_presented',
   });
@@ -152,7 +154,7 @@ beforeAll(async () => {
 
   // 6 — interview_without_outcome: scheduled in the past, outcome pending;
   // a FUTURE pending interview does not qualify.
-  const interviewReq = await insertRequisition(db.sql, {
+  interviewReq = await insertRequisition(db.sql, {
     clientId: tenant,
     status: 'interviewing',
   });
@@ -251,20 +253,24 @@ describe('AC-PL-14 — all seven buckets with correct counts', () => {
       entityId: staleSourcingReq,
     });
 
-    // Threshold 3 days: 4-day-old presented in, 1-day-old not.
+    // Threshold 3 days: 4-day-old presented in, 1-day-old not. Assignment
+    // items carry the owning requisition id for deep links (UX 1.7).
     const feedback = bucket(queue, 'awaiting_client_feedback');
     expect(feedback.count).toBe(1);
     expect(feedback.items[0]).toMatchObject({
       entityType: 'assignment',
       entityId: staleAssignment,
+      requisitionId: presentedReq,
     });
 
-    // Past pending interview in; the future round 2 not.
+    // Past pending interview in; the future round 2 not. Interview items
+    // carry the owning requisition id for deep links (UX 1.7).
     const interviews = bucket(queue, 'interview_without_outcome');
     expect(interviews.count).toBe(1);
     expect(interviews.items[0]).toMatchObject({
       entityType: 'interview',
       entityId: overdueInterview,
+      requisitionId: interviewReq,
     });
 
     const incomplete = bucket(queue, 'incomplete_webhook_candidates');
@@ -274,12 +280,18 @@ describe('AC-PL-14 — all seven buckets with correct counts', () => {
       entityId: incompleteCandidate,
     });
 
-    // Every item carries a real reference/label and an ISO since.
+    // Every item carries a real reference/label and an ISO since; only the
+    // assignment/interview buckets carry the deep-link requisitionId.
     for (const row of queue.buckets) {
       for (const item of row.items) {
         expect(item.reference.length).toBeGreaterThan(0);
         expect(item.label.length).toBeGreaterThan(0);
         expect(Number.isNaN(Date.parse(item.since))).toBe(false);
+        if (item.entityType === 'assignment' || item.entityType === 'interview') {
+          expect(item.requisitionId).toBeDefined();
+        } else {
+          expect(item.requisitionId).toBeUndefined();
+        }
       }
     }
   });
@@ -345,6 +357,57 @@ describe('cache — precomputed by the refresh job, served by the endpoint', () 
     // Clean up so the earlier exact counts stay meaningful on reruns.
     await db.sql`delete from requisitions where id = ${lateReq}`;
     await fetchQueue(true);
+  });
+});
+
+describe('cache — cleared on state change (UX 1.7 clear-on-write hook)', () => {
+  it('a requisition status transition busts the cache without ?refresh', async () => {
+    const warmed = await fetchQueue(true);
+    expect(
+      bucket(warmed, 'new_intake_submissions').items.map((i) => i.entityId),
+    ).toContain(submittedReq);
+
+    // submitted → on_hold through the API: the transition path invalidates
+    // the in-process cache, so a plain cached read recomputes.
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/requisitions/${submittedReq}/transition`,
+      headers: await harness.bearer(admin),
+      payload: { toStatus: 'on_hold' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const afterTransition = await fetchQueue(false);
+    expect(afterTransition.computedAt).not.toBe(warmed.computedAt);
+    expect(
+      bucket(afterTransition, 'new_intake_submissions').items.map(
+        (i) => i.entityId,
+      ),
+    ).not.toContain(submittedReq);
+  });
+
+  it('an assignment stage change busts the cache without ?refresh', async () => {
+    const warmed = await fetchQueue(true);
+    expect(
+      bucket(warmed, 'awaiting_client_feedback').items.map((i) => i.entityId),
+    ).toContain(staleAssignment);
+
+    // presented → client_reviewing through the API advance path.
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${staleAssignment}/advance`,
+      headers: await harness.bearer(admin),
+      payload: { toStage: 'client_reviewing' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const afterAdvance = await fetchQueue(false);
+    expect(afterAdvance.computedAt).not.toBe(warmed.computedAt);
+    expect(
+      bucket(afterAdvance, 'awaiting_client_feedback').items.map(
+        (i) => i.entityId,
+      ),
+    ).not.toContain(staleAssignment);
   });
 });
 

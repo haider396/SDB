@@ -40,17 +40,29 @@ export const COMPLETENESS_SQL_PREDICATE = COMPLETENESS_REQUIRED_COLUMNS.map(
   (column) => `${column} is not null`,
 ).join(' and ');
 
-/** JS-side computation over a camelCase candidate-shaped record. */
-export function computeDataCompleteness(
+/**
+ * The camelCase required-set keys currently missing from the record, in the
+ * declaration order of COMPLETENESS_REQUIRED_FIELDS (UX 2.5 — the API
+ * surfaces WHICH fields are missing, not just the flag).
+ */
+export function computeMissingFields(
   record: Partial<Record<CompletenessField, unknown>>,
-): 'complete' | 'incomplete' {
+): CompletenessField[] {
+  const missing: CompletenessField[] = [];
   for (const field of Object.keys(
     COMPLETENESS_REQUIRED_FIELDS,
   ) as CompletenessField[]) {
     const value = record[field];
     if (value === undefined || value === null || value === '') {
-      return 'incomplete';
+      missing.push(field);
     }
   }
-  return 'complete';
+  return missing;
+}
+
+/** JS-side computation over a camelCase candidate-shaped record. */
+export function computeDataCompleteness(
+  record: Partial<Record<CompletenessField, unknown>>,
+): 'complete' | 'incomplete' {
+  return computeMissingFields(record).length > 0 ? 'incomplete' : 'complete';
 }

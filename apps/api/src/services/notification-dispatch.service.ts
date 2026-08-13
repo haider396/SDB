@@ -103,9 +103,11 @@ export interface NotificationDispatchService {
    */
   retryFailed(now?: Date): Promise<number>;
   /** Admin log view (GET /admin/notifications). */
-  list(
-    query: ListNotificationsQuery,
-  ): Promise<{ data: NotificationLogRow[]; nextCursor: string | null }>;
+  list(query: ListNotificationsQuery): Promise<{
+    data: NotificationLogRow[];
+    nextCursor: string | null;
+    total?: number;
+  }>;
   /** Manual resend: re-queue, write the event row, dispatch immediately. */
   resend(id: string, actor: DispatchActor): Promise<NotificationLogRow>;
 }
@@ -380,7 +382,7 @@ export function createNotificationDispatchService(
 
     async list(query) {
       const after = query.cursor === undefined ? null : decodeCursor(query.cursor);
-      const rows = await listNotificationsPage(
+      const { data: rows, total } = await listNotificationsPage(
         db,
         { status: query.status ?? null, event: query.event ?? null },
         query.limit + 1,
@@ -392,7 +394,12 @@ export function createNotificationDispatchService(
         rows.length > query.limit && last !== undefined
           ? encodeCursor({ createdAt: last.createdAt, id: last.id })
           : null;
-      return { data: page, nextCursor };
+      return {
+        data: page,
+        nextCursor,
+        // UX 2.9: full filtered count — first (un-cursored) pages only.
+        ...(after === null ? { total } : {}),
+      };
     },
 
     async resend(id, actor) {

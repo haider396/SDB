@@ -54,15 +54,20 @@ describe('ClientDashboardSchema', () => {
           entityId: uuid(),
           eventType: 'status_changed',
           actorId: null,
+          actorName: 'Ana Admin',
           actorRole: null,
           fromValue: 'sourcing',
           toValue: 'candidates_presented',
           metadata: {},
           occurredAt: now,
+          requisitionReference: 'REQ-000001',
+          requisitionTitle: 'Executive Assistant',
         },
       ],
     });
     expect(parsed.requisitions[0]?.stageCounts.presented).toBe(2);
+    expect(parsed.recentEvents[0]?.requisitionReference).toBe('REQ-000001');
+    expect(parsed.recentEvents[0]?.actorName).toBe('Ana Admin');
   });
 
   it('rejects internal stages in stageCounts — the client summary is view-shaped', () => {
@@ -99,6 +104,34 @@ describe('AttentionQueueSchema', () => {
         since: now,
       },
     ],
+  });
+
+  it('items accept an optional requisitionId deep-link (UX 1.7)', () => {
+    const withLink = {
+      computedAt: now,
+      buckets: ATTENTION_QUEUE_BUCKET_KEYS.map((key) =>
+        key === 'awaiting_client_feedback'
+          ? {
+              ...bucket(key),
+              items: [
+                {
+                  entityType: 'assignment',
+                  entityId: uuid(),
+                  requisitionId: uuid(),
+                  reference: 'REQ-000001',
+                  label: 'Maria G. — REQ-000001',
+                  since: now,
+                },
+              ],
+            }
+          : bucket(key),
+      ),
+    };
+    const parsed = AttentionQueueSchema.parse(withLink);
+    const item = parsed.buckets[4]?.items[0];
+    expect(item?.requisitionId).toBeDefined();
+    // requisition-typed items omit the key entirely
+    expect(parsed.buckets[0]?.items[0]?.requisitionId).toBeUndefined();
   });
 
   it('the seven bucket keys match docs/01 §6 in order', () => {

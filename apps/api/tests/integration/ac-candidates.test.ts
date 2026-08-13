@@ -207,6 +207,97 @@ describe('candidate CRUD, consent, archive, completeness', () => {
     }
   });
 
+  it('GET /candidates/:id names the missing required fields while incomplete (UX 2.5)', async () => {
+    const candidate = await createCandidate({
+      firstName: 'Missing',
+      lastName: 'Fields',
+      email: 'missing.fields@example.com',
+      country: 'Mexico',
+    });
+    expect(candidate.dataCompleteness).toBe('incomplete');
+
+    const before = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/candidates/${candidate.id}`,
+      headers: adminHeaders,
+    });
+    expect(before.statusCode).toBe(200);
+    const incompleteRow = before.json<{
+      data: { missingFields: string[] };
+    }>().data;
+    // camelCase keys from the data-completeness required set, minus the ones
+    // supplied above (email, country).
+    expect(incompleteRow.missingFields).toEqual([
+      'phone',
+      'englishSpokenLevel',
+      'yearsExperienceTotal',
+      'expectedRateAmount',
+      'expectedRateUnit',
+      'primaryRoleCategoryId',
+    ]);
+
+    // Completing the record empties the list.
+    const patch = await harness.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/candidates/${candidate.id}`,
+      headers: adminHeaders,
+      payload: {
+        phone: '+52-555-0102',
+        englishSpokenLevel: 'professional',
+        yearsExperienceTotal: 3,
+        expectedRateAmount: 1200,
+        expectedRateUnit: 'monthly',
+        primaryRoleCategoryId: ROLE_EA,
+      },
+    });
+    expect(patch.statusCode, patch.body).toBe(200);
+    const after = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/candidates/${candidate.id}`,
+      headers: adminHeaders,
+    });
+    expect(
+      after.json<{ data: { dataCompleteness: string; missingFields: string[] } }>()
+        .data,
+    ).toMatchObject({ dataCompleteness: 'complete', missingFields: [] });
+  });
+
+  it('GET /candidates/:id carries a 300 s signed photoUrl when photoPath is set (UX 1.4)', async () => {
+    const candidate = await createCandidate({ firstName: 'Photo', lastName: 'Cand' });
+
+    // No photo → null photoUrl and no storage call.
+    harness.storage.calls.createSignedDownloadUrls.length = 0;
+    const bare = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/candidates/${candidate.id}`,
+      headers: adminHeaders,
+    });
+    expect(
+      bare.json<{ data: { photoUrl: string | null } }>().data.photoUrl,
+    ).toBeNull();
+    expect(harness.storage.calls.createSignedDownloadUrls).toHaveLength(0);
+
+    const photoPath = `candidates/${candidate.id}/photo/headshot.jpg`;
+    await db.sql`
+      update candidates set photo_path = ${photoPath} where id = ${candidate.id}
+    `;
+    const res = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/candidates/${candidate.id}`,
+      headers: adminHeaders,
+    });
+    expect(res.statusCode).toBe(200);
+    const detail = res.json<{
+      data: { photoPath: string | null; photoUrl: string | null };
+    }>().data;
+    expect(detail.photoPath).toBe(photoPath);
+    expect(detail.photoUrl).toContain(encodeURIComponent(photoPath));
+    expect(detail.photoUrl).toContain('expires_in=300');
+    expect(harness.storage.calls.createSignedDownloadUrls).toEqual([
+      { paths: [photoPath], expiresInSeconds: 300 },
+    ]);
+  });
+
   it('PATCH updates fields, recomputes completeness, and writes events', async () => {
     const candidate = await createCandidate({ firstName: 'Patch', lastName: 'Me' });
     expect(candidate.dataCompleteness).toBe('incomplete');
@@ -710,5 +801,47 @@ describe('AC-CA-14 — filters combine correctly over the 25-candidate seed', ()
     for (const candidate of page2.data) {
       expect(ids1.has(candidate.id)).toBe(false);
     }
+  });
+
+  it('meta.total carries the full filtered count on first pages only (UX 2.9)', async () => {
+    const dbCount = await db.sql<{ count: string }[]>`
+      select count(*) as count from candidates where archived_at is null
+    `;
+    const first = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/candidates?limit=5',
+      headers: adminHeaders,
+    });
+    expect(first.statusCode).toBe(200);
+    const page1 = first.json<{
+      data: { id: string }[];
+      meta: { count: number; nextCursor: string | null; total?: number };
+    }>();
+    expect(page1.meta.count).toBe(5);
+    expect(page1.meta.total).toBe(Number(dbCount[0]!.count));
+
+    // A filtered list totals the filtered set, not the pool.
+    const filtered = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/candidates?dataCompleteness=incomplete&limit=1',
+      headers: adminHeaders,
+    });
+    const incompleteCount = await db.sql<{ count: string }[]>`
+      select count(*) as count from candidates
+      where data_completeness = 'incomplete' and archived_at is null
+    `;
+    expect(
+      filtered.json<{ meta: { total?: number } }>().meta.total,
+    ).toBe(Number(incompleteCount[0]!.count));
+
+    // Cursored pages omit total (the window no longer spans the full set).
+    const second = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/candidates?limit=5&cursor=${encodeURIComponent(page1.meta.nextCursor!)}`,
+      headers: adminHeaders,
+    });
+    expect(
+      second.json<{ meta: { total?: number } }>().meta.total,
+    ).toBeUndefined();
   });
 });

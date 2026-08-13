@@ -13,6 +13,13 @@ export const CollectionMetaSchema = z.object({
   count: z.number().int().nonnegative(),
   /** Opaque cursor for the next page; null when there is no further page. */
   nextCursor: z.string().nullable(),
+  /**
+   * Full filtered row count (`count(*) over ()`), independent of `limit`.
+   * Present only where cheap and accurate — the first (un-cursored) page of
+   * the candidates, clients, requisitions, and notifications lists. Absent on
+   * cursored pages and on endpoints that do not compute it.
+   */
+  total: z.number().int().nonnegative().optional(),
 });
 export type CollectionMeta = z.infer<typeof CollectionMetaSchema>;
 

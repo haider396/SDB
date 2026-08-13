@@ -50,6 +50,7 @@ function presentedViewRow() {
     reference: 'CAN-000001',
     displayName: 'Maria G.',
     photoPath: null,
+    photoUrl: null,
     country: 'Mexico',
     regionState: null,
     city: null,
@@ -76,6 +77,9 @@ function presentedViewRow() {
     canManageUp: true,
     recruiterRecommendation: 'Recommend strongly',
     strengths: 'Detail, follow-through',
+    interviewRequestedAt: null,
+    rejectionReasonLabel: null,
+    rejectionDetail: null,
     firstName: null,
     lastName: null,
     email: null,
@@ -133,6 +137,20 @@ describe('ClientVisibleAssignmentSchema — the P5 client contract', () => {
         `${field} must accept null`,
       ).toBe(true);
     }
+  });
+
+  it('carries client decision state (UX 3.2): interviewRequestedAt and rejection fields', () => {
+    const rejected = {
+      ...presentedViewRow(),
+      stage: 'rejected_by_client',
+      interviewRequestedAt: now,
+      rejectionReasonLabel: 'Rate too high',
+      rejectionDetail: 'Outside budget',
+    };
+    const parsed = ClientVisibleAssignmentSchema.parse(rejected);
+    expect(parsed.rejectionReasonLabel).toBe('Rate too high');
+    expect(parsed.rejectionDetail).toBe('Outside budget');
+    expect(parsed.interviewRequestedAt).toBe(now);
   });
 
   it('rejects the five internal stages (sourced/screened/vetted/rejected_by_admin/withdrawn)', () => {

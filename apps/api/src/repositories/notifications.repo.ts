@@ -123,15 +123,20 @@ export interface NotificationsKeysetPosition {
   id: string;
 }
 
-/** Admin log view page, newest first, keyset on (created_at, id). */
+/**
+ * Admin log view page, newest first, keyset on (created_at, id).
+ * `total` is the full filtered count via `count(*) over ()` — accurate only
+ * when no keyset position narrows the window (the service surfaces it on
+ * first pages only, UX 2.9). 0 when the page is empty.
+ */
 export async function listNotificationsPage(
   sql: Queryable,
   filters: ListNotificationsFilters,
   limit: number,
   after: NotificationsKeysetPosition | null,
-): Promise<NotificationLogRow[]> {
-  const rows = await sql<NotificationLogDbRow[]>`
-    select ${sql(COLUMNS)} from notification_log
+): Promise<{ data: NotificationLogRow[]; total: number }> {
+  const rows = await sql<(NotificationLogDbRow & { total: string })[]>`
+    select ${sql(COLUMNS)}, count(*) over ()::text as total from notification_log
     where true
       ${filters.status === null ? sql`` : sql`and status = ${filters.status}`}
       ${filters.event === null ? sql`` : sql`and event = ${filters.event}::notification_event`}
@@ -143,7 +148,10 @@ export async function listNotificationsPage(
     order by created_at desc, id desc
     limit ${limit}
   `;
-  return rows.map(toRow);
+  return {
+    data: rows.map(toRow),
+    total: Number(rows[0]?.total ?? '0'),
+  };
 }
 
 /**

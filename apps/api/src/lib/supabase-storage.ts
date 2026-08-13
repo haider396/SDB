@@ -31,6 +31,16 @@ export interface SupabaseStoragePort {
     path: string,
     expiresInSeconds: number,
   ): Promise<string>;
+  /**
+   * Batched signed download URLs — ONE storage round-trip for many objects
+   * (read-time photoUrl decoration, UX 1.4). Returns path → signed URL;
+   * paths that could not be signed map to null. Never throws for individual
+   * failures: read models must not 500 because a thumbnail failed to sign.
+   */
+  createSignedDownloadUrls(
+    paths: string[],
+    expiresInSeconds: number,
+  ): Promise<Map<string, string | null>>;
   /** Remove an object. Idempotent: a missing object is a success. */
   removeObject(path: string): Promise<void>;
   /** Object metadata, or null when the object does not exist (confirm step). */
@@ -78,6 +88,27 @@ export function createSupabaseStorage(
         throw new ApiError('INTERNAL_ERROR', 'Could not create a download URL.');
       }
       return data.signedUrl;
+    },
+
+    async createSignedDownloadUrls(paths, expiresInSeconds) {
+      const result = new Map<string, string | null>();
+      if (paths.length === 0) return result;
+      for (const path of paths) result.set(path, null);
+      const { data, error } = await bucket().createSignedUrls(
+        paths,
+        expiresInSeconds,
+      );
+      if (error !== null || data === null) {
+        // Batch-level failure degrades to all-null; the caller renders
+        // without photos rather than failing the read.
+        return result;
+      }
+      for (const entry of data) {
+        if (entry.error === null && entry.path !== null) {
+          result.set(entry.path, entry.signedUrl);
+        }
+      }
+      return result;
     },
 
     async removeObject(path) {

@@ -46,6 +46,8 @@ import {
 } from '@sdb/contracts';
 import { withTransaction, type Db, type Tx } from '../lib/db.js';
 import { ApiError } from '../lib/errors.js';
+import { signPhotoPaths } from '../lib/photo-urls.js';
+import type { SupabaseStoragePort } from '../lib/supabase-storage.js';
 import {
   findAdminAssignmentById,
   findExistingAssignmentCandidateIds,
@@ -90,7 +92,15 @@ export interface AssignmentActor {
 
 export interface AssignmentsServiceDeps {
   db: Db;
+  /** Storage port for read-time photoUrl signing (UX 1.4). */
+  storage: SupabaseStoragePort;
   logger?: EnqueueLogger;
+  /**
+   * Attention-queue clear-on-write hook (UX 1.7): called after any
+   * successful assignment stage change (advance/present/approve/reject/
+   * place). Coarse by design.
+   */
+  invalidateAttentionQueue?: () => void;
 }
 
 /** Stages with outbound transitions — everything a placement must close. */
@@ -150,7 +160,56 @@ export interface AssignmentsService {
 export function createAssignmentsService(
   deps: AssignmentsServiceDeps,
 ): AssignmentsService {
-  const { db } = deps;
+  const { db, storage } = deps;
+
+  /** photoUrl decoration (UX 1.4): one batched port call per distinct path. */
+  async function withAdminPhotoUrls(
+    rows: AdminAssignmentRow[],
+  ): Promise<AdminAssignmentRow[]> {
+    const urls = await signPhotoPaths(
+      storage,
+      rows.map((row) => row.candidate.photoPath),
+    );
+    return rows.map((row) =>
+      row.candidate.photoPath === null
+        ? row
+        : {
+            ...row,
+            candidate: {
+              ...row.candidate,
+              photoUrl: urls.get(row.candidate.photoPath) ?? null,
+            },
+          },
+    );
+  }
+
+  async function withClientPhotoUrls(
+    rows: ClientVisibleAssignment[],
+  ): Promise<ClientVisibleAssignment[]> {
+    const urls = await signPhotoPaths(
+      storage,
+      rows.map((row) => row.photoPath),
+    );
+    return rows.map((row) =>
+      row.photoPath === null
+        ? row
+        : { ...row, photoUrl: urls.get(row.photoPath) ?? null },
+    );
+  }
+
+  async function adminRowWithPhotoUrl(
+    row: AdminAssignmentRow,
+  ): Promise<AdminAssignmentRow> {
+    const [decorated] = await withAdminPhotoUrls([row]);
+    return decorated ?? row;
+  }
+
+  async function clientRowWithPhotoUrl(
+    row: ClientVisibleAssignment,
+  ): Promise<ClientVisibleAssignment> {
+    const [decorated] = await withClientPhotoUrls([row]);
+    return decorated ?? row;
+  }
 
   /** The admin pipeline surface does not exist for client-scoped callers. */
   function assertAdminSurface(actor: AssignmentActor): void {
@@ -377,7 +436,7 @@ export function createAssignmentsService(
       for (const assignment of created) {
         rows.push(await requireAdminRow(db, assignment.id));
       }
-      return rows;
+      return withAdminPhotoUrls(rows);
     },
 
     // -----------------------------------------------------------------------
@@ -389,10 +448,14 @@ export function createAssignmentsService(
         // (CLAUDE.md rule 3; the repository queries client_visible_assignments
         // exclusively, so internal stages are structurally absent, AC-PL-07).
         await requireRequisition(db, requisitionId, actor.ownClientId);
-        return listClientVisibleAssignments(db, actor.ownClientId, requisitionId);
+        return withClientPhotoUrls(
+          await listClientVisibleAssignments(db, actor.ownClientId, requisitionId),
+        );
       }
       await requireRequisition(db, requisitionId);
-      return listAdminAssignmentsForRequisition(db, requisitionId);
+      return withAdminPhotoUrls(
+        await listAdminAssignmentsForRequisition(db, requisitionId),
+      );
     },
 
     // -----------------------------------------------------------------------
@@ -410,9 +473,9 @@ export function createAssignmentsService(
         if (row === null) {
           throw new ApiError('NOT_FOUND', 'Assignment not found.');
         }
-        return row;
+        return clientRowWithPhotoUrl(row);
       }
-      return requireAdminRow(db, assignmentId);
+      return adminRowWithPhotoUrl(await requireAdminRow(db, assignmentId));
     },
 
     // -----------------------------------------------------------------------
@@ -441,7 +504,7 @@ export function createAssignmentsService(
           },
         });
       });
-      return requireAdminRow(db, assignmentId);
+      return adminRowWithPhotoUrl(await requireAdminRow(db, assignmentId));
     },
 
     // -----------------------------------------------------------------------
@@ -471,7 +534,8 @@ export function createAssignmentsService(
           ...(note !== null ? { note } : {}),
         });
       });
-      return requireAdminRow(db, assignmentId);
+      deps.invalidateAttentionQueue?.();
+      return adminRowWithPhotoUrl(await requireAdminRow(db, assignmentId));
     },
 
     // -----------------------------------------------------------------------
@@ -590,11 +654,12 @@ export function createAssignmentsService(
         }
       });
 
+      deps.invalidateAttentionQueue?.();
       const fresh: AdminAssignmentRow[] = [];
       for (const row of rows) {
         fresh.push(await requireAdminRow(db, row.id));
       }
-      return fresh;
+      return withAdminPhotoUrls(fresh);
     },
 
     // -----------------------------------------------------------------------
@@ -637,11 +702,12 @@ export function createAssignmentsService(
           actor.userId,
         );
       });
+      deps.invalidateAttentionQueue?.();
       const fresh = await findClientVisibleAssignment(db, clientId, assignmentId);
       if (fresh === null) {
         throw new ApiError('INTERNAL_ERROR', 'Assignment disappeared mid-write.');
       }
-      return fresh;
+      return clientRowWithPhotoUrl(fresh);
     },
 
     // -----------------------------------------------------------------------
@@ -736,6 +802,7 @@ export function createAssignmentsService(
         }
       });
 
+      deps.invalidateAttentionQueue?.();
       if (actorKind === 'client') {
         // rejected_by_client is a client-visible stage; serve the view row.
         const fresh = await findClientVisibleAssignment(
@@ -746,9 +813,9 @@ export function createAssignmentsService(
         if (fresh === null) {
           throw new ApiError('INTERNAL_ERROR', 'Assignment disappeared mid-write.');
         }
-        return fresh;
+        return clientRowWithPhotoUrl(fresh);
       }
-      return requireAdminRow(db, assignmentId);
+      return adminRowWithPhotoUrl(await requireAdminRow(db, assignmentId));
     },
 
     // -----------------------------------------------------------------------
@@ -783,7 +850,13 @@ export function createAssignmentsService(
           actor.userId,
         );
       });
-      return visible;
+      // Re-read so the response reflects the just-written event in
+      // `interviewRequestedAt` (UX 3.2).
+      const fresh = await findClientVisibleAssignment(db, clientId, assignmentId);
+      if (fresh === null) {
+        throw new ApiError('INTERNAL_ERROR', 'Assignment disappeared mid-write.');
+      }
+      return clientRowWithPhotoUrl(fresh);
     },
 
     // -----------------------------------------------------------------------
@@ -946,6 +1019,7 @@ export function createAssignmentsService(
         }
       });
 
+      deps.invalidateAttentionQueue?.();
       if (placement === null) {
         throw new ApiError('INTERNAL_ERROR', 'Placement was not created.');
       }

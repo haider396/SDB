@@ -51,9 +51,14 @@ import { ACCENT_STRENGTH_ORDER } from '@sdb/contracts';
 import { decodeCursor, encodeCursor } from '../lib/cursor.js';
 import { withTransaction, type Db, type Tx } from '../lib/db.js';
 import { ApiError } from '../lib/errors.js';
+import { signPhotoPaths } from '../lib/photo-urls.js';
+import type { SupabaseStoragePort } from '../lib/supabase-storage.js';
 import * as repo from '../repositories/candidates.repo.js';
 import { listFiles } from '../repositories/candidate-files.repo.js';
-import { computeDataCompleteness } from './data-completeness.js';
+import {
+  computeDataCompleteness,
+  computeMissingFields,
+} from './data-completeness.js';
 import { emitEvent } from './events.js';
 
 export interface CandidateActor {
@@ -65,6 +70,8 @@ export interface CandidateActor {
 
 export interface CandidatesServiceDeps {
   db: Db;
+  /** Storage port for read-time photoUrl signing on the detail read (UX 1.4). */
+  storage: SupabaseStoragePort;
 }
 
 interface PgError {
@@ -88,7 +95,7 @@ export interface CandidatesService {
   list(
     query: ListCandidatesQuery,
     actor: CandidateActor,
-  ): Promise<{ data: Candidate[]; nextCursor: string | null }>;
+  ): Promise<{ data: Candidate[]; nextCursor: string | null; total?: number }>;
   create(body: CreateCandidateBody, actor: CandidateActor): Promise<Candidate>;
   get(candidateId: string, actor: CandidateActor): Promise<CandidateDetail>;
   update(
@@ -237,7 +244,7 @@ export interface CandidatesService {
 export function createCandidatesService(
   deps: CandidatesServiceDeps,
 ): CandidatesService {
-  const { db } = deps;
+  const { db, storage } = deps;
 
   /** The internal pool is admin-only; a client-scoped caller sees nothing. */
   function assertAdminSurface(actor: CandidateActor): void {
@@ -302,7 +309,7 @@ export function createCandidatesService(
       if (actor.ownClientId !== null) {
         // Client callers hold candidate.view for the P5 portal surface, not
         // the pool: an empty page, never internal candidates (rule 3).
-        return { data: [], nextCursor: null };
+        return { data: [], nextCursor: null, total: 0 };
       }
       const accentCeiling = query.maxAccentStrength;
       const filters: repo.ListCandidatesFilters = {
@@ -342,13 +349,19 @@ export function createCandidatesService(
           ? { cursor: decodeCursor(query.cursor) }
           : {}),
       };
-      const data = await repo.listCandidates(db, filters);
+      const { data, total } = await repo.listCandidates(db, filters);
       const last = data[data.length - 1];
       const nextCursor =
         data.length === query.limit && last !== undefined
           ? encodeCursor({ createdAt: last.createdAt, id: last.id })
           : null;
-      return { data, nextCursor };
+      // UX 2.9: the window-function total is the full filtered count only
+      // when no cursor narrows the window — first pages only.
+      return {
+        data,
+        nextCursor,
+        ...(query.cursor === undefined ? { total } : {}),
+      };
     },
 
     async create(body, actor) {
@@ -406,8 +419,21 @@ export function createCandidatesService(
         repo.listAssessments(db, candidateId),
         listFiles(db, candidateId),
       ]);
+      // UX 2.5: name the missing required fields when incomplete; [] otherwise.
+      const missingFields =
+        candidate.dataCompleteness === 'incomplete'
+          ? computeMissingFields(candidate)
+          : [];
+      // UX 1.4: renderable short-lived signed URL for the raw storage path.
+      const photoUrls = await signPhotoPaths(storage, [candidate.photoPath]);
+      const photoUrl =
+        candidate.photoPath === null
+          ? null
+          : (photoUrls.get(candidate.photoPath) ?? null);
       return {
         ...candidate,
+        missingFields,
+        photoUrl,
         languages,
         tools,
         skills,

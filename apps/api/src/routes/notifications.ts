@@ -62,8 +62,17 @@ export async function notificationRoutes(
       },
     },
     async (request) => {
-      const { data, nextCursor } = await notificationDispatch.list(request.query);
-      return { data, meta: { count: data.length, nextCursor } };
+      const { data, nextCursor, total } = await notificationDispatch.list(
+        request.query,
+      );
+      return {
+        data,
+        meta: {
+          count: data.length,
+          nextCursor,
+          ...(total !== undefined ? { total } : {}),
+        },
+      };
     },
   );
 

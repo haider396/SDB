@@ -176,6 +176,7 @@ export async function listEventsPage(
       entity_id: string;
       event_type: string;
       actor_id: string | null;
+      actor_name: string | null;
       actor_role: EventRecord['actorRole'];
       from_value: string | null;
       to_value: string | null;
@@ -183,22 +184,24 @@ export async function listEventsPage(
       occurred_at: Date;
     }[]
   >`
-    select id, entity_type, entity_id, event_type, actor_id, actor_role,
-           from_value, to_value, metadata, occurred_at
-    from events
+    select e.id, e.entity_type, e.entity_id, e.event_type, e.actor_id,
+           u.full_name as actor_name, e.actor_role,
+           e.from_value, e.to_value, e.metadata, e.occurred_at
+    from events e
+    left join users u on u.id = e.actor_id
     where true
-      ${filters.entityType === null ? sql`` : sql`and entity_type = ${filters.entityType}`}
-      ${filters.entityId === null ? sql`` : sql`and entity_id = ${filters.entityId}`}
-      ${filters.eventType === null ? sql`` : sql`and event_type = ${filters.eventType}`}
-      ${filters.actorId === null ? sql`` : sql`and actor_id = ${filters.actorId}`}
-      ${filters.from === null ? sql`` : sql`and occurred_at >= ${filters.from}`}
-      ${filters.to === null ? sql`` : sql`and occurred_at <= ${filters.to}`}
+      ${filters.entityType === null ? sql`` : sql`and e.entity_type = ${filters.entityType}`}
+      ${filters.entityId === null ? sql`` : sql`and e.entity_id = ${filters.entityId}`}
+      ${filters.eventType === null ? sql`` : sql`and e.event_type = ${filters.eventType}`}
+      ${filters.actorId === null ? sql`` : sql`and e.actor_id = ${filters.actorId}`}
+      ${filters.from === null ? sql`` : sql`and e.occurred_at >= ${filters.from}`}
+      ${filters.to === null ? sql`` : sql`and e.occurred_at <= ${filters.to}`}
       ${
         after === null
           ? sql``
-          : sql`and (occurred_at, id) < (${after.occurredAt}::timestamptz, ${after.id}::uuid)`
+          : sql`and (e.occurred_at, e.id) < (${after.occurredAt}::timestamptz, ${after.id}::uuid)`
       }
-    order by occurred_at desc, id desc
+    order by e.occurred_at desc, e.id desc
     limit ${limit}
   `;
   return rows.map((row) => ({
@@ -207,6 +210,7 @@ export async function listEventsPage(
     entityId: row.entity_id,
     eventType: row.event_type,
     actorId: row.actor_id,
+    actorName: row.actor_name,
     actorRole: row.actor_role,
     fromValue: row.from_value,
     toValue: row.to_value,

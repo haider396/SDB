@@ -374,6 +374,111 @@ describe('request-interview (04 §9)', () => {
   });
 });
 
+describe('UX 3.2 — client decision state persists on the view row', () => {
+  async function fetchClientRow(assignmentId: string) {
+    const res = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/assignments/${assignmentId}`,
+      headers: await harness.bearer(clientAdminA),
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json<{
+      data: {
+        stage: string;
+        interviewRequestedAt: string | null;
+        rejectionReasonLabel: string | null;
+        rejectionDetail: string | null;
+      };
+    }>().data;
+  }
+
+  it('interviewRequestedAt derives from the latest interview_requested event', async () => {
+    const { assignmentId } = await seedAssignment({ stage: 'presented' });
+    const before = await fetchClientRow(assignmentId);
+    expect(before.interviewRequestedAt).toBeNull();
+
+    const request = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${assignmentId}/request-interview`,
+      headers: await harness.bearer(clientAdminA),
+    });
+    expect(request.statusCode).toBe(200);
+    // The action response already reflects the just-written event.
+    expect(
+      request.json<{ data: { interviewRequestedAt: string | null } }>().data
+        .interviewRequestedAt,
+    ).not.toBeNull();
+
+    const after = await fetchClientRow(assignmentId);
+    expect(after.interviewRequestedAt).not.toBeNull();
+    expect(Number.isNaN(Date.parse(after.interviewRequestedAt!))).toBe(false);
+  });
+
+  it('a structured client rejection surfaces its reason label and detail', async () => {
+    const { assignmentId } = await seedAssignment({ stage: 'presented' });
+    const reject = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${assignmentId}/reject`,
+      headers: await harness.bearer(clientAdminA),
+      payload: { reasonId: clientReasonId, detail: 'Prefers larger teams' },
+    });
+    expect(reject.statusCode).toBe(200);
+
+    const expectedLabel = (
+      await db.sql<{ label: string }[]>`
+        select label from rejection_reasons where id = ${clientReasonId}
+      `
+    )[0]!.label;
+    const row = await fetchClientRow(assignmentId);
+    expect(row.stage).toBe('rejected_by_client');
+    expect(row.rejectionReasonLabel).toBe(expectedLabel);
+    expect(row.rejectionDetail).toBe('Prefers larger teams');
+  });
+
+  it('a free-text client rejection surfaces the free text as the label', async () => {
+    const { assignmentId } = await seedAssignment({ stage: 'presented' });
+    const reject = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${assignmentId}/reject`,
+      headers: await harness.bearer(clientUserA),
+      payload: { reasonOther: 'Went a different direction' },
+    });
+    expect(reject.statusCode).toBe(200);
+    const row = await fetchClientRow(assignmentId);
+    expect(row.rejectionReasonLabel).toBe('Went a different direction');
+    expect(row.rejectionDetail).toBeNull();
+  });
+
+  it('NEVER exposes admin rejection internals to a client (negative case)', async () => {
+    // A presented assignment carrying an ADMIN rejection row (inserted
+    // directly — e.g. historical data): the client row must show nothing.
+    const { assignmentId } = await seedAssignment({ stage: 'presented' });
+    await db.sql`
+      insert into rejections (assignment_id, actor, rejected_by, reason_id, detail)
+      values (${assignmentId}, 'admin', ${admin}, ${adminReasonId},
+              'internal admin-only detail')
+    `;
+    const presented = await fetchClientRow(assignmentId);
+    expect(presented.rejectionReasonLabel).toBeNull();
+    expect(presented.rejectionDetail).toBeNull();
+
+    // Even at rejected_by_client with BOTH rows present, only the CLIENT
+    // rejection surfaces — the admin one is filtered in SQL, not in JS.
+    const clientReject = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${assignmentId}/reject`,
+      headers: await harness.bearer(clientAdminA),
+      payload: { reasonOther: 'Client-side reason', detail: 'Client detail' },
+    });
+    expect(clientReject.statusCode).toBe(200);
+    const rejected = await fetchClientRow(assignmentId);
+    expect(rejected.stage).toBe('rejected_by_client');
+    expect(rejected.rejectionReasonLabel).toBe('Client-side reason');
+    expect(rejected.rejectionDetail).toBe('Client detail');
+    expect(JSON.stringify(rejected)).not.toContain('internal admin-only detail');
+  });
+});
+
 describe('AC-PL-13 — the placement transaction', () => {
   interface PlacementFixture {
     requisitionId: string;

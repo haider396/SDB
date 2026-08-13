@@ -49,6 +49,7 @@ import {
   insertQuestion,
   isOptionReferenced,
   listCategories,
+  listCategoryConditionalDependents,
   listCategoryKeys,
   listDependents,
   listOptionsForQuestions,
@@ -269,11 +270,20 @@ export interface QuestionsService {
     body: UpdateQuestionCategoryBody,
     actor: Actor,
   ): Promise<QuestionCategory>;
+  /**
+   * Deactivation returns warnings[] naming ACTIVE questions in OTHER
+   * categories whose conditional controller lives inside this category
+   * (UX 2.7) — mirroring the question-deactivate warnings shape.
+   * Activation always returns an empty warnings list.
+   */
   setCategoryActive(
     id: string,
     isActive: boolean,
     actor: Actor,
-  ): Promise<QuestionCategory>;
+  ): Promise<{
+    category: QuestionCategory;
+    warnings: QuestionDeactivateWarning[];
+  }>;
   reorderCategories(
     body: ReorderQuestionCategoriesBody,
     actor: Actor,
@@ -960,6 +970,24 @@ export function createQuestionsService(
       if (current === null) {
         throw new ApiError('NOT_FOUND', 'Question category not found.');
       }
+      const warnings: QuestionDeactivateWarning[] = [];
+      if (!isActive) {
+        // UX 2.7: active questions elsewhere whose conditional controller is
+        // inside this category will silently stop appearing.
+        const dependents = await listCategoryConditionalDependents(db, id);
+        for (const dependent of dependents) {
+          warnings.push({
+            code: 'CONDITIONAL_DEPENDENT',
+            message: `Question '${dependent.label}' (${dependent.key}) is conditionally shown based on question '${dependent.controllerKey}' in this category and will no longer appear.`,
+            dependent: {
+              id: dependent.id,
+              key: dependent.key,
+              label: dependent.label,
+              isActive: dependent.isActive,
+            },
+          });
+        }
+      }
       if (current.isActive !== isActive) {
         await withTransaction(db, async (tx) => {
           // Cascades visibility only — per-question is_active is untouched, so
@@ -980,7 +1008,7 @@ export function createQuestionsService(
       }
       const record = await findCategoryById(db, id);
       if (record === null) throw new ApiError('NOT_FOUND', 'Category not found.');
-      return mapCategory(record);
+      return { category: mapCategory(record), warnings };
     },
 
     async reorderCategories(body, actor) {

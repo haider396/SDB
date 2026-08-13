@@ -6,19 +6,15 @@ import { z } from 'zod';
 import {
   ClientMemberSchema,
   ClientSchema,
+  CollectionResponseSchema,
   RevokeAccessResponseSchema,
   SingleResponseSchema,
 } from '@sdb/contracts';
 
 export const ClientEnvelopeSchema = SingleResponseSchema(ClientSchema);
 
-export const ClientCollectionSchema = z.object({
-  data: z.array(ClientSchema),
-  meta: z.object({
-    count: z.number().int().nonnegative(),
-    nextCursor: z.string().nullable(),
-  }),
-});
+/** Shared meta (includes the optional first-page `total`, UX 2.9). */
+export const ClientCollectionSchema = CollectionResponseSchema(ClientSchema);
 
 export const MemberEnvelopeSchema = SingleResponseSchema(ClientMemberSchema);
 

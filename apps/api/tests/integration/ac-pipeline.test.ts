@@ -666,6 +666,113 @@ describe('AC-PL-08 — gated PII unlocks at interview_scheduled, exactly', () =>
   });
 });
 
+describe('UX 1.4 — photoUrl signed at read time from photo_path', () => {
+  it('admin and client assignment reads carry a 300 s signed photoUrl via ONE batched port call', async () => {
+    const { assignmentId, candidateId, requisitionId } = await seedAssignment({
+      stage: 'presented',
+    });
+    const photoPath = `candidates/${candidateId}/photo/headshot.jpg`;
+    await db.sql`
+      update candidates set photo_path = ${photoPath} where id = ${candidateId}
+    `;
+
+    harness.storage.calls.createSignedDownloadUrls.length = 0;
+    const asAdmin = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/assignments/${assignmentId}`,
+      headers: await harness.bearer(admin),
+    });
+    expect(asAdmin.statusCode).toBe(200);
+    const adminRow = asAdmin.json<{
+      data: { candidate: { photoPath: string | null; photoUrl: string | null } };
+    }>().data;
+    expect(adminRow.candidate.photoPath).toBe(photoPath);
+    expect(adminRow.candidate.photoUrl).toContain(encodeURIComponent(photoPath));
+    expect(adminRow.candidate.photoUrl).toContain('expires_in=300');
+    expect(harness.storage.calls.createSignedDownloadUrls).toEqual([
+      { paths: [photoPath], expiresInSeconds: 300 },
+    ]);
+
+    // Client read (view-backed) is decorated the same way.
+    harness.storage.calls.createSignedDownloadUrls.length = 0;
+    const asClient = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/assignments/${assignmentId}`,
+      headers: await harness.bearer(clientAdminA),
+    });
+    expect(asClient.statusCode).toBe(200);
+    const clientRow = asClient.json<{
+      data: { photoPath: string | null; photoUrl: string | null };
+    }>().data;
+    expect(clientRow.photoPath).toBe(photoPath);
+    expect(clientRow.photoUrl).toContain('expires_in=300');
+    expect(harness.storage.calls.createSignedDownloadUrls).toHaveLength(1);
+
+    // A requisition-level list makes ONE batched call over distinct paths.
+    harness.storage.calls.createSignedDownloadUrls.length = 0;
+    const list = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/requisitions/${requisitionId}/assignments`,
+      headers: await harness.bearer(admin),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(harness.storage.calls.createSignedDownloadUrls).toEqual([
+      { paths: [photoPath], expiresInSeconds: 300 },
+    ]);
+  });
+
+  it('a candidate without a photo keeps photoUrl null and triggers no port call', async () => {
+    const { assignmentId } = await seedAssignment({ stage: 'presented' });
+    harness.storage.calls.createSignedDownloadUrls.length = 0;
+    const res = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/assignments/${assignmentId}`,
+      headers: await harness.bearer(clientAdminA),
+    });
+    expect(res.statusCode).toBe(200);
+    const row = res.json<{
+      data: { photoPath: string | null; photoUrl: string | null };
+    }>().data;
+    expect(row.photoPath).toBeNull();
+    expect(row.photoUrl).toBeNull();
+    expect(harness.storage.calls.createSignedDownloadUrls).toHaveLength(0);
+  });
+});
+
+describe('UX 2.10 — GET /assignments/:id/events carries actorName', () => {
+  it('the advance event names the acting admin; trigger rows stay null', async () => {
+    const { assignmentId } = await seedAssignment({ stage: 'sourced' });
+    const advance = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${assignmentId}/advance`,
+      headers: await harness.bearer(admin),
+      payload: { toStage: 'screened' },
+    });
+    expect(advance.statusCode).toBe(200);
+
+    const adminName = (
+      await db.sql<{ full_name: string }[]>`
+        select full_name from users where id = ${admin}
+      `
+    )[0]!.full_name;
+    const res = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/assignments/${assignmentId}/events`,
+      headers: await harness.bearer(admin),
+    });
+    expect(res.statusCode).toBe(200);
+    const { data } = res.json<{
+      data: { eventType: string; actorId: string | null; actorName: string | null }[];
+    }>();
+    const stageEvent = data.find((event) => event.eventType === 'stage_changed')!;
+    expect(stageEvent.actorId).toBe(admin);
+    expect(stageEvent.actorName).toBe(adminName);
+    for (const event of data) {
+      if (event.actorId === null) expect(event.actorName).toBeNull();
+    }
+  });
+});
+
 describe('PATCH /assignments/:id — notes and sort order', () => {
   it('updates adminNote, clientNote, sortOrder and writes an event', async () => {
     const { assignmentId } = await seedAssignment();

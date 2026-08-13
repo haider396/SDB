@@ -178,12 +178,17 @@ export interface ListRequisitionsFilters {
   cursor?: { createdAt: string; id: string };
 }
 
+/**
+ * `total` is the full filtered count via `count(*) over ()` — accurate only
+ * when no cursor predicate narrows the window (the service surfaces it on
+ * first pages only, UX 2.9). 0 when the page is empty.
+ */
 export async function listRequisitions(
   sql: Queryable,
   filters: ListRequisitionsFilters,
-): Promise<RequisitionRecord[]> {
-  const rows = await sql<RequisitionRow[]>`
-    select ${sql.unsafe(REQUISITION_COLUMNS)}
+): Promise<{ data: RequisitionRecord[]; total: number }> {
+  const rows = await sql<(RequisitionRow & { total: string })[]>`
+    select ${sql.unsafe(REQUISITION_COLUMNS)}, count(*) over ()::text as total
     from requisitions r
     join clients c on c.id = r.client_id
     where r.archived_at is null
@@ -210,7 +215,10 @@ export async function listRequisitions(
     order by r.created_at desc, r.id desc
     limit ${filters.limit}
   `;
-  return rows.map(mapRequisition);
+  return {
+    data: rows.map(mapRequisition),
+    total: Number(rows[0]?.total ?? '0'),
+  };
 }
 
 /**
@@ -568,6 +576,8 @@ export interface EventRecord {
   entityId: string;
   eventType: string;
   actorId: string | null;
+  /** users.full_name of the actor, joined at read time (UX 2.10). */
+  actorName: string | null;
   actorRole: UserRoleKey | null;
   fromValue: string | null;
   toValue: string | null;
@@ -581,6 +591,7 @@ interface EventRow {
   entity_id: string;
   event_type: string;
   actor_id: string | null;
+  actor_name: string | null;
   actor_role: UserRoleKey | null;
   from_value: string | null;
   to_value: string | null;
@@ -588,19 +599,21 @@ interface EventRow {
   occurred_at: Date;
 }
 
-/** Chronological (oldest first) events for one entity. */
+/** Chronological (oldest first) events for one entity, with actor names. */
 export async function listEventsForEntity(
   sql: Queryable,
   entityType: string,
   entityId: string,
 ): Promise<EventRecord[]> {
   const rows = await sql<EventRow[]>`
-    select id, entity_type, entity_id, event_type, actor_id, actor_role,
-           from_value, to_value, metadata, occurred_at
-    from events
-    where entity_type = ${entityType}
-      and entity_id = ${entityId}
-    order by occurred_at asc, id asc
+    select e.id, e.entity_type, e.entity_id, e.event_type, e.actor_id,
+           u.full_name as actor_name, e.actor_role,
+           e.from_value, e.to_value, e.metadata, e.occurred_at
+    from events e
+    left join users u on u.id = e.actor_id
+    where e.entity_type = ${entityType}
+      and e.entity_id = ${entityId}
+    order by e.occurred_at asc, e.id asc
   `;
   return rows.map((row) => ({
     id: row.id,
@@ -608,6 +621,7 @@ export async function listEventsForEntity(
     entityId: row.entity_id,
     eventType: row.event_type,
     actorId: row.actor_id,
+    actorName: row.actor_name,
     actorRole: row.actor_role,
     fromValue: row.from_value,
     toValue: row.to_value,

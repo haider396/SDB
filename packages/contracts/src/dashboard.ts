@@ -74,6 +74,18 @@ export type CandidateAwaitingReview = z.infer<
   typeof CandidateAwaitingReviewSchema
 >;
 
+/**
+ * One dashboard feed entry (UX 1.3): an EntityEvent plus enough requisition
+ * context to render a human sentence without a follow-up fetch.
+ */
+export const ClientDashboardEventSchema = EntityEventSchema.extend({
+  /** The requisition's human reference (REQ-…). */
+  requisitionReference: z.string(),
+  /** Advertised title (role label); null when not yet set. */
+  requisitionTitle: z.string().nullable(),
+});
+export type ClientDashboardEvent = z.infer<typeof ClientDashboardEventSchema>;
+
 export const ClientDashboardSchema = z.object({
   requisitions: z.array(ClientDashboardRequisitionSchema),
   pendingActions: z.object({
@@ -86,7 +98,7 @@ export const ClientDashboardSchema = z.object({
    * first, app+trigger pairs de-duplicated. Assignment events are excluded:
    * their from-values can reference internal pipeline stages.
    */
-  recentEvents: z.array(EntityEventSchema),
+  recentEvents: z.array(ClientDashboardEventSchema),
 });
 export type ClientDashboard = z.infer<typeof ClientDashboardSchema>;
 
@@ -124,6 +136,12 @@ export type AttentionQueueEntityType = z.infer<
 export const AttentionQueueItemSchema = z.object({
   entityType: AttentionQueueEntityTypeSchema,
   entityId: z.string().uuid(),
+  /**
+   * Deep-link context (UX 1.7): the owning requisition's id for items whose
+   * entityType is `assignment` or `interview` — so the queue can link into
+   * the requisition's pipeline view directly. Absent for other entity types.
+   */
+  requisitionId: z.string().uuid().optional(),
   /** Human reference of the linked object (REQ-…, CAN-…, company name). */
   reference: z.string(),
   /** One-line display label for the queue row. */

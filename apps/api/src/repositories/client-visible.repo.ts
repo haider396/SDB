@@ -36,6 +36,9 @@ interface ViewRow {
   requisition_id: string;
   stage: ClientVisibleAssignment['stage'];
   presented_at: Date | null;
+  interview_requested_at: Date | null;
+  rejection_reason_label: string | null;
+  rejection_detail: string | null;
   client_note: string | null;
   client_id: string;
   candidate_id: string;
@@ -87,12 +90,18 @@ function mapViewRow(
     requisitionId: row.requisition_id,
     stage: row.stage,
     presentedAt: iso(row.presented_at),
+    interviewRequestedAt: iso(row.interview_requested_at),
+    rejectionReasonLabel: row.rejection_reason_label,
+    rejectionDetail: row.rejection_detail,
     clientNote: row.client_note,
     clientId: row.client_id,
     candidateId: row.candidate_id,
     reference: row.reference,
     displayName: row.display_name,
     photoPath: row.photo_path,
+    // Signed at read time by the service (lib/photo-urls.ts) — the repo has
+    // no storage access on purpose.
+    photoUrl: null,
     country: row.country,
     regionState: row.region_state,
     city: row.city,
@@ -129,6 +138,44 @@ function mapViewRow(
     files,
   };
 }
+
+/**
+ * Decision-state companions (UX 3.2), computed alongside the view row:
+ * - `interview_requested_at`: the latest `interview_requested` event for the
+ *   assignment (the client's request leaves no column, only an event)
+ * - rejection reason/detail: from the latest CLIENT-actor rejections row —
+ *   `rj.actor = 'client'` is a hard filter, so admin rejection internals can
+ *   never surface here, and the stage CASE keeps both null on every stage
+ *   except `rejected_by_client` (defence in depth; the view only shows
+ *   clients that stage for client rejections anyway).
+ */
+const DECISION_STATE_SELECT = `
+  ir.interview_requested_at,
+  case when cva.stage = 'rejected_by_client'
+       then rej.rejection_reason_label end as rejection_reason_label,
+  case when cva.stage = 'rejected_by_client'
+       then rej.rejection_detail end as rejection_detail
+`;
+
+const DECISION_STATE_JOINS = `
+  left join lateral (
+    select max(e.occurred_at) as interview_requested_at
+    from events e
+    where e.entity_type = 'assignment'
+      and e.entity_id = cva.assignment_id
+      and e.event_type = 'interview_requested'
+  ) ir on true
+  left join lateral (
+    select coalesce(rr.label, rj.reason_other) as rejection_reason_label,
+           rj.detail as rejection_detail
+    from rejections rj
+    left join rejection_reasons rr on rr.id = rj.reason_id
+    where rj.assignment_id = cva.assignment_id
+      and rj.actor = 'client'
+    order by rj.created_at desc, rj.id desc
+    limit 1
+  ) rej on true
+`;
 
 const VIEW_COLUMNS = `
   assignment_id, requisition_id, stage, presented_at, client_note, client_id,
@@ -206,8 +253,9 @@ export async function listClientVisibleAssignments(
   requisitionId: string,
 ): Promise<ClientVisibleAssignment[]> {
   const rows = await sql<ViewRow[]>`
-    select ${sql.unsafe(VIEW_COLUMNS)}
-    from client_visible_assignments
+    select ${sql.unsafe(VIEW_COLUMNS)}, ${sql.unsafe(DECISION_STATE_SELECT)}
+    from client_visible_assignments cva
+    ${sql.unsafe(DECISION_STATE_JOINS)}
     where client_id = ${clientId}
       and requisition_id = ${requisitionId}
     order by presented_at asc nulls last, assignment_id asc
@@ -231,8 +279,9 @@ export async function findClientVisibleAssignment(
   assignmentId: string,
 ): Promise<ClientVisibleAssignment | null> {
   const rows = await sql<ViewRow[]>`
-    select ${sql.unsafe(VIEW_COLUMNS)}
-    from client_visible_assignments
+    select ${sql.unsafe(VIEW_COLUMNS)}, ${sql.unsafe(DECISION_STATE_SELECT)}
+    from client_visible_assignments cva
+    ${sql.unsafe(DECISION_STATE_JOINS)}
     where client_id = ${clientId}
       and assignment_id = ${assignmentId}
   `;

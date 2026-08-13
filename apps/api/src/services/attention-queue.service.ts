@@ -80,6 +80,12 @@ export interface AttentionQueueService {
   ): Promise<AttentionQueue>;
   /** Recompute and store — the 5-minute cron job's entry point (06 §5). */
   refresh(): Promise<AttentionQueue>;
+  /**
+   * Clear-on-write hook (UX 1.7): drops the cached queue so the next read
+   * recomputes. Called by the requisition/assignment services whenever a
+   * requisition status or assignment stage changes — deliberately coarse.
+   */
+  invalidate(): void;
 }
 
 export function createAttentionQueueService(
@@ -100,6 +106,9 @@ export function createAttentionQueueService(
       items: record.items.map((item) => ({
         entityType: BUCKET_ENTITY_TYPES[key],
         entityId: item.entityId,
+        ...(item.requisitionId !== undefined
+          ? { requisitionId: item.requisitionId }
+          : {}),
         reference: item.reference,
         label: item.label,
         since: item.since,
@@ -152,6 +161,10 @@ export function createAttentionQueueService(
 
     async refresh() {
       return compute();
+    },
+
+    invalidate() {
+      cache = null;
     },
   };
 }

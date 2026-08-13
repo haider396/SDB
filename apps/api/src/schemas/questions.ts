@@ -30,6 +30,16 @@ export const CategoryEnvelopeSchema = SingleResponseSchema(
   QuestionCategorySchema,
 );
 
+/**
+ * `POST /question-categories/:id/deactivate` — 200 with warnings[] naming
+ * ACTIVE questions in OTHER categories whose conditional controller lives in
+ * this category (UX 2.7). Mirrors QuestionDeactivateEnvelopeSchema.
+ */
+export const CategoryDeactivateEnvelopeSchema = z.object({
+  data: QuestionCategorySchema,
+  warnings: z.array(QuestionDeactivateWarningSchema),
+});
+
 export const CategoryCollectionSchema = z.object({
   data: z.array(QuestionCategorySchema),
   meta: z.object({

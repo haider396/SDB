@@ -334,6 +334,27 @@ describe('GET /events — filters, pagination, dedupe', () => {
     expect(page.data[0]!.actorId).toBe(admin);
   });
 
+  it('exposes actorName (users.full_name) on every row; null without an actor (UX 2.10)', async () => {
+    const adminName = (
+      await db.sql<{ full_name: string }[]>`
+        select full_name from users where id = ${admin}
+      `
+    )[0]!.full_name;
+    const page = await fetchEvents({ entityType: 'candidate', entityId });
+    expect(page.data.length).toBeGreaterThan(0);
+    for (const event of page.data) {
+      expect(event).toHaveProperty('actorName');
+      if (event.actorId === admin) {
+        expect(event.actorName).toBe(adminName);
+      } else if (event.actorId === null) {
+        expect(event.actorName).toBeNull();
+      }
+    }
+    // The one actor-bearing row in the fixture carries the name.
+    const withActor = page.data.find((event) => event.actorId === admin);
+    expect(withActor?.actorName).toBe(adminName);
+  });
+
   it('client roles lack event.view → 403', async () => {
     const res = await harness.app.inject({
       method: 'GET',

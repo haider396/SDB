@@ -439,12 +439,17 @@ export interface ListCandidatesFilters {
   cursor?: { createdAt: string; id: string };
 }
 
+/**
+ * `total` is the full filtered count via `count(*) over ()` — accurate only
+ * when no cursor predicate narrows the window (the service surfaces it on
+ * first pages only, UX 2.9). 0 when the page is empty.
+ */
 export async function listCandidates(
   sql: Queryable,
   filters: ListCandidatesFilters,
-): Promise<Candidate[]> {
-  const rows = await sql<CandidateRow[]>`
-    select ${sql.unsafe(CANDIDATE_COLUMNS)}
+): Promise<{ data: Candidate[]; total: number }> {
+  const rows = await sql<(CandidateRow & { total: string })[]>`
+    select ${sql.unsafe(CANDIDATE_COLUMNS)}, count(*) over ()::text as total
     from candidates
     where archived_at is null
       ${
@@ -516,7 +521,10 @@ export async function listCandidates(
     order by created_at desc, id desc
     limit ${filters.limit}
   `;
-  return rows.map(mapCandidate);
+  return {
+    data: rows.map(mapCandidate),
+    total: Number(rows[0]?.total ?? '0'),
+  };
 }
 
 export async function findCandidateById(

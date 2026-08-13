@@ -38,6 +38,21 @@ describe('CollectionResponseSchema', () => {
     expect(schema.parse(payload)).toEqual(payload);
   });
 
+  it('accepts an optional meta.total and rejects a negative one (UX 2.9)', () => {
+    const schema = CollectionResponseSchema(ItemSchema);
+    const payload = {
+      data: [{ id: 'a', name: 'Alpha' }],
+      meta: { count: 1, nextCursor: null, total: 41 },
+    };
+    expect(schema.parse(payload)).toEqual(payload);
+    expect(
+      schema.safeParse({
+        data: [],
+        meta: { count: 0, nextCursor: null, total: -1 },
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects a collection without meta', () => {
     const schema = CollectionResponseSchema(ItemSchema);
     expect(schema.safeParse({ data: [] }).success).toBe(false);

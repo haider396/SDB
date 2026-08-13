@@ -497,6 +497,45 @@ export async function listDependents(
   }));
 }
 
+/**
+ * Cross-category conditional dependents (UX 2.7): ACTIVE, un-archived
+ * questions living OUTSIDE the given category whose conditional controller
+ * lives INSIDE it — the questions that silently stop appearing when the
+ * category is deactivated. `controllerKey` names the controlling question
+ * for the warning message.
+ */
+export async function listCategoryConditionalDependents(
+  sql: Queryable,
+  categoryId: string,
+): Promise<(DependentRecord & { controllerKey: string })[]> {
+  const rows = await sql<
+    {
+      id: string;
+      key: string;
+      label: string;
+      is_active: boolean;
+      controller_key: string;
+    }[]
+  >`
+    select q.id, q.key, q.label, q.is_active, ctrl.key as controller_key
+    from questions q
+    join questions ctrl on ctrl.id = q.conditional_on_question_id
+    where ctrl.category_id = ${categoryId}
+      and q.category_id <> ${categoryId}
+      and q.is_active = true
+      and q.archived_at is null
+      and ctrl.archived_at is null
+    order by q.sort_order, q.id
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    key: row.key,
+    label: row.label,
+    isActive: row.is_active,
+    controllerKey: row.controller_key,
+  }));
+}
+
 /** id → conditional_on_question_id for every question (cycle detection). */
 export async function getConditionalEdges(
   sql: Queryable,

@@ -264,17 +264,29 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     invalidateUserContext: cachedLoader.invalidate,
     logger,
   });
-  const requisitionsService = createRequisitionsService({ db, logger });
-  const assignmentsService = createAssignmentsService({ db, logger });
+  // Created before the requisition/assignment services so their
+  // clear-on-write hooks (UX 1.7) can target the same in-process cache.
+  const attentionQueueService = createAttentionQueueService({ db });
+  const invalidateAttentionQueue = () => attentionQueueService.invalidate();
+  const requisitionsService = createRequisitionsService({
+    db,
+    logger,
+    invalidateAttentionQueue,
+  });
+  const assignmentsService = createAssignmentsService({
+    db,
+    storage,
+    logger,
+    invalidateAttentionQueue,
+  });
   const interviewsService = createInterviewsService({ db, logger });
   const dashboardService = createDashboardService({ db });
-  const attentionQueueService = createAttentionQueueService({ db });
   const reportingService = createReportingService({ db });
   // Exposed so server.ts can hand the SAME cache instance to the
   // refresh-attention-queue-cache cron job (06 §5).
   app.decorate('attentionQueue', attentionQueueService);
   const placementsService = createPlacementsService({ db });
-  const candidatesService = createCandidatesService({ db });
+  const candidatesService = createCandidatesService({ db, storage });
   const candidateFilesService = createCandidateFilesService({ db, storage });
   const candidateWebhookService = createCandidateWebhookService({
     db,

@@ -46,6 +46,7 @@ interface AdminAssignmentJoinedRow extends AssignmentRowBase {
   c_first_name: string;
   c_last_name: string;
   c_display_name: string;
+  c_photo_path: string | null;
   c_email: string | null;
   c_current_title: string | null;
   c_country: string | null;
@@ -86,6 +87,9 @@ function mapAdminRow(row: AdminAssignmentJoinedRow): AdminAssignmentRow {
       firstName: row.c_first_name,
       lastName: row.c_last_name,
       displayName: row.c_display_name,
+      photoPath: row.c_photo_path,
+      // Signed at read time by the service (lib/photo-urls.ts).
+      photoUrl: null,
       email: row.c_email,
       currentTitle: row.c_current_title,
       country: row.c_country,
@@ -106,6 +110,7 @@ const ADMIN_ROW_COLUMNS = `
   r.reference as requisition_reference, r.client_id,
   c.reference as c_reference, c.first_name as c_first_name,
   c.last_name as c_last_name, c.display_name as c_display_name,
+  c.photo_path as c_photo_path,
   c.email::text as c_email, c.current_title as c_current_title,
   c.country as c_country, c.seniority_level as c_seniority_level,
   c.vetting_status as c_vetting_status, c.recruiter_rating as c_recruiter_rating,

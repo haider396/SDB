@@ -75,13 +75,19 @@ export interface RequisitionActor {
 export interface RequisitionsServiceDeps {
   db: Db;
   logger?: EnqueueLogger;
+  /**
+   * Attention-queue clear-on-write hook (UX 1.7): called after any
+   * successful status transition so the admin queue never serves a stale
+   * cache. Coarse by design.
+   */
+  invalidateAttentionQueue?: () => void;
 }
 
 export interface RequisitionsService {
   list(
     query: ListRequisitionsQuery,
     actor: RequisitionActor,
-  ): Promise<{ data: Requisition[]; nextCursor: string | null }>;
+  ): Promise<{ data: Requisition[]; nextCursor: string | null; total?: number }>;
   get(requisitionId: string, actor: RequisitionActor): Promise<RequisitionDetail>;
   update(
     requisitionId: string,
@@ -293,6 +299,7 @@ export function createRequisitionsService(
       await notifyStatusChanged(tx, record, toStatus, actor.userId);
       if (extra !== undefined) await extra(tx);
     });
+    deps.invalidateAttentionQueue?.();
 
     const updated = await findRequisitionById(deps.db, record.id);
     if (updated === null) {
@@ -319,7 +326,7 @@ export function createRequisitionsService(
       // 04 §1.3: a client-scoped caller's tenant filter comes from their
       // membership — the clientId query param is admin-only and ignored here.
       const clientId = actor.ownClientId ?? query.clientId;
-      const rows = await listRequisitions(deps.db, {
+      const { data: rows, total } = await listRequisitions(deps.db, {
         ...(clientId !== undefined ? { clientId } : {}),
         ...(query.status !== undefined ? { status: query.status } : {}),
         ...(query.engineId !== undefined ? { engineId: query.engineId } : {}),
@@ -340,6 +347,8 @@ export function createRequisitionsService(
           rows.length === query.limit && last !== undefined
             ? encodeCursor({ createdAt: last.createdAt, id: last.id })
             : null,
+        // UX 2.9: full filtered count — first (un-cursored) pages only.
+        ...(query.cursor === undefined ? { total } : {}),
       };
     },
 
@@ -583,9 +592,14 @@ export function createRequisitionsService(
  * writes a backstop for the same change. Rows sharing (entity_id, event_type,
  * from, to) within a one-second window collapse to one — preferring the
  * app-sourced row, which carries the actor.
+ *
+ * Generic over the record type so enriched read models (e.g. the client
+ * dashboard's feed records with requisition context) keep their extra fields
+ * through dedupe. EventRecord is structurally an EntityEvent (including the
+ * read-time actorName), so callers typed to EntityEvent[] remain sound.
  */
-export function dedupeEvents(events: EventRecord[]): EntityEvent[] {
-  const kept: EventRecord[] = [];
+export function dedupeEvents<T extends EventRecord>(events: T[]): T[] {
+  const kept: T[] = [];
   for (const event of events) {
     const duplicateIndex = kept.findIndex(
       (candidate) =>
@@ -607,16 +621,5 @@ export function dedupeEvents(events: EventRecord[]): EntityEvent[] {
       kept[duplicateIndex] = event; // prefer the app event (has the actor)
     }
   }
-  return kept.map((event) => ({
-    id: event.id,
-    entityType: event.entityType,
-    entityId: event.entityId,
-    eventType: event.eventType,
-    actorId: event.actorId,
-    actorRole: event.actorRole,
-    fromValue: event.fromValue,
-    toValue: event.toValue,
-    metadata: event.metadata,
-    occurredAt: event.occurredAt,
-  }));
+  return kept;
 }

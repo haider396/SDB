@@ -79,7 +79,7 @@ export interface ClientsServiceDeps {
 export interface ClientsService {
   list(
     query: ListClientsQuery,
-  ): Promise<{ data: Client[]; nextCursor: string | null }>;
+  ): Promise<{ data: Client[]; nextCursor: string | null; total?: number }>;
   create(body: CreateClientBody, actor: ClientActor): Promise<Client>;
   get(clientId: string, actor: ClientActor): Promise<Client>;
   update(
@@ -235,7 +235,7 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
 
   return {
     async list(query) {
-      const rows = await listClients(deps.db, {
+      const { data: rows, total } = await listClients(deps.db, {
         ...(query.status !== undefined ? { status: query.status } : {}),
         ...(query.search !== undefined ? { search: query.search } : {}),
         ...(query.hasPendingAccess !== undefined
@@ -253,6 +253,8 @@ export function createClientsService(deps: ClientsServiceDeps): ClientsService {
           rows.length === query.limit && last !== undefined
             ? encodeCursor({ createdAt: last.createdAt, id: last.id })
             : null,
+        // UX 2.9: full filtered count — first (un-cursored) pages only.
+        ...(query.cursor === undefined ? { total } : {}),
       };
     },
 

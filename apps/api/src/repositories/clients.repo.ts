@@ -96,12 +96,17 @@ export interface ListClientsFilters {
   cursor?: { createdAt: string; id: string };
 }
 
+/**
+ * `total` is the full filtered count via `count(*) over ()` — accurate only
+ * when no cursor predicate narrows the window (the service surfaces it on
+ * first pages only, UX 2.9). 0 when the page is empty.
+ */
 export async function listClients(
   sql: Queryable,
   filters: ListClientsFilters,
-): Promise<ClientRecord[]> {
-  const rows = await sql<ClientRow[]>`
-    select ${sql.unsafe(CLIENT_COLUMNS)}
+): Promise<{ data: ClientRecord[]; total: number }> {
+  const rows = await sql<(ClientRow & { total: string })[]>`
+    select ${sql.unsafe(CLIENT_COLUMNS)}, count(*) over ()::text as total
     from clients
     where archived_at is null
       ${filters.status === undefined ? sql`` : sql`and status = ${filters.status}`}
@@ -125,7 +130,10 @@ export async function listClients(
     order by created_at desc, id desc
     limit ${filters.limit}
   `;
-  return rows.map(mapClient);
+  return {
+    data: rows.map(mapClient),
+    total: Number(rows[0]?.total ?? '0'),
+  };
 }
 
 export async function findClientById(

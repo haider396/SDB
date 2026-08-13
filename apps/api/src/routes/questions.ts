@@ -26,6 +26,7 @@ import { requirePermission } from '../middleware/require-permission.js';
 import { IntakeFormEnvelopeSchema, IntakeFormQuerySchema } from '../schemas/intake.js';
 import {
   CategoryCollectionSchema,
+  CategoryDeactivateEnvelopeSchema,
   CategoryEnvelopeSchema,
   OptionParamsSchema,
   QuestionCollectionSchema,
@@ -388,12 +389,12 @@ export async function questionRoutes(
       },
     },
     async (request) => {
-      const data = await questionsService.setCategoryActive(
+      const { category } = await questionsService.setCategoryActive(
         request.params.id,
         true,
         actorOf(request),
       );
-      return { data };
+      return { data: category };
     },
   );
 
@@ -403,16 +404,16 @@ export async function questionRoutes(
       ...manage,
       schema: {
         params: UuidParamSchema,
-        response: { 200: CategoryEnvelopeSchema },
+        response: { 200: CategoryDeactivateEnvelopeSchema },
       },
     },
     async (request) => {
-      const data = await questionsService.setCategoryActive(
+      const { category, warnings } = await questionsService.setCategoryActive(
         request.params.id,
         false,
         actorOf(request),
       );
-      return { data };
+      return { data: category, warnings };
     },
   );
 }

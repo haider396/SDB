@@ -967,6 +967,45 @@ describe('GET /api/v1/admin/notifications — log view with filters and cursor p
     expect(garbled.statusCode).toBe(400);
   });
 
+  it('meta.total carries the full filtered count on first pages only (UX 2.9)', async () => {
+    const dbCount = await db.sql<{ count: string }[]>`
+      select count(*) as count from notification_log
+    `;
+    const first = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/notifications?limit=1',
+      headers: await harness.bearer(admin),
+    });
+    expect(first.statusCode).toBe(200);
+    const meta1 = first.json<{
+      meta: { count: number; nextCursor: string | null; total?: number };
+    }>().meta;
+    expect(meta1.total).toBe(Number(dbCount[0]!.count));
+
+    // A status filter narrows the total to the filtered set.
+    const sentCount = await db.sql<{ count: string }[]>`
+      select count(*) as count from notification_log where status = 'sent'
+    `;
+    const filtered = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/notifications?status=sent&limit=1',
+      headers: await harness.bearer(admin),
+    });
+    expect(
+      filtered.json<{ meta: { total?: number } }>().meta.total,
+    ).toBe(Number(sentCount[0]!.count));
+
+    // Cursored pages omit total.
+    const second = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/admin/notifications?limit=1&cursor=${encodeURIComponent(meta1.nextCursor!)}`,
+      headers: await harness.bearer(admin),
+    });
+    expect(
+      second.json<{ meta: { total?: number } }>().meta.total,
+    ).toBeUndefined();
+  });
+
   it('requires event.view: client-scoped callers get 403', async () => {
     for (const caller of [clientAdminA, clientUserA]) {
       const res = await harness.app.inject({

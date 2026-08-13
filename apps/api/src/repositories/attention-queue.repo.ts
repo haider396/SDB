@@ -23,6 +23,11 @@ import type { Queryable } from '../lib/db.js';
 
 export interface QueueItemRecord {
   entityId: string;
+  /**
+   * Deep-link context (UX 1.7): the owning requisition's id, populated by
+   * the assignment- and interview-shaped buckets only.
+   */
+  requisitionId?: string;
   reference: string;
   label: string;
   since: string;
@@ -38,6 +43,7 @@ const ITEM_CAP = 50;
 
 interface BucketRow {
   entity_id: string;
+  requisition_id?: string | null;
   reference: string;
   label: string;
   since: Date;
@@ -49,6 +55,9 @@ function mapBucket(rows: BucketRow[]): QueueBucketRecord {
     count: Number(rows[0]?.total ?? '0'),
     items: rows.map((row) => ({
       entityId: row.entity_id,
+      ...(row.requisition_id !== undefined && row.requisition_id !== null
+        ? { requisitionId: row.requisition_id }
+        : {}),
       reference: row.reference,
       label: row.label,
       since: row.since.toISOString(),
@@ -147,7 +156,7 @@ export async function queueAwaitingClientFeedback(
   thresholdDays: number,
 ): Promise<QueueBucketRecord> {
   const rows = await sql<BucketRow[]>`
-    select a.id as entity_id, r.reference,
+    select a.id as entity_id, r.id as requisition_id, r.reference,
            c.display_name || ' — ' || r.reference as label,
            a.presented_at as since,
            count(*) over ()::text as total
@@ -168,7 +177,7 @@ export async function queueInterviewWithoutOutcome(
   sql: Queryable,
 ): Promise<QueueBucketRecord> {
   const rows = await sql<BucketRow[]>`
-    select i.id as entity_id, r.reference,
+    select i.id as entity_id, r.id as requisition_id, r.reference,
            c.display_name || ' — round ' || i.round_number || ' — ' || r.reference as label,
            i.scheduled_at as since,
            count(*) over ()::text as total

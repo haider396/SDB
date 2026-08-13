@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import {
+  CollectionResponseSchema,
   EntityEventSchema,
   RequisitionDetailSchema,
   RequisitionSchema,
@@ -16,13 +17,9 @@ export const RequisitionDetailEnvelopeSchema = SingleResponseSchema(
   RequisitionDetailSchema,
 );
 
-export const RequisitionCollectionSchema = z.object({
-  data: z.array(RequisitionSchema),
-  meta: z.object({
-    count: z.number().int().nonnegative(),
-    nextCursor: z.string().nullable(),
-  }),
-});
+/** Shared meta (includes the optional first-page `total`, UX 2.9). */
+export const RequisitionCollectionSchema =
+  CollectionResponseSchema(RequisitionSchema);
 
 export const EventCollectionSchema = z.object({
   data: z.array(EntityEventSchema),

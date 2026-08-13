@@ -549,6 +549,17 @@ export const DOWNLOAD_URL_TTL_SECONDS = 300;
 // ---------------------------------------------------------------------------
 
 export const CandidateDetailSchema = CandidateSchema.extend({
+  /**
+   * The camelCase keys from the data-completeness required set that are
+   * currently missing (UX 2.5). Non-empty exactly when `dataCompleteness`
+   * is 'incomplete'; always `[]` when complete.
+   */
+  missingFields: z.array(z.string()),
+  /**
+   * Short-lived (300 s) signed URL for photoPath, computed at read time via
+   * the storage port (UX 1.4). Null when there is no photo or signing failed.
+   */
+  photoUrl: z.string().nullable(),
   languages: z.array(CandidateLanguageSchema),
   tools: z.array(CandidateToolSchema),
   skills: z.array(CandidateSkillSchema),

@@ -155,6 +155,7 @@ export interface StorageStub extends SupabaseStoragePort {
   calls: {
     createSignedUploadUrl: string[];
     createSignedDownloadUrl: { path: string; expiresInSeconds: number }[];
+    createSignedDownloadUrls: { paths: string[]; expiresInSeconds: number }[];
     removeObject: string[];
     statObject: string[];
     uploadObject: { path: string; size: number; contentType: string }[];
@@ -169,6 +170,7 @@ export function stubStorage(): StorageStub {
   const calls: StorageStub['calls'] = {
     createSignedUploadUrl: [],
     createSignedDownloadUrl: [],
+    createSignedDownloadUrls: [],
     removeObject: [],
     statObject: [],
     uploadObject: [],
@@ -190,6 +192,15 @@ export function stubStorage(): StorageStub {
     async createSignedDownloadUrl(path, expiresInSeconds) {
       calls.createSignedDownloadUrl.push({ path, expiresInSeconds });
       return `https://storage.test/signed/${encodeURIComponent(path)}?expires_in=${expiresInSeconds}`;
+    },
+    async createSignedDownloadUrls(paths, expiresInSeconds) {
+      calls.createSignedDownloadUrls.push({ paths: [...paths], expiresInSeconds });
+      return new Map(
+        paths.map((path) => [
+          path,
+          `https://storage.test/signed/${encodeURIComponent(path)}?expires_in=${expiresInSeconds}`,
+        ]),
+      );
     },
     async removeObject(path) {
       calls.removeObject.push(path);

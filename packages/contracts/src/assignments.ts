@@ -82,6 +82,10 @@ export const AdminAssignmentRowSchema = AssignmentSchema.extend({
     firstName: z.string(),
     lastName: z.string(),
     displayName: z.string(),
+    /** Raw storage path (admin-only shape). */
+    photoPath: z.string().nullable(),
+    /** Short-lived (300 s) signed URL for photoPath, computed at read time. */
+    photoUrl: z.string().nullable(),
     email: z.string().nullable(),
     currentTitle: z.string().nullable(),
     country: z.string().nullable(),
@@ -135,6 +139,11 @@ export const ClientVisibleAssignmentSchema = z.object({
   // always visible
   displayName: z.string(),
   photoPath: z.string().nullable(),
+  /**
+   * Short-lived (300 s) signed URL for photoPath, computed at read time via
+   * the storage port (UX 1.4). Null when there is no photo or signing failed.
+   */
+  photoUrl: z.string().nullable(),
   country: z.string().nullable(),
   regionState: z.string().nullable(),
   city: z.string().nullable(),
@@ -161,6 +170,21 @@ export const ClientVisibleAssignmentSchema = z.object({
   canManageUp: z.boolean().nullable(),
   recruiterRecommendation: z.string().nullable(),
   strengths: z.string().nullable(),
+
+  // decision state (UX 3.2)
+  /**
+   * When the client last requested an interview for this assignment — the
+   * latest `interview_requested` event, or null if never requested.
+   */
+  interviewRequestedAt: isoTimestamp.nullable(),
+  /**
+   * For stage `rejected_by_client` ONLY: the client-side rejection's reason
+   * label (rejection_reasons.label, or the free-text reason). Always null at
+   * any other stage, and NEVER populated from an admin rejection.
+   */
+  rejectionReasonLabel: z.string().nullable(),
+  /** For stage `rejected_by_client` ONLY: the rejection's free-text detail. */
+  rejectionDetail: z.string().nullable(),
 
   // gated: SQL NULL until interview_scheduled or later (view CASE exprs)
   firstName: z.string().nullable(),

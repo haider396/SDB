@@ -150,16 +150,24 @@ export async function listCandidatesAwaitingReview(
   }));
 }
 
+/** A recent event plus the requisition context the feed sentence needs (UX 1.3). */
+export interface ClientFeedEventRecord extends EventRecord {
+  requisitionReference: string;
+  requisitionTitle: string | null;
+}
+
 /**
  * Recent requisition events for the client's own requisitions, newest first.
  * Requisition events only: assignment events can carry internal pipeline
  * stages in their from-values (see contracts ClientDashboardSchema).
+ * Carries the requisition's reference/title and the actor's name so the
+ * dashboard can render a human sentence without follow-up fetches.
  */
 export async function listRecentClientRequisitionEvents(
   sql: Queryable,
   clientId: string,
   limit: number,
-): Promise<EventRecord[]> {
+): Promise<ClientFeedEventRecord[]> {
   const rows = await sql<
     {
       id: string;
@@ -167,17 +175,24 @@ export async function listRecentClientRequisitionEvents(
       entity_id: string;
       event_type: string;
       actor_id: string | null;
+      actor_name: string | null;
       actor_role: EventRecord['actorRole'];
       from_value: string | null;
       to_value: string | null;
       metadata: Record<string, unknown>;
       occurred_at: Date;
+      requisition_reference: string;
+      requisition_title: string | null;
     }[]
   >`
     select e.id, e.entity_type, e.entity_id, e.event_type, e.actor_id,
-           e.actor_role, e.from_value, e.to_value, e.metadata, e.occurred_at
+           u.full_name as actor_name,
+           e.actor_role, e.from_value, e.to_value, e.metadata, e.occurred_at,
+           r.reference as requisition_reference,
+           r.advertised_title as requisition_title
     from events e
     join requisitions r on r.id = e.entity_id
+    left join users u on u.id = e.actor_id
     where e.entity_type = 'requisition'
       and r.client_id = ${clientId}
     order by e.occurred_at desc, e.id desc
@@ -189,10 +204,13 @@ export async function listRecentClientRequisitionEvents(
     entityId: row.entity_id,
     eventType: row.event_type,
     actorId: row.actor_id,
+    actorName: row.actor_name,
     actorRole: row.actor_role,
     fromValue: row.from_value,
     toValue: row.to_value,
     metadata: row.metadata,
     occurredAt: row.occurred_at.toISOString(),
+    requisitionReference: row.requisition_reference,
+    requisitionTitle: row.requisition_title,
   }));
 }
