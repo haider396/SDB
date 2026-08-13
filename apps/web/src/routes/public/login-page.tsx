@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { signInWithPassword } from "@/lib/auth";
 import { fetchMe, homePathFor, ME_QUERY_KEY } from "@/lib/permissions";
 import { queryClient } from "@/lib/query-client";
+import logoUrl from "@/assets/logo.png";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Enter your email address").email("Enter a valid email address"),
@@ -64,7 +65,12 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-page p-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-surface-page p-8">
+      <img
+        src={logoUrl}
+        alt="Business Done Better"
+        className="mb-8 h-12 w-auto"
+      />
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>

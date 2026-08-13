@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
+import logoUrl from "@/assets/logo.png";
 
 export interface SidebarNavItem {
   label: string;
@@ -47,22 +48,29 @@ export function Sidebar({ items, areaLabel }: SidebarProps) {
             isCollapsed ? "justify-center px-0" : "px-4",
           )}
         >
-          <span
-            aria-hidden="true"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-brand text-sm font-bold"
-          >
-            SD
-          </span>
-          {!isCollapsed ? (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight">
-                Staffing Done Better
-              </p>
-              <p className="truncate text-xs leading-tight text-brand-teal">
+          {isCollapsed ? (
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-brand text-sm font-bold"
+            >
+              SD
+            </span>
+          ) : (
+            <>
+              {/* The lock-up is navy-on-transparent; a light chip keeps it
+                  legible on the navy chrome. */}
+              <span className="flex shrink-0 items-center rounded-md bg-brand-on-dark px-2 py-1">
+                <img
+                  src={logoUrl}
+                  alt="Business Done Better"
+                  className="h-6 w-auto"
+                />
+              </span>
+              <p className="min-w-0 truncate text-xs font-medium leading-tight text-brand-teal">
                 {areaLabel}
               </p>
-            </div>
-          ) : null}
+            </>
+          )}
         </div>
 
         <nav aria-label="Primary" className="flex-1 overflow-y-auto py-4">
