@@ -2,7 +2,7 @@
  * Data hooks for admin requisition management (docs/04-API.md §7, 01 §3 J3).
  *
  * Query keys:
- *   ["requisitions", "list", filters]  — cursor-paginated list (infinite)
+ *   ["requisitions", "list", filters, page] — one cursor page (Prev/Next)
  *   ["requisitions", "detail", id]     — detail incl. answers with snapshots
  *   ["requisitions", "events", id]     — chronological event log
  *
@@ -11,12 +11,11 @@
  * never assume the keys exist.
  */
 import {
-  useInfiniteQuery,
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
-  type InfiniteData,
-  type UseInfiniteQueryResult,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import type {
   EntityEvent,
@@ -31,6 +30,7 @@ import {
   apiFetchCollection,
   type Collection,
 } from "@/lib/api-client";
+import type { CursorPage } from "@/lib/use-cursor-pagination";
 
 export interface RequisitionListFilters {
   status?: RequisitionStatus;
@@ -40,31 +40,31 @@ export interface RequisitionListFilters {
 
 export const requisitionKeys = {
   root: ["requisitions"] as const,
-  list: (filters: RequisitionListFilters) =>
-    ["requisitions", "list", filters] as const,
+  list: (filters: RequisitionListFilters, page: CursorPage) =>
+    ["requisitions", "list", filters, page] as const,
   detail: (id: string) => ["requisitions", "detail", id] as const,
   events: (id: string) => ["requisitions", "events", id] as const,
 };
 
-const PAGE_SIZE = 25;
-
+/** One cursor page of the list; the caller owns the cursor stack (Prev/Next). */
 export function useRequisitions(
   filters: RequisitionListFilters,
-): UseInfiniteQueryResult<InfiniteData<Collection<Requisition>>, Error> {
-  return useInfiniteQuery({
-    queryKey: requisitionKeys.list(filters),
-    queryFn: ({ pageParam }) =>
+  page: CursorPage,
+): UseQueryResult<Collection<Requisition>, Error> {
+  return useQuery({
+    queryKey: requisitionKeys.list(filters, page),
+    queryFn: () =>
       apiFetchCollection<Requisition>("/requisitions", {
         query: {
           status: filters.status,
           clientId: filters.clientId,
           search: filters.search === "" ? undefined : filters.search,
-          limit: PAGE_SIZE,
-          cursor: pageParam,
+          limit: page.pageSize,
+          cursor: page.cursor,
         },
       }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
+    // Keep the previous page's rows on screen while the next one loads.
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -59,8 +59,12 @@ export function AdminLayout() {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onOpenNav={() => setNavOpen(true)} />
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-content px-4 py-6 md:px-8 md:py-8">
+        {/* main scrolls the page; the flex chain lets a page opt into a
+            fixed-height layout by giving its root `flex-1 min-h-0` (list
+            pages: fixed filters, scrolling table). Pages without that root
+            keep the old behaviour — content grows and main scrolls. */}
+        <main className="flex flex-1 flex-col overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-content flex-1 flex-col px-4 py-6 md:px-8 md:py-8">
             <Suspense
               fallback={
                 <LoadingSkeleton variant="card" rows={3} label="Loading…" />

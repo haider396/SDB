@@ -30,8 +30,13 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { apiFetchCollection } from "@/lib/api-client";
 import { daysSince, budgetParts, formatDate } from "@/lib/format";
+import {
+  hasNextPage,
+  useCursorPagination,
+  useRetainedTotal,
+} from "@/lib/use-cursor-pagination";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
-import { useRequisitions } from "./api";
+import { useRequisitions, type RequisitionListFilters } from "./api";
 
 function meta(value: DataTableColumnMeta): DataTableColumnMeta {
   return value;
@@ -168,17 +173,26 @@ export function RequisitionsListPage() {
   );
   const search = useDebouncedValue(searchInput.trim());
 
-  const query = useRequisitions({
+  const filters: RequisitionListFilters = {
     status,
     clientId,
     search: search === "" ? undefined : search,
+  };
+  // Any filter (or page-size) change discards the cursor stack → page 1.
+  const pager = useCursorPagination(JSON.stringify(filters));
+  const query = useRequisitions(filters, {
+    pageSize: pager.pageSize,
+    cursor: pager.cursor,
   });
+  // meta.total arrives on the first page only; keep it while paginating.
+  const totalCount = useRetainedTotal(
+    pager.resetKey,
+    pager.cursor === undefined,
+    query.data?.meta.total,
+  );
   const clientOptions = useClientOptions();
 
-  const rows = useMemo(
-    () => (query.data?.pages ?? []).flatMap((page) => page.data),
-    [query.data],
-  );
+  const rows = useMemo(() => query.data?.data ?? [], [query.data]);
 
   // Commercial keys are ABSENT without requisition.view_commercials
   // (AC-RQ-06) — only show the column when the payload carries them.
@@ -210,7 +224,8 @@ export function RequisitionsListPage() {
     status !== undefined || clientId !== undefined || search !== "";
 
   return (
-    <div>
+    // Full-height column: header + filters stay fixed, the table scrolls.
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         breadcrumbs={[
           { label: "Admin", to: "/admin" },
@@ -220,8 +235,10 @@ export function RequisitionsListPage() {
         subtitle="Every open role across all clients"
       />
 
-      <div className="mb-4 grid items-end gap-3 [grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))]">
-        <div className="space-y-1.5">
+      <div className="mb-4 grid shrink-0 items-end gap-3 [grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))]">
+        {/* The search box gets two tracks (full width below sm) — one 11rem
+            auto-fill track is too narrow for "Reference or role…". */}
+        <div className="col-span-full space-y-1.5 sm:col-span-2">
           <Label htmlFor="requisitions-search">Search</Label>
           <Input
             id="requisitions-search"
@@ -282,11 +299,20 @@ export function RequisitionsListPage() {
             : "Requisitions appear here when a prospect submits the intake form.",
         }}
         getRowHref={(requisition) => `/admin/requisitions/${requisition.id}`}
-        onLoadMore={() => void query.fetchNextPage()}
-        hasMore={query.hasNextPage}
-        isLoadingMore={query.isFetchingNextPage}
-        // meta.total arrives on the first page; keep it while paginating.
-        totalCount={query.data?.pages[0]?.meta.total}
+        pagination={{
+          page: pager.page,
+          pageSize: pager.pageSize,
+          onPageSizeChange: pager.setPageSize,
+          hasPrev: pager.canPrev,
+          hasNext: hasNextPage(query.data),
+          onPrev: pager.goPrev,
+          onNext: () => {
+            const next = query.data?.meta.nextCursor;
+            if (next != null) pager.goNext(next);
+          },
+          isFetching: query.isFetching,
+        }}
+        totalCount={totalCount}
       />
     </div>
   );

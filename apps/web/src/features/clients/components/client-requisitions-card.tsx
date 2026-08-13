@@ -2,7 +2,7 @@
  * Requisitions belonging to this client, linking through to the requisition
  * workspace. Reuses the requisitions list hook scoped by clientId.
  */
-import { ClipboardList } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { ErrorState } from "@/components/patterns/error-state";
@@ -11,11 +11,21 @@ import { RequisitionStatusBadge } from "@/components/patterns/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
+import {
+  DEFAULT_PAGE_SIZE,
+  hasNextPage,
+  useCursorStack,
+} from "@/lib/use-cursor-pagination";
 import { useRequisitions } from "@/features/requisitions/api";
 
 export function ClientRequisitionsCard({ clientId }: { clientId: string }) {
-  const query = useRequisitions({ clientId });
-  const requisitions = (query.data?.pages ?? []).flatMap((page) => page.data);
+  const pager = useCursorStack(clientId);
+  const query = useRequisitions(
+    { clientId },
+    { pageSize: DEFAULT_PAGE_SIZE, cursor: pager.cursor },
+  );
+  const requisitions = query.data?.data ?? [];
+  const hasNext = hasNextPage(query.data);
 
   return (
     <Card>
@@ -64,15 +74,33 @@ export function ClientRequisitionsCard({ clientId }: { clientId: string }) {
                 </li>
               ))}
             </ul>
-            {query.hasNextPage ? (
-              <div className="mt-3 flex justify-center">
+            {pager.canPrev || hasNext ? (
+              <div className="mt-3 flex items-center justify-between">
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => void query.fetchNextPage()}
-                  disabled={query.isFetchingNextPage}
+                  aria-label="Previous page"
+                  disabled={!pager.canPrev || query.isFetching}
+                  onClick={pager.goPrev}
                 >
-                  {query.isFetchingNextPage ? "Loading…" : "Load more"}
+                  <ChevronLeft aria-hidden="true" />
+                  Prev
+                </Button>
+                <span className="text-xs tabular-nums text-neutral-500">
+                  Page {pager.page}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label="Next page"
+                  disabled={!hasNext || query.isFetching}
+                  onClick={() => {
+                    const next = query.data?.meta.nextCursor;
+                    if (next != null) pager.goNext(next);
+                  }}
+                >
+                  Next
+                  <ChevronRight aria-hidden="true" />
                 </Button>
               </div>
             ) : null}

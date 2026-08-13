@@ -34,12 +34,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { rateParts, SENIORITY_LABELS } from "@/lib/format";
+import {
+  hasNextPage,
+  useCursorPagination,
+  useRetainedTotal,
+} from "@/lib/use-cursor-pagination";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import {
-  CANDIDATE_PAGE_SIZE,
   useCandidates,
   useTaxonomyOptions,
   useToolOptions,
+  type CandidateListFilters,
 } from "./api";
 import {
   ACCENT_LABELS,
@@ -254,7 +259,7 @@ export function CandidatesListPage() {
   // and monthly rates never mix (04 §8).
   const rateFilterActive = rateMax !== undefined && rateUnit !== undefined;
 
-  const query = useCandidates({
+  const filters: CandidateListFilters = {
     search: search === "" ? undefined : search,
     roleCategoryId,
     country: country === "" ? undefined : country,
@@ -266,15 +271,24 @@ export function CandidatesListPage() {
     rateUnit: rateFilterActive ? rateUnit : undefined,
     toolIds: toolIds.length > 0 ? toolIds : undefined,
     dataCompleteness,
+  };
+  // Any filter (or page-size) change discards the cursor stack → page 1.
+  const pager = useCursorPagination(JSON.stringify(filters));
+  const query = useCandidates(filters, {
+    pageSize: pager.pageSize,
+    cursor: pager.cursor,
   });
+  // meta.total arrives on the first page only; keep it while paginating.
+  const totalCount = useRetainedTotal(
+    pager.resetKey,
+    pager.cursor === undefined,
+    query.data?.meta.total,
+  );
 
   const taxonomy = useTaxonomyOptions();
   const toolOptions = useToolOptions();
 
-  const rows = useMemo(
-    () => (query.data?.pages ?? []).flatMap((page) => page.data),
-    [query.data],
-  );
+  const rows = useMemo(() => query.data?.data ?? [], [query.data]);
 
   const columns = useMemo(
     () => buildColumns(taxonomy.data?.roleCategoryLabelById ?? {}),
@@ -321,14 +335,9 @@ export function CandidatesListPage() {
     </Button>
   );
 
-  // The server omits nextCursor on the final page, but a short page is
-  // already proof there is nothing more — hide "Load more" either way.
-  const lastPage = query.data?.pages.at(-1);
-  const lastPageFull =
-    lastPage !== undefined && lastPage.data.length >= CANDIDATE_PAGE_SIZE;
-
   return (
-    <div>
+    // Full-height column: header + filters stay fixed, the table scrolls.
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         breadcrumbs={[{ label: "Admin", to: "/admin" }, { label: "Candidates" }]}
         title="Candidates"
@@ -343,8 +352,10 @@ export function CandidatesListPage() {
         }
       />
 
-      <div className="mb-4 grid items-end gap-3 [grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))]">
-        <div className="space-y-1.5">
+      <div className="mb-4 grid shrink-0 items-end gap-3 [grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))]">
+        {/* The search box gets two tracks (full width below sm) — one 11rem
+            auto-fill track is too narrow for "Name or CV text…". */}
+        <div className="col-span-full space-y-1.5 sm:col-span-2">
           <Label htmlFor="candidates-search">Search</Label>
           <Input
             id="candidates-search"
@@ -462,13 +473,13 @@ export function CandidatesListPage() {
               id="candidates-rate-max"
               inputMode="decimal"
               placeholder="Max"
-              className="w-24"
+              className="min-w-0 flex-1"
               value={rateMaxParam}
               onChange={(event) => setParam("rateMax", event.target.value)}
             />
             <NativeSelect
               aria-label="Rate unit"
-              className="w-28"
+              className="w-28 shrink-0"
               value={rateUnit ?? ""}
               onChange={(event) => setParam("rateUnit", event.target.value)}
             >
@@ -551,11 +562,20 @@ export function CandidatesListPage() {
           ),
         }}
         getRowHref={(candidate) => `/admin/candidates/${candidate.id}`}
-        onLoadMore={() => void query.fetchNextPage()}
-        hasMore={query.hasNextPage && lastPageFull}
-        isLoadingMore={query.isFetchingNextPage}
-        // meta.total arrives on the first page; keep it while paginating.
-        totalCount={query.data?.pages[0]?.meta.total}
+        pagination={{
+          page: pager.page,
+          pageSize: pager.pageSize,
+          onPageSizeChange: pager.setPageSize,
+          hasPrev: pager.canPrev,
+          hasNext: hasNextPage(query.data),
+          onPrev: pager.goPrev,
+          onNext: () => {
+            const next = query.data?.meta.nextCursor;
+            if (next != null) pager.goNext(next);
+          },
+          isFetching: query.isFetching,
+        }}
+        totalCount={totalCount}
       />
     </div>
   );

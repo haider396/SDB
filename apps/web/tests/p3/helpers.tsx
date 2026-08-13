@@ -49,6 +49,11 @@ export function testUuid(): string {
   return `00000000-0000-4000-8000-${String(uuidCounter).padStart(12, "0")}`;
 }
 
+/** Deterministic 12-char base62 public id (contracts PublicIdSchema). */
+export function testPublicId(): string {
+  return `Pub${String(uuidCounter).padStart(9, "0")}`;
+}
+
 export const NOW = "2026-08-12T09:00:00+00:00";
 
 // ---------------------------------------------------------------------------
@@ -61,6 +66,7 @@ export function makeCandidate(
   const first = overrides.preferredName ?? overrides.firstName;
   return {
     id: testUuid(),
+    publicId: testPublicId(),
     reference: `CAN-${String(uuidCounter).padStart(6, "0")}`,
     externalId: null,
     preferredName: null,

@@ -73,8 +73,13 @@ function ReasonRow({ group, max }: { group: ReasonGroup; max: number }) {
 
   return (
     <>
-      <tr className="border-b border-neutral-100">
-        <th scope="row" className="py-2.5 pr-4 text-left align-top">
+      {/* Borders live on the cells: the table is border-separate so the
+          sticky header keeps its border while scrolling. */}
+      <tr>
+        <th
+          scope="row"
+          className="border-b border-neutral-100 py-2.5 pr-4 text-left align-top"
+        >
           {hasTexts ? (
             <button
               type="button"
@@ -96,19 +101,23 @@ function ReasonRow({ group, max }: { group: ReasonGroup; max: number }) {
             </span>
           )}
         </th>
-        <td className="w-1/4 py-2.5 pr-4 align-middle">
+        <td className="w-1/4 border-b border-neutral-100 py-2.5 pr-4 align-middle">
           <ActorBar actor="client" count={group.countByActor.client} max={max} />
         </td>
-        <td className="w-1/4 py-2.5 pr-4 align-middle">
+        <td className="w-1/4 border-b border-neutral-100 py-2.5 pr-4 align-middle">
           <ActorBar actor="admin" count={group.countByActor.admin} max={max} />
         </td>
-        <td className="w-16 py-2.5 text-right align-middle text-sm font-semibold tabular-nums text-brand-navy-ink">
+        <td className="w-16 border-b border-neutral-100 py-2.5 text-right align-middle text-sm font-semibold tabular-nums text-brand-navy-ink">
           {group.total}
         </td>
       </tr>
       {hasTexts && isExpanded ? (
-        <tr className="border-b border-neutral-100 bg-surface-subtle">
-          <td colSpan={4} className="px-4 py-2.5" id={detailsId}>
+        <tr className="bg-surface-subtle">
+          <td
+            colSpan={4}
+            className="border-b border-neutral-100 px-4 py-2.5"
+            id={detailsId}
+          >
             <ul className="space-y-1">
               {otherTexts.map((entry, index) => (
                 <li key={index} className="flex gap-2 text-sm text-neutral-600">
@@ -185,12 +194,14 @@ export function RejectionReasonsReportPage() {
   );
 
   return (
-    <div>
+    // Full-height column: header + filters stay fixed, the report scrolls
+    // (the grouped-reason list grows unbounded with the date range).
+    <div className="flex min-h-0 flex-1 flex-col">
       {header}
 
       <form
         aria-label="Report filters"
-        className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-surface-raised p-4 shadow-xs"
+        className="mb-6 flex shrink-0 flex-wrap items-end gap-4 rounded-lg bg-surface-raised p-4 shadow-xs"
         onSubmit={(event) => event.preventDefault()}
       >
         <div className="space-y-1.5">
@@ -266,8 +277,8 @@ export function RejectionReasonsReportPage() {
           description="Widen the date range or clear the filters to see rejection reasons."
         />
       ) : (
-        <div className="rounded-lg bg-surface-raised p-6 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-neutral-600">
+        <div className="flex min-h-0 flex-col rounded-lg bg-surface-raised p-6 shadow-sm">
+          <div className="mb-4 flex shrink-0 flex-wrap items-center gap-4 text-xs text-neutral-600">
             <span className="inline-flex items-center gap-1.5">
               <span
                 aria-hidden="true"
@@ -288,33 +299,48 @@ export function RejectionReasonsReportPage() {
               {formatDate(query.data.from)} – {formatDate(query.data.to)}
             </span>
           </div>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-neutral-200 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th scope="col" className="py-2 pr-4 text-left">
-                  Reason
-                </th>
-                <th scope="col" className="py-2 pr-4 text-left">
-                  Client
-                </th>
-                <th scope="col" className="py-2 pr-4 text-left">
-                  Admin
-                </th>
-                <th scope="col" className="py-2 text-right">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((group) => (
-                <ReasonRow
-                  key={`${group.reasonKey}-${group.label}`}
-                  group={group}
-                  max={maxCount}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className="min-h-40 overflow-auto">
+            {/* border-separate: collapsed borders detach from sticky cells. */}
+            <table className="w-full border-separate border-spacing-0">
+              <thead>
+                <tr className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  <th
+                    scope="col"
+                    className="sticky top-0 z-10 border-b border-neutral-200 bg-surface-raised py-2 pr-4 text-left"
+                  >
+                    Reason
+                  </th>
+                  <th
+                    scope="col"
+                    className="sticky top-0 z-10 border-b border-neutral-200 bg-surface-raised py-2 pr-4 text-left"
+                  >
+                    Client
+                  </th>
+                  <th
+                    scope="col"
+                    className="sticky top-0 z-10 border-b border-neutral-200 bg-surface-raised py-2 pr-4 text-left"
+                  >
+                    Admin
+                  </th>
+                  <th
+                    scope="col"
+                    className="sticky top-0 z-10 border-b border-neutral-200 bg-surface-raised py-2 text-right"
+                  >
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((group) => (
+                  <ReasonRow
+                    key={`${group.reasonKey}-${group.label}`}
+                    group={group}
+                    max={maxCount}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

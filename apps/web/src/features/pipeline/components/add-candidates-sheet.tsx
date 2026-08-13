@@ -7,7 +7,7 @@
  */
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { UserPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
 import type { Candidate } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,11 @@ import { EmptyState } from "@/components/patterns/empty-state";
 import { ErrorState } from "@/components/patterns/error-state";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { ApiError } from "@/lib/api-client";
+import {
+  DEFAULT_PAGE_SIZE,
+  hasNextPage,
+  useCursorStack,
+} from "@/lib/use-cursor-pagination";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useCandidates } from "@/features/candidates/api";
 import { countryFlag } from "@/features/candidates/labels";
@@ -71,18 +76,21 @@ export function AddCandidatesSheet({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [inlineError, setInlineError] = useState<string | null>(null);
 
-  const query = useCandidates({ search: search === "" ? undefined : search });
+  // A new search term invalidates the walked cursors → back to page 1.
+  const pager = useCursorStack(search);
+  const query = useCandidates(
+    { search: search === "" ? undefined : search },
+    { pageSize: DEFAULT_PAGE_SIZE, cursor: pager.cursor },
+  );
+  const hasNext = hasNextPage(query.data);
   const create = useCreateAssignments(requisitionId);
 
   const candidates = useMemo(() => {
-    const pages = query.data?.pages ?? [];
-    return pages
-      .flatMap((page) => page.data)
-      .filter(
-        (candidate) =>
-          !assignedCandidateIds.has(candidate.id) &&
-          candidate.archivedAt === null,
-      );
+    return (query.data?.data ?? []).filter(
+      (candidate) =>
+        !assignedCandidateIds.has(candidate.id) &&
+        candidate.archivedAt === null,
+    );
   }, [query.data, assignedCandidateIds]);
 
   const nameById = useMemo(() => {
@@ -242,16 +250,35 @@ export function AddCandidatesSheet({
                 })}
               </ul>
             )}
-            {query.hasNextPage === true ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-3"
-                disabled={query.isFetchingNextPage}
-                onClick={() => void query.fetchNextPage()}
-              >
-                {query.isFetchingNextPage ? "Loading…" : "Load more"}
-              </Button>
+            {pager.canPrev || hasNext ? (
+              <div className="mt-3 flex items-center justify-between">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label="Previous page"
+                  disabled={!pager.canPrev || query.isFetching}
+                  onClick={pager.goPrev}
+                >
+                  <ChevronLeft aria-hidden="true" />
+                  Prev
+                </Button>
+                <span className="text-xs tabular-nums text-neutral-500">
+                  Page {pager.page}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label="Next page"
+                  disabled={!hasNext || query.isFetching}
+                  onClick={() => {
+                    const next = query.data?.meta.nextCursor;
+                    if (next != null) pager.goNext(next);
+                  }}
+                >
+                  Next
+                  <ChevronRight aria-hidden="true" />
+                </Button>
+              </div>
             ) : null}
           </div>
         </SheetBody>

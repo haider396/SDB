@@ -2,9 +2,14 @@
  * Reusable dense data table (05 §4.1: 40 px rows, 14 px text, tabular
  * numerals) built on TanStack Table 8 in headless mode.
  *
- * - Sorting is client-side over the loaded pages; sortable headers are real
- *   buttons and the <th> carries aria-sort (05 §4.6)
- * - Cursor pagination surfaces as a "Load more" button (04 §1 nextCursor)
+ * - Sorting is client-side within the visible page; sortable headers are
+ *   real buttons and the <th> carries aria-sort (05 §4.6)
+ * - Cursor pagination surfaces as a Prev/Next footer with a page-size
+ *   select (04 §1: cursors cannot jump to an arbitrary page, so the caller
+ *   keeps a cursor stack — see lib/use-cursor-pagination)
+ * - The rows scroll inside a viewport-bounded region with a sticky header,
+ *   so page chrome (header, filters) stays fixed while data scrolls. In a
+ *   non-flex parent the region simply grows with its content.
  * - All four states are wired here once: skeleton (matching row count),
  *   empty, error (requestId + retry), success (AC-UI-02)
  * - Rows navigate on click AND on Enter/Space with the row focused, so the
@@ -19,13 +24,15 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { EmptyState, type EmptyStateProps } from "@/components/patterns/empty-state";
 import { ErrorState } from "@/components/patterns/error-state";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PAGE_SIZE_OPTIONS } from "@/lib/use-cursor-pagination";
 import { cn } from "@/lib/utils";
 
 /** Per-column presentation hints, carried on TanStack's `meta`. */
@@ -34,6 +41,20 @@ export interface DataTableColumnMeta {
   numeric?: boolean;
   /** Extra classes for both the header and its cells (e.g. width). */
   className?: string;
+}
+
+/** Controlled Prev/Next pagination over a cursor API (04 §1). */
+export interface DataTablePagination {
+  /** 1-based page number. */
+  page: number;
+  pageSize: number;
+  onPageSizeChange: (size: number) => void;
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  /** Disables the controls while a page is in flight. */
+  isFetching?: boolean;
 }
 
 export interface DataTableProps<TData> {
@@ -48,20 +69,100 @@ export interface DataTableProps<TData> {
   empty: EmptyStateProps;
   /** Row → destination; makes rows clickable and keyboard-activatable. */
   getRowHref?: (row: TData) => string;
-  /** Cursor pagination (04 §1). Hidden when there is no next page. */
-  onLoadMore?: () => void;
-  hasMore?: boolean;
-  isLoadingMore?: boolean;
+  /** Prev/Next footer controls; the caller owns the cursor stack. */
+  pagination?: DataTablePagination;
   /** Initial hidden/visible columns, keyed by column id. */
   initialColumnVisibility?: VisibilityState;
   /** Skeleton row count matching the expected final layout (05 §4.3). */
   skeletonRows?: number;
   /**
-   * Server-reported total (meta.total, sent on first pages). When present
-   * the header count line reads "N of M"; callers keep the first page's
-   * total while paginating.
+   * Server-reported total (meta.total, sent on the first page only). Feeds
+   * the count line, the "x–y of N" range, and the page count; callers keep
+   * the first page's total while paginating (useRetainedTotal).
    */
   totalCount?: number;
+}
+
+function DataTableFooter({
+  pagination,
+  rowCount,
+  totalCount,
+}: {
+  pagination: DataTablePagination;
+  rowCount: number;
+  totalCount?: number;
+}) {
+  const {
+    page,
+    pageSize,
+    onPageSizeChange,
+    hasPrev,
+    hasNext,
+    onPrev,
+    onNext,
+    isFetching = false,
+  } = pagination;
+
+  const from = rowCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = (page - 1) * pageSize + rowCount;
+  const pageCount =
+    totalCount !== undefined
+      ? Math.max(1, Math.ceil(totalCount / pageSize))
+      : undefined;
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-b-lg border-t border-border-default bg-surface-raised px-4 py-2 shadow-sm">
+      <p className="text-sm tabular-nums text-neutral-500">
+        {rowCount === 0
+          ? "No rows"
+          : totalCount !== undefined
+            ? `${from}–${to} of ${totalCount}`
+            : `${from}–${to}`}
+      </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <label className="flex items-center gap-2 text-sm text-neutral-500">
+          Rows per page
+          <NativeSelect
+            className="w-20"
+            value={String(pageSize)}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </NativeSelect>
+        </label>
+        <p className="text-sm tabular-nums text-neutral-500">
+          Page {page}
+          {pageCount !== undefined ? ` of ${pageCount}` : ""}
+        </p>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label="Previous page"
+            disabled={!hasPrev || isFetching}
+            onClick={onPrev}
+          >
+            <ChevronLeft aria-hidden="true" />
+            Prev
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label="Next page"
+            disabled={!hasNext || isFetching}
+            onClick={onNext}
+          >
+            Next
+            <ChevronRight aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DataTable<TData>({
@@ -74,9 +175,7 @@ export function DataTable<TData>({
   onRetry,
   empty,
   getRowHref,
-  onLoadMore,
-  hasMore = false,
-  isLoadingMore = false,
+  pagination,
   initialColumnVisibility,
   skeletonRows = 8,
   totalCount,
@@ -110,7 +209,9 @@ export function DataTable<TData>({
     return <ErrorState error={error} onRetry={onRetry} />;
   }
 
-  if (data.length === 0) {
+  // A truly empty result set shows the empty state. An empty page deeper in
+  // the pagination keeps the footer so Prev remains reachable.
+  if (data.length === 0 && !(pagination?.hasPrev ?? false)) {
     return <EmptyState {...empty} />;
   }
 
@@ -127,19 +228,30 @@ export function DataTable<TData>({
   };
 
   return (
-    <div>
-      <div className="mb-2 flex items-baseline justify-end">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mb-2 flex shrink-0 items-baseline justify-end">
         <p className="text-sm tabular-nums text-neutral-500">
           {totalCount !== undefined
-            ? `${data.length} of ${totalCount}`
-            : `${data.length} loaded`}
+            ? `${totalCount} total`
+            : `${data.length} rows`}
         </p>
       </div>
-      <div className="overflow-x-auto rounded-lg bg-surface-raised shadow-sm">
-        <table className="w-full border-collapse text-sm" aria-label={label}>
+      <div
+        className={cn(
+          // The one scroll container for both axes: vertical inside the
+          // bounded region (sticky header), horizontal for wide tables.
+          "min-h-48 flex-1 overflow-auto bg-surface-raised shadow-sm",
+          pagination !== undefined ? "rounded-t-lg" : "rounded-lg",
+        )}
+      >
+        {/* border-separate: collapsed borders detach from sticky cells. */}
+        <table
+          className="w-full border-separate border-spacing-0 text-sm"
+          aria-label={label}
+        >
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-border-default">
+              <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   const meta = header.column.columnDef.meta as
                     | DataTableColumnMeta
@@ -160,7 +272,7 @@ export function DataTable<TData>({
                               : undefined
                       }
                       className={cn(
-                        "h-10 whitespace-nowrap px-4 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500",
+                        "sticky top-0 z-10 h-10 whitespace-nowrap border-b border-border-default bg-surface-raised px-4 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500",
                         meta?.numeric && "text-right",
                         meta?.className,
                       )}
@@ -208,12 +320,11 @@ export function DataTable<TData>({
               </tr>
             ))}
           </thead>
-          <tbody>
+          <tbody className="[&>tr:last-child>td]:border-b-0">
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
                 className={cn(
-                  "border-b border-neutral-200 last:border-b-0",
                   getRowHref &&
                     "cursor-pointer transition-colors duration-fast hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
                 )}
@@ -233,7 +344,7 @@ export function DataTable<TData>({
                     <td
                       key={cell.id}
                       className={cn(
-                        "h-10 whitespace-nowrap px-4 text-neutral-800",
+                        "h-10 whitespace-nowrap border-b border-neutral-200 px-4 text-neutral-800",
                         meta?.numeric && "text-right tabular-nums",
                         meta?.className,
                       )}
@@ -247,16 +358,12 @@ export function DataTable<TData>({
           </tbody>
         </table>
       </div>
-      {onLoadMore && hasMore ? (
-        <div className="mt-4 flex justify-center">
-          <Button
-            variant="secondary"
-            onClick={onLoadMore}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore ? "Loading…" : "Load more"}
-          </Button>
-        </div>
+      {pagination !== undefined ? (
+        <DataTableFooter
+          pagination={pagination}
+          rowCount={data.length}
+          totalCount={totalCount}
+        />
       ) : null}
     </div>
   );

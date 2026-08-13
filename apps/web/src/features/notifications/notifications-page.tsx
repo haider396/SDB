@@ -37,8 +37,17 @@ import {
 import { ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { useCan } from "@/lib/permissions";
+import {
+  hasNextPage,
+  useCursorPagination,
+  useRetainedTotal,
+} from "@/lib/use-cursor-pagination";
 import { cn } from "@/lib/utils";
-import { useNotifications, useResendNotification } from "./api";
+import {
+  useNotifications,
+  useResendNotification,
+  type NotificationListFilters,
+} from "./api";
 import {
   NOTIFICATION_EVENT_LABELS,
   NOTIFICATION_STATUS_LABELS,
@@ -82,17 +91,26 @@ export function NotificationsPage() {
     ? parsedEvent.data
     : undefined;
 
-  const query = useNotifications({ status, event });
+  const filters: NotificationListFilters = { status, event };
+  // Any filter (or page-size) change discards the cursor stack → page 1.
+  const pager = useCursorPagination(JSON.stringify(filters));
+  const query = useNotifications(filters, {
+    pageSize: pager.pageSize,
+    cursor: pager.cursor,
+  });
+  // meta.total arrives on the first page only; keep it while paginating.
+  const totalCount = useRetainedTotal(
+    pager.resetKey,
+    pager.cursor === undefined,
+    query.data?.meta.total,
+  );
   const resend = useResendNotification();
   // POST :id/resend is settings.manage (super_admin) — hide it otherwise.
   const { allowed: canResend } = useCan("settings.manage");
 
   const [payloadRow, setPayloadRow] = useState<NotificationLogRow | null>(null);
 
-  const rows = useMemo(
-    () => (query.data?.pages ?? []).flatMap((page) => page.data),
-    [query.data],
-  );
+  const rows = useMemo(() => query.data?.data ?? [], [query.data]);
 
   const setParam = (key: string, value: string | null) => {
     setSearchParams(
@@ -229,7 +247,8 @@ export function NotificationsPage() {
   ];
 
   return (
-    <div>
+    // Full-height column: header + filters stay fixed, the table scrolls.
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         breadcrumbs={[
           { label: "Admin", to: "/admin" },
@@ -239,7 +258,7 @@ export function NotificationsPage() {
         subtitle="Outbound GoHighLevel dispatch log — queued, sent, and failed sends"
       />
 
-      <div className="mb-4 flex flex-wrap items-end gap-4">
+      <div className="mb-4 flex shrink-0 flex-wrap items-end gap-4">
         <div className="w-48 space-y-1.5">
           <Label htmlFor="notifications-status">Status</Label>
           <NativeSelect
@@ -292,11 +311,20 @@ export function NotificationsPage() {
               ? "No notifications match these filters. Clear them to see the full log."
               : "Outbound notifications appear here as portal activity triggers them.",
         }}
-        onLoadMore={() => void query.fetchNextPage()}
-        hasMore={query.hasNextPage}
-        isLoadingMore={query.isFetchingNextPage}
-        // meta.total arrives on the first page; keep it while paginating.
-        totalCount={query.data?.pages[0]?.meta.total}
+        pagination={{
+          page: pager.page,
+          pageSize: pager.pageSize,
+          onPageSizeChange: pager.setPageSize,
+          hasPrev: pager.canPrev,
+          hasNext: hasNextPage(query.data),
+          onPrev: pager.goPrev,
+          onNext: () => {
+            const next = query.data?.meta.nextCursor;
+            if (next != null) pager.goNext(next);
+          },
+          isFetching: query.isFetching,
+        }}
+        totalCount={totalCount}
       />
 
       <Sheet

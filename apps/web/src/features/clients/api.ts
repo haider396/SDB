@@ -2,7 +2,7 @@
  * Data hooks for admin client management (docs/04-API.md §6, 01 §3 J2).
  *
  * Query keys:
- *   ["clients", "list", filters]   — cursor-paginated list (infinite)
+ *   ["clients", "list", filters, page] — one cursor page (Prev/Next)
  *   ["clients", "detail", id]      — one client
  *   ["clients", "members", id]     — members of one client
  *
@@ -10,12 +10,11 @@
  * changes also refresh members (grant-access creates the primary contact).
  */
 import {
-  useInfiniteQuery,
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
-  type UseInfiniteQueryResult,
-  type InfiniteData,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import type {
   Client,
@@ -35,6 +34,7 @@ import {
   apiFetchEnvelope,
   type Collection,
 } from "@/lib/api-client";
+import type { CursorPage } from "@/lib/use-cursor-pagination";
 
 export interface ClientListFilters {
   status?: Client["status"];
@@ -44,31 +44,32 @@ export interface ClientListFilters {
 
 export const clientKeys = {
   root: ["clients"] as const,
-  list: (filters: ClientListFilters) => ["clients", "list", filters] as const,
+  list: (filters: ClientListFilters, page: CursorPage) =>
+    ["clients", "list", filters, page] as const,
   detail: (id: string) => ["clients", "detail", id] as const,
   events: (id: string) => ["clients", "events", id] as const,
   members: (id: string) => ["clients", "members", id] as const,
 };
 
-const PAGE_SIZE = 25;
-
+/** One cursor page of the list; the caller owns the cursor stack (Prev/Next). */
 export function useClients(
   filters: ClientListFilters,
-): UseInfiniteQueryResult<InfiniteData<Collection<Client>>, Error> {
-  return useInfiniteQuery({
-    queryKey: clientKeys.list(filters),
-    queryFn: ({ pageParam }) =>
+  page: CursorPage,
+): UseQueryResult<Collection<Client>, Error> {
+  return useQuery({
+    queryKey: clientKeys.list(filters, page),
+    queryFn: () =>
       apiFetchCollection<Client>("/clients", {
         query: {
           status: filters.status,
           search: filters.search === "" ? undefined : filters.search,
           hasPendingAccess: filters.hasPendingAccess ? "true" : undefined,
-          limit: PAGE_SIZE,
-          cursor: pageParam,
+          limit: page.pageSize,
+          cursor: page.cursor,
         },
       }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
+    // Keep the previous page's rows on screen while the next one loads.
+    placeholderData: keepPreviousData,
   });
 }
 

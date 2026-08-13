@@ -26,6 +26,7 @@ import {
   makeRequisition,
   makeState,
   renderClientPortal,
+  testPublicId,
   testUuid,
   NOW,
 } from "./helpers";
@@ -93,6 +94,7 @@ describe("client dashboard", () => {
         requisitions: [
           {
             id: requisition.id,
+            publicId: testPublicId(),
             reference: requisition.reference,
             advertisedTitle: requisition.advertisedTitle,
             status: "submitted",
@@ -178,6 +180,7 @@ describe("client dashboard", () => {
         requisitions: [
           {
             id: requisition.id,
+            publicId: testPublicId(),
             reference: requisition.reference,
             advertisedTitle: requisition.advertisedTitle,
             status: "sourcing",
@@ -210,6 +213,7 @@ describe("client dashboard", () => {
         requisitions: [
           {
             id: placedId,
+            publicId: testPublicId(),
             reference: "REQ-000201",
             advertisedTitle: "Filled role",
             status: "placed",
@@ -219,6 +223,7 @@ describe("client dashboard", () => {
           },
           {
             id: openId,
+            publicId: testPublicId(),
             reference: "REQ-000202",
             advertisedTitle: "Open role",
             status: "candidates_presented",

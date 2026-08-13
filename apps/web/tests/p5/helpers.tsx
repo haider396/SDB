@@ -37,6 +37,7 @@ import {
   jsonResponse,
   errorResponse,
   makeRequisition,
+  testPublicId,
   testUuid,
   type Override,
   type RecordedRequest,
@@ -47,6 +48,7 @@ export {
   jsonResponse,
   errorResponse,
   makeRequisition,
+  testPublicId,
   testUuid,
 };
 export type { Override, RecordedRequest };
@@ -86,6 +88,7 @@ export function makeClientRecord(
 ): Client {
   return {
     id,
+    publicId: testPublicId(),
     companyName: "Acme Corp",
     website: "https://acme.test",
     industry: null,

@@ -18,8 +18,13 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatDate, SERVICE_TIER_LABELS } from "@/lib/format";
 import { useCan } from "@/lib/permissions";
+import {
+  hasNextPage,
+  useCursorPagination,
+  useRetainedTotal,
+} from "@/lib/use-cursor-pagination";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
-import { useClients } from "./api";
+import { useClients, type ClientListFilters } from "./api";
 import { NewClientDialog } from "./components/new-client-dialog";
 
 const CLIENT_STATUSES = ClientStatusSchema.options;
@@ -114,19 +119,28 @@ export function ClientsListPage() {
   );
   const search = useDebouncedValue(searchInput.trim());
 
-  const query = useClients({
+  const filters: ClientListFilters = {
     status,
     search: search === "" ? undefined : search,
     hasPendingAccess: hasPendingAccess || undefined,
+  };
+  // Any filter (or page-size) change discards the cursor stack → page 1.
+  const pager = useCursorPagination(JSON.stringify(filters));
+  const query = useClients(filters, {
+    pageSize: pager.pageSize,
+    cursor: pager.cursor,
   });
+  // meta.total arrives on the first page only; keep it while paginating.
+  const totalCount = useRetainedTotal(
+    pager.resetKey,
+    pager.cursor === undefined,
+    query.data?.meta.total,
+  );
   // POST /clients requires client.create — offer the action only then.
   const { allowed: canCreate } = useCan("client.create");
   const [isNewOpen, setIsNewOpen] = useState(false);
 
-  const rows = useMemo(
-    () => (query.data?.pages ?? []).flatMap((page) => page.data),
-    [query.data],
-  );
+  const rows = useMemo(() => query.data?.data ?? [], [query.data]);
 
   const setParam = (key: string, value: string | null) => {
     setSearchParams(
@@ -141,7 +155,8 @@ export function ClientsListPage() {
   };
 
   return (
-    <div>
+    // Full-height column: header + filters stay fixed, the table scrolls.
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         breadcrumbs={[{ label: "Admin", to: "/admin" }, { label: "Clients" }]}
         title="Clients"
@@ -156,7 +171,7 @@ export function ClientsListPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-end gap-4">
+      <div className="mb-4 flex shrink-0 flex-wrap items-end gap-4">
         <div className="w-64 space-y-1.5">
           <Label htmlFor="clients-search">Search</Label>
           <Input
@@ -219,11 +234,20 @@ export function ClientsListPage() {
               : "Clients appear here when a prospect submits the intake form, ready for payment confirmation and portal access.",
         }}
         getRowHref={(client) => `/admin/clients/${client.id}`}
-        onLoadMore={() => void query.fetchNextPage()}
-        hasMore={query.hasNextPage}
-        isLoadingMore={query.isFetchingNextPage}
-        // meta.total arrives on the first page; keep it while paginating.
-        totalCount={query.data?.pages[0]?.meta.total}
+        pagination={{
+          page: pager.page,
+          pageSize: pager.pageSize,
+          onPageSizeChange: pager.setPageSize,
+          hasPrev: pager.canPrev,
+          hasNext: hasNextPage(query.data),
+          onPrev: pager.goPrev,
+          onNext: () => {
+            const next = query.data?.meta.nextCursor;
+            if (next != null) pager.goNext(next);
+          },
+          isFetching: query.isFetching,
+        }}
+        totalCount={totalCount}
       />
 
       <NewClientDialog open={isNewOpen} onClose={() => setIsNewOpen(false)} />

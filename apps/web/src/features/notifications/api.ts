@@ -3,17 +3,17 @@
  * "Admin UI exposes a notification log view with a manual resend action").
  *
  * Query keys:
- *   ["notifications", "list", filters] — cursor-paginated log (infinite)
+ *   ["notifications", "list", filters, page] — one cursor page (Prev/Next)
  *
  * Resend re-queues the row and attempts an immediate dispatch; the returned
  * row reflects the outcome, so the list refetches after it settles.
  */
 import {
-  useInfiniteQuery,
+  keepPreviousData,
   useMutation,
+  useQuery,
   useQueryClient,
-  type InfiniteData,
-  type UseInfiniteQueryResult,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import type {
   NotificationEvent,
@@ -26,6 +26,7 @@ import {
   apiFetchCollection,
   type Collection,
 } from "@/lib/api-client";
+import type { CursorPage } from "@/lib/use-cursor-pagination";
 
 export interface NotificationListFilters {
   status?: NotificationStatus;
@@ -34,28 +35,28 @@ export interface NotificationListFilters {
 
 export const notificationKeys = {
   root: ["notifications"] as const,
-  list: (filters: NotificationListFilters) =>
-    ["notifications", "list", filters] as const,
+  list: (filters: NotificationListFilters, page: CursorPage) =>
+    ["notifications", "list", filters, page] as const,
 };
 
-const PAGE_SIZE = 25;
-
+/** One cursor page of the log; the caller owns the cursor stack (Prev/Next). */
 export function useNotifications(
   filters: NotificationListFilters,
-): UseInfiniteQueryResult<InfiniteData<Collection<NotificationLogRow>>, Error> {
-  return useInfiniteQuery({
-    queryKey: notificationKeys.list(filters),
-    queryFn: ({ pageParam }) =>
+  page: CursorPage,
+): UseQueryResult<Collection<NotificationLogRow>, Error> {
+  return useQuery({
+    queryKey: notificationKeys.list(filters, page),
+    queryFn: () =>
       apiFetchCollection<NotificationLogRow>("/admin/notifications", {
         query: {
           status: filters.status,
           event: filters.event,
-          limit: PAGE_SIZE,
-          cursor: pageParam,
+          limit: page.pageSize,
+          cursor: page.cursor,
         },
       }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
+    // Keep the previous page's rows on screen while the next one loads.
+    placeholderData: keepPreviousData,
   });
 }
 

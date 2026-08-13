@@ -2,7 +2,7 @@
  * Data hooks for the admin candidates workspace (docs/04-API.md §8, 01 §3 J4).
  *
  * Query keys:
- *   ["candidates", "list", filters]  — cursor-paginated list (infinite)
+ *   ["candidates", "list", filters, page] — one cursor page (Prev/Next)
  *   ["candidates", "detail", id]     — full CandidateDetail
  *   ["candidates", "files", id]      — file list (refreshed after uploads)
  *   ["candidates", "options", kind]  — taxonomy option lists
@@ -11,12 +11,11 @@
  * PATCH — so consent_captured_at always reflects a deliberate action.
  */
 import {
-  useInfiniteQuery,
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
-  type InfiniteData,
-  type UseInfiniteQueryResult,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import type {
   AccentStrength,
@@ -42,6 +41,7 @@ import {
   apiFetchEnvelope,
   type Collection,
 } from "@/lib/api-client";
+import type { CursorPage } from "@/lib/use-cursor-pagination";
 
 export interface CandidateListFilters {
   search?: string;
@@ -61,24 +61,22 @@ export interface CandidateListFilters {
 
 export const candidateKeys = {
   root: ["candidates"] as const,
-  list: (filters: CandidateListFilters) =>
-    ["candidates", "list", filters] as const,
+  list: (filters: CandidateListFilters, page: CursorPage) =>
+    ["candidates", "list", filters, page] as const,
   detail: (id: string) => ["candidates", "detail", id] as const,
   events: (id: string) => ["candidates", "events", id] as const,
   files: (id: string) => ["candidates", "files", id] as const,
   options: (kind: string) => ["candidates", "options", kind] as const,
 };
 
-/** List page size — exported so the UI can detect a short (final) page. */
-export const CANDIDATE_PAGE_SIZE = 25;
-const PAGE_SIZE = CANDIDATE_PAGE_SIZE;
-
+/** One cursor page of the list; the caller owns the cursor stack (Prev/Next). */
 export function useCandidates(
   filters: CandidateListFilters,
-): UseInfiniteQueryResult<InfiniteData<Collection<Candidate>>, Error> {
-  return useInfiniteQuery({
-    queryKey: candidateKeys.list(filters),
-    queryFn: ({ pageParam }) =>
+  page: CursorPage,
+): UseQueryResult<Collection<Candidate>, Error> {
+  return useQuery({
+    queryKey: candidateKeys.list(filters, page),
+    queryFn: () =>
       apiFetchCollection<Candidate>("/candidates", {
         query: {
           search: filters.search,
@@ -96,12 +94,12 @@ export function useCandidates(
               ? filters.toolIds.join(",")
               : undefined,
           dataCompleteness: filters.dataCompleteness,
-          limit: PAGE_SIZE,
-          cursor: pageParam,
+          limit: page.pageSize,
+          cursor: page.cursor,
         },
       }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
+    // Keep the previous page's rows on screen while the next one loads.
+    placeholderData: keepPreviousData,
   });
 }
 

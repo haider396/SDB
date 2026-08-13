@@ -26,6 +26,7 @@ import {
   makeCandidate,
   makeDetail,
   makeFile,
+  testPublicId,
   testUuid,
   type Override,
   type RecordedRequest,
@@ -38,6 +39,7 @@ export {
   errorResponse,
   makeCandidate,
   makeDetail,
+  testPublicId,
   testUuid,
 };
 export type { Override, RecordedRequest };
@@ -61,6 +63,7 @@ export function makeRequisition(
   const id = testUuid();
   return {
     id,
+    publicId: testPublicId(),
     reference: "REQ-000101",
     clientId: testUuid(),
     clientName: "Acme Corp",
@@ -128,6 +131,7 @@ export function makeAssignment({
     clientId: requisition.clientId,
     candidate: {
       id: candidate.id,
+      publicId: candidate.publicId,
       reference: candidate.reference,
       photoPath: null,
       photoUrl: null,
