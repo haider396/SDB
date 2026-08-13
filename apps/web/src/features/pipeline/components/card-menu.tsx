@@ -104,7 +104,7 @@ export function CardMenu({ label, items }: CardMenuProps) {
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
-        className="rounded-sm p-1 text-neutral-400 hover:text-neutral-700"
+        className="rounded-sm p-1 text-neutral-400 hover:text-neutral-800"
       >
         <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
       </button>

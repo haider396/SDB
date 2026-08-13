@@ -20,6 +20,8 @@ import type {
   CandidateDetail,
   Interview,
 } from "@sdb/contracts";
+import { Chip } from "@/components/ui/chip";
+import { InsetPanel } from "@/components/ui/inset-panel";
 import { cn } from "@/lib/utils";
 import { daysSince } from "@/lib/format";
 import {
@@ -172,7 +174,7 @@ export function AssignmentCard({
       ref={setNodeRef}
       data-assignment-id={row.id}
       className={cn(
-        "rounded-md border border-border-default bg-surface-raised p-3 shadow-xs",
+        "rounded-md border border-neutral-200 bg-surface-raised p-3 shadow-xs",
         isDragging && "opacity-40",
       )}
     >
@@ -182,7 +184,7 @@ export function AssignmentCard({
             ref={setActivatorNodeRef}
             type="button"
             aria-label={`Drag ${name} to another stage`}
-            className="mt-0.5 cursor-grab touch-none rounded-sm p-0.5 text-neutral-400 hover:text-neutral-700"
+            className="mt-0.5 cursor-grab touch-none rounded-sm p-0.5 text-neutral-400 hover:text-neutral-800"
             {...attributes}
             {...listeners}
           >
@@ -234,6 +236,9 @@ export function AssignmentCard({
               {row.candidate.currentTitle}
             </p>
           ) : null}
+          <p className="font-mono text-2xs text-neutral-500">
+            {row.candidate.reference}
+          </p>
         </div>
 
         <div className="flex items-center gap-1">
@@ -257,17 +262,17 @@ export function AssignmentCard({
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {candidate?.englishSpokenLevel != null ? (
-          <span className="inline-flex rounded-full bg-info-subtle px-2 py-0.5 text-[11px] font-medium text-info">
+          <Chip tone="info" size="sm">
             {LANGUAGE_LEVEL_LABELS[candidate.englishSpokenLevel]} English
-          </span>
+          </Chip>
         ) : null}
         {candidate?.accentStrength != null ? (
-          <span className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+          <Chip tone="neutral" size="sm">
             {ACCENT_LABELS[candidate.accentStrength]}
-          </span>
+          </Chip>
         ) : null}
         <span
-          className="ml-auto text-[11px] tabular-nums text-neutral-500"
+          className="ml-auto font-mono text-2xs tabular-nums text-neutral-500"
           title="Approximate — derived from the assignment's last update, not a per-stage timestamp"
         >
           {days}d in stage
@@ -275,7 +280,7 @@ export function AssignmentCard({
       </div>
 
       {pendingInterview !== null ? (
-        <div className="mt-2 rounded-md bg-warning-subtle px-2 py-1.5 text-[11px] text-warning-text">
+        <InsetPanel tone="warning" className="mt-2 text-2xs text-warning-text">
           <p className="flex items-center gap-1 font-medium">
             <CalendarClock aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
             Round {pendingInterview.roundNumber}
@@ -304,25 +309,25 @@ export function AssignmentCard({
               Join meeting
             </a>
           ) : null}
-        </div>
+        </InsetPanel>
       ) : null}
 
       {recordedOutcome !== null ? (
         <div className="mt-2">
-          <span
-            className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+          <Chip
+            size="sm"
+            tone={
               recordedOutcome.outcome === "passed"
-                ? "bg-success-subtle text-success-text"
+                ? "success"
                 : recordedOutcome.outcome === "failed" ||
                     recordedOutcome.outcome === "no_show"
-                  ? "bg-danger-subtle text-danger-text"
-                  : "bg-neutral-100 text-neutral-600",
-            )}
+                  ? "danger"
+                  : "neutral"
+            }
           >
             Round {recordedOutcome.roundNumber}:{" "}
             {OUTCOME_LABELS[recordedOutcome.outcome]}
-          </span>
+          </Chip>
         </div>
       ) : null}
     </div>

@@ -71,7 +71,7 @@ function SortableRow({
         ref={setActivatorNodeRef}
         type="button"
         aria-label={`Reorder ${label}`}
-        className="cursor-grab touch-none rounded-sm p-1 text-neutral-400 hover:text-neutral-700"
+        className="cursor-grab touch-none rounded-sm p-1 text-neutral-400 hover:text-neutral-800"
         {...attributes}
         {...listeners}
       >
@@ -84,7 +84,7 @@ function SortableRow({
           aria-label={`Move ${label} up`}
           disabled={index === 0}
           onClick={() => onMove(index, index - 1)}
-          className="rounded-sm p-0.5 text-neutral-400 hover:text-neutral-700 disabled:pointer-events-none disabled:opacity-40"
+          className="rounded-sm p-0.5 text-neutral-400 hover:text-neutral-800 disabled:pointer-events-none disabled:opacity-40"
         >
           <ChevronUp aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
@@ -93,7 +93,7 @@ function SortableRow({
           aria-label={`Move ${label} down`}
           disabled={index === count - 1}
           onClick={() => onMove(index, index + 1)}
-          className="rounded-sm p-0.5 text-neutral-400 hover:text-neutral-700 disabled:pointer-events-none disabled:opacity-40"
+          className="rounded-sm p-0.5 text-neutral-400 hover:text-neutral-800 disabled:pointer-events-none disabled:opacity-40"
         >
           <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
         </button>

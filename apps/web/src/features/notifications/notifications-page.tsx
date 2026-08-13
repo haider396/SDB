@@ -295,7 +295,8 @@ export function NotificationsPage() {
         onLoadMore={() => void query.fetchNextPage()}
         hasMore={query.hasNextPage}
         isLoadingMore={query.isFetchingNextPage}
-        footer={`${rows.length} notification${rows.length === 1 ? "" : "s"} loaded`}
+        // meta.total arrives on the first page; keep it while paginating.
+        totalCount={query.data?.pages[0]?.meta.total}
       />
 
       <Sheet

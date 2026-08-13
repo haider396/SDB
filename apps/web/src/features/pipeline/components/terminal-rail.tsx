@@ -43,7 +43,7 @@ export function TerminalRail({ rows }: TerminalRailProps) {
       aria-label="Closed assignments"
       className="w-64 shrink-0 rounded-lg bg-surface-subtle p-3"
     >
-      <h3 className="text-xs font-semibold uppercase tracking-tight text-neutral-600">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">
         Closed
       </h3>
       <ul className="mt-2 space-y-1">
@@ -56,7 +56,7 @@ export function TerminalRail({ rows }: TerminalRailProps) {
                 type="button"
                 aria-expanded={isOpen}
                 onClick={() => toggle(stage)}
-                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-neutral-700 hover:bg-surface-raised"
+                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-neutral-600 hover:bg-surface-raised"
               >
                 {isOpen ? (
                   <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
@@ -64,7 +64,7 @@ export function TerminalRail({ rows }: TerminalRailProps) {
                   <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
                 )}
                 <span>{STAGE_LABELS[stage]}</span>
-                <span className="ml-auto rounded-full bg-neutral-100 px-1.5 text-[11px] font-medium tabular-nums text-neutral-600">
+                <span className="ml-auto rounded-full bg-neutral-100 px-1.5 text-2xs font-medium tabular-nums text-neutral-600">
                   {stageRows.length}
                 </span>
               </button>
@@ -88,7 +88,7 @@ export function TerminalRail({ rows }: TerminalRailProps) {
                         </Link>
                         <div className="mt-0.5 flex items-center justify-between gap-1">
                           <StatusBadge stage={row.stage} />
-                          <span className="text-[11px] text-neutral-500">
+                          <span className="text-2xs text-neutral-500">
                             {formatDate(row.updatedAt)}
                           </span>
                         </div>

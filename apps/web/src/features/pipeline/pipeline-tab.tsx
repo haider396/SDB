@@ -211,7 +211,7 @@ export function PipelineTab({ requisitionId }: PipelineTabProps) {
           onToggleSelect={toggleSelect}
           vettedHeaderAction={
             selectedRows.length > 0 ? (
-              <span className="text-[11px] font-medium text-brand-blue">
+              <span className="text-2xs font-medium text-brand-blue">
                 {selectedRows.length} selected
               </span>
             ) : undefined

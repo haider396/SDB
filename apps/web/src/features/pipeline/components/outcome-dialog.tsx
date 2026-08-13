@@ -120,7 +120,7 @@ export function OutcomeDialog({
 
         <div className="space-y-4">
           <fieldset>
-            <legend className="mb-1.5 text-sm font-medium text-neutral-700">
+            <legend className="mb-1.5 text-sm font-medium text-neutral-800">
               Outcome
             </legend>
             <div
@@ -135,7 +135,7 @@ export function OutcomeDialog({
                     "flex cursor-pointer flex-col rounded-md border px-3 py-2 text-sm transition-colors duration-fast",
                     outcome === option.value
                       ? "border-brand-blue bg-brand-blue-subtle text-brand-navy-ink"
-                      : "border-border-default bg-surface-raised text-neutral-700 hover:bg-surface-subtle",
+                      : "border-border-default bg-surface-raised text-neutral-800 hover:bg-surface-subtle",
                   )}
                 >
                   <span className="flex items-center gap-2">

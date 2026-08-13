@@ -37,6 +37,8 @@ export class ApiError extends Error {
 export interface CollectionMeta {
   count: number;
   nextCursor: string | null;
+  /** Full filtered row count — first (un-cursored) pages only (04 §1). */
+  total?: number;
 }
 
 export interface Collection<T> {

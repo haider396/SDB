@@ -305,7 +305,7 @@ export function LanguagesCard({ candidate }: { candidate: CandidateDetail }) {
                 <p className="text-sm font-medium text-neutral-800">
                   {entry.language}
                   {entry.isNative ? (
-                    <span className="ml-2 rounded-full bg-brand-blue-subtle px-2 py-0.5 text-[11px] font-medium text-brand-blue">
+                    <span className="ml-2 rounded-full bg-brand-blue-subtle px-2 py-0.5 text-2xs font-medium text-brand-blue">
                       Native
                     </span>
                   ) : null}
@@ -593,7 +593,7 @@ export function EmploymentCard({ candidate }: { candidate: CandidateDetail }) {
                 <p className="truncate text-sm font-medium text-neutral-800">
                   {entry.title} · {entry.employer}
                   {entry.isCurrent ? (
-                    <span className="ml-2 rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text">
+                    <span className="ml-2 rounded-full bg-success-subtle px-2 py-0.5 text-2xs font-medium text-success-text">
                       Current
                     </span>
                   ) : null}
@@ -1333,7 +1333,7 @@ export function ReferencesCard({ candidate }: { candidate: CandidateDetail }) {
                 <p className="truncate text-sm font-medium text-neutral-800">
                   {entry.refereeName}
                   {entry.checkedAt !== null ? (
-                    <span className="ml-2 rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text">
+                    <span className="ml-2 rounded-full bg-success-subtle px-2 py-0.5 text-2xs font-medium text-success-text">
                       Checked
                     </span>
                   ) : null}

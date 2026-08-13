@@ -19,6 +19,7 @@ import {
   DataTable,
   type DataTableColumnMeta,
 } from "@/components/patterns/data-table";
+import { MoneyFigure } from "@/components/patterns/money-figure";
 import { PageHeader } from "@/components/patterns/page-header";
 import {
   REQUISITION_STATUS_META,
@@ -28,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { apiFetchCollection } from "@/lib/api-client";
-import { daysSince, formatBudget, formatDate } from "@/lib/format";
+import { daysSince, budgetParts, formatDate } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useRequisitions } from "./api";
 
@@ -101,13 +102,16 @@ const budgetColumn: ColumnDef<Requisition, unknown> = {
   accessorFn: (row) => row.budgetMin ?? row.budgetMax ?? null,
   header: "Budget",
   meta: meta({ numeric: true }),
-  cell: ({ row }) =>
-    formatBudget({
-      budgetMin: row.original.budgetMin ?? null,
-      budgetMax: row.original.budgetMax ?? null,
-      budgetCurrency: row.original.budgetCurrency ?? null,
-      budgetUnit: row.original.budgetUnit ?? null,
-    }),
+  cell: ({ row }) => (
+    <MoneyFigure
+      parts={budgetParts({
+        budgetMin: row.original.budgetMin ?? null,
+        budgetMax: row.original.budgetMax ?? null,
+        budgetCurrency: row.original.budgetCurrency ?? null,
+        budgetUnit: row.original.budgetUnit ?? null,
+      })}
+    />
+  ),
 };
 
 const trailingColumns: ColumnDef<Requisition, unknown>[] = [
@@ -216,8 +220,8 @@ export function RequisitionsListPage() {
         subtitle="Every open role across all clients"
       />
 
-      <div className="mb-4 flex flex-wrap items-end gap-4">
-        <div className="w-64 space-y-1.5">
+      <div className="mb-4 grid items-end gap-3 [grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))]">
+        <div className="space-y-1.5">
           <Label htmlFor="requisitions-search">Search</Label>
           <Input
             id="requisitions-search"
@@ -230,7 +234,7 @@ export function RequisitionsListPage() {
             }}
           />
         </div>
-        <div className="w-56 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="requisitions-status">Status</Label>
           <NativeSelect
             id="requisitions-status"
@@ -245,7 +249,7 @@ export function RequisitionsListPage() {
             ))}
           </NativeSelect>
         </div>
-        <div className="w-56 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="requisitions-client">Client</Label>
           <NativeSelect
             id="requisitions-client"
@@ -281,7 +285,8 @@ export function RequisitionsListPage() {
         onLoadMore={() => void query.fetchNextPage()}
         hasMore={query.hasNextPage}
         isLoadingMore={query.isFetchingNextPage}
-        footer={`${rows.length} requisition${rows.length === 1 ? "" : "s"} loaded`}
+        // meta.total arrives on the first page; keep it while paginating.
+        totalCount={query.data?.pages[0]?.meta.total}
       />
     </div>
   );

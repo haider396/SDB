@@ -198,7 +198,7 @@ export function QuestionManagerPage() {
         }
       >
         <section aria-label="Categories">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-tight text-neutral-500">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
             Categories
           </h2>
           <CategoryPane
@@ -209,7 +209,7 @@ export function QuestionManagerPage() {
         </section>
 
         <section aria-label="Questions in category">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-tight text-neutral-500">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
             {selectedCategory !== undefined
               ? `Questions — ${selectedCategory.label}`
               : "Questions"}
@@ -250,7 +250,7 @@ export function QuestionManagerPage() {
             aria-label="Live preview"
             className="lg:col-span-2 xl:col-span-1"
           >
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-tight text-neutral-500">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
               Live preview
             </h2>
             <PreviewPane />

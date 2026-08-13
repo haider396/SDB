@@ -13,6 +13,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import type { LucideIcon } from "lucide-react";
 import { Mail, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { Chip } from "@/components/ui/chip";
 import {
   Tooltip,
   TooltipContent,
@@ -84,13 +85,17 @@ function NavList({
                     {item.badgeCount === 1 ? "" : "s"}
                   </span>
                 ) : (
-                  <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-brand-teal px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-brand-navy">
+                  <Chip
+                    tone="brand-teal"
+                    size="sm"
+                    className="ml-auto min-w-[1.25rem] justify-center px-1.5 font-semibold tabular-nums"
+                  >
                     {item.badgeCount}
                     <span className="sr-only">
                       {" "}
                       pending action{item.badgeCount === 1 ? "" : "s"}
                     </span>
-                  </span>
+                  </Chip>
                 )
               ) : null}
             </NavLink>
@@ -253,7 +258,7 @@ export function MobileNavDrawer({
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-neutral-900/50 motion-safe:transition-opacity motion-safe:duration-fast lg:hidden" />
         <DialogPrimitive.Content
           aria-label="Navigation"
-          className="fixed inset-y-0 left-0 z-50 flex w-sidebar-expanded max-w-[85vw] flex-col bg-brand-navy text-brand-on-dark shadow-lg focus:outline-none motion-safe:transition-transform motion-safe:duration-base lg:hidden"
+          className="fixed inset-y-0 left-0 z-50 flex w-sidebar-expanded max-w-[85vw] flex-col bg-brand-navy text-brand-on-dark shadow-lg focus:outline-none motion-safe:data-[state=open]:animate-drawer-in motion-safe:data-[state=closed]:animate-drawer-out lg:hidden"
         >
           <DialogPrimitive.Title className="sr-only">
             Navigation

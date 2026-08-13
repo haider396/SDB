@@ -14,6 +14,8 @@ import { ErrorState } from "@/components/patterns/error-state";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
 import { ApiError } from "@/lib/api-client";
 import { daysSince, formatDateTime, formatRelative } from "@/lib/format";
 import { useAttentionQueue, useRefreshAttentionQueue } from "./api";
@@ -46,9 +48,10 @@ function BucketCard({ bucket }: { bucket: AttentionQueueBucket }) {
 
   if (bucket.count === 0) {
     return (
-      <section
+      <Card
+        role="region"
         aria-label={title}
-        className="flex items-center gap-3 rounded-lg bg-surface-raised px-4 py-2.5 shadow-xs"
+        className="flex items-center gap-3 px-4 py-2.5 shadow-xs"
       >
         <CheckCircle2
           aria-hidden="true"
@@ -58,26 +61,26 @@ function BucketCard({ bucket }: { bucket: AttentionQueueBucket }) {
         <p className="ml-auto text-xs text-neutral-500">
           {BUCKET_ALL_CLEAR[bucket.key]}
         </p>
-      </section>
+      </Card>
     );
   }
 
   return (
-    <section
-      aria-label={title}
-      className="rounded-lg bg-surface-raised shadow-sm"
-    >
+    <Card role="region" aria-label={title}>
       <header className="flex items-center gap-2 border-b border-neutral-100 px-4 py-3">
         <h2 className="text-lg font-semibold tracking-tight text-brand-navy-ink">
           {title}
         </h2>
-        <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-brand-blue-subtle px-2 py-0.5 text-xs font-semibold tabular-nums text-brand-blue">
+        <Chip
+          tone="brand-blue"
+          className="min-w-[1.5rem] justify-center font-semibold tabular-nums"
+        >
           {bucket.count}
           <span className="sr-only">
             {" "}
             item{bucket.count === 1 ? "" : "s"}
           </span>
-        </span>
+        </Chip>
         <span className="ml-auto inline-flex items-center gap-3">
           {bucket.count > bucket.items.length ? (
             <span className="text-xs text-neutral-500">
@@ -99,18 +102,18 @@ function BucketCard({ bucket }: { bucket: AttentionQueueBucket }) {
           <li key={`${item.entityType}-${item.entityId}`}>
             <Link
               to={queueItemHref(item)}
-              className="flex items-baseline gap-3 px-4 py-2.5 text-sm hover:bg-surface-subtle focus-visible:bg-surface-subtle"
+              className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-3 px-4 py-2.5 text-sm hover:bg-surface-subtle focus-visible:bg-surface-subtle"
             >
-              <span className="shrink-0 font-mono text-xs text-neutral-500">
+              <span className="font-mono text-xs text-neutral-500">
                 {item.reference}
               </span>
-              <span className="min-w-0 flex-1 truncate text-brand-navy-ink">
+              <span className="min-w-0 truncate text-brand-navy-ink">
                 {item.label}
               </span>
               <time
                 dateTime={item.since}
                 title={formatDateTime(item.since)}
-                className="shrink-0 whitespace-nowrap text-xs tabular-nums text-neutral-500"
+                className="whitespace-nowrap font-mono text-2xs tabular-nums text-neutral-500"
               >
                 {ageText(item.since, thresholdDays)}
               </time>
@@ -118,7 +121,7 @@ function BucketCard({ bucket }: { bucket: AttentionQueueBucket }) {
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }
 

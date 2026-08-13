@@ -103,10 +103,10 @@ export function AnswersCard({ answers }: { answers: RequisitionAnswer[] }) {
                 key={group.categoryKey}
                 aria-label={humanizeKey(group.categoryKey)}
               >
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-tight text-neutral-500">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                   {humanizeKey(group.categoryKey)}
                 </h3>
-                <dl className="divide-y divide-border-default">
+                <dl className="divide-y divide-neutral-200">
                   {group.answers.map((answer) => {
                     // The snapshot is authoritative for display (03 §1.4);
                     // the lifted `label` field is the fallback.

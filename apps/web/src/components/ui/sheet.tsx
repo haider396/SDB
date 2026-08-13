@@ -36,7 +36,7 @@ const SheetContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-surface-raised shadow-lg focus:outline-none motion-safe:transition-transform motion-safe:duration-base",
+        "fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-surface-raised shadow-lg focus:outline-none motion-safe:data-[state=open]:animate-sheet-in motion-safe:data-[state=closed]:animate-sheet-out",
         className,
       )}
       {...props}

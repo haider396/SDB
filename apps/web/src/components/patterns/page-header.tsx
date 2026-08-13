@@ -16,6 +16,11 @@ export interface PageHeaderProps {
   breadcrumbs?: Breadcrumb[];
   title: string;
   subtitle?: string;
+  /**
+   * Meta row under the subtitle: mono references, related links.
+   * Subtitles ration middots to one per line — overflow goes here.
+   */
+  meta?: ReactNode;
   /** Right-aligned action slot, usually a primary <Button>. */
   actions?: ReactNode;
 }
@@ -24,6 +29,7 @@ export function PageHeader({
   breadcrumbs,
   title,
   subtitle,
+  meta,
   actions,
 }: PageHeaderProps) {
   // The document title follows the page's H1 (UX 1.10).
@@ -62,6 +68,11 @@ export function PageHeader({
           </h1>
           {subtitle ? (
             <p className="mt-1 text-sm text-neutral-500">{subtitle}</p>
+          ) : null}
+          {meta ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-neutral-500">
+              {meta}
+            </div>
           ) : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}

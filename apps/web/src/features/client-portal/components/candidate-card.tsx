@@ -22,7 +22,6 @@ import {
   CalendarPlus,
   CheckCircle2,
   PartyPopper,
-  Sparkles,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
@@ -30,6 +29,8 @@ import type { ClientVisibleAssignment } from "@sdb/contracts";
 import { isPiiUnlockedStage } from "@sdb/contracts";
 import type { ClientVisibleStage } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
+import { Chip, type ChipProps } from "@/components/ui/chip";
+import { InsetPanel } from "@/components/ui/inset-panel";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRelative } from "@/lib/format";
 import { ENGAGEMENT_LABELS, SENIORITY_LABELS } from "@/lib/format";
@@ -62,23 +63,18 @@ const STAGE_TONES: Record<ClientVisibleStage, BadgeTone> = {
   closed_not_selected: "muted",
 };
 
-const TONE_CLASSES: Record<BadgeTone, string> = {
-  info: "text-info bg-info-subtle",
-  interview: "text-warning-text bg-warning-subtle",
-  success: "text-success-text bg-success-subtle",
-  muted: "text-neutral-600 bg-neutral-100",
+const CHIP_TONES: Record<BadgeTone, ChipProps["tone"]> = {
+  info: "info",
+  interview: "warning",
+  success: "success",
+  muted: "neutral",
 };
 
 export function ClientStageBadge({ stage }: { stage: ClientVisibleStage }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        TONE_CLASSES[STAGE_TONES[stage]],
-      )}
-    >
+    <Chip tone={CHIP_TONES[STAGE_TONES[stage]]}>
       {CLIENT_STAGE_LABELS[stage]}
-    </span>
+    </Chip>
   );
 }
 
@@ -192,7 +188,7 @@ export function CandidateCard({
     <article
       aria-label={`Candidate ${row.displayName}`}
       className={cn(
-        "flex flex-col gap-4 rounded-lg border border-border-default bg-surface-raised p-5 shadow-sm",
+        "flex flex-col gap-4 rounded-lg border border-neutral-200 bg-surface-raised p-6 shadow-xs",
         isMuted && "opacity-70",
       )}
     >
@@ -234,16 +230,16 @@ export function CandidateCard({
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <ClientStageBadge stage={row.stage} />
           {row.stage === "client_reviewing" ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text">
+            <Chip tone="success" size="sm">
               <CheckCircle2 aria-hidden="true" className="h-3 w-3" />
               Approved
-            </span>
+            </Chip>
           ) : null}
           {row.interviewRequestedAt !== null && !showInterviews && !isMuted ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-info-subtle px-2 py-0.5 text-[11px] font-medium text-info">
+            <Chip tone="info" size="sm">
               <CalendarPlus aria-hidden="true" className="h-3 w-3" />
               Interview requested {formatRelative(row.interviewRequestedAt)}
-            </span>
+            </Chip>
           ) : null}
         </div>
       </div>
@@ -252,11 +248,10 @@ export function CandidateCard({
       {chips.length > 0 ? (
         <ul aria-label="English and accent" className="flex flex-wrap gap-1.5">
           {chips.map((chip) => (
-            <li
-              key={chip}
-              className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600"
-            >
-              {chip}
+            <li key={chip}>
+              <Chip tone="neutral" size="sm">
+                {chip}
+              </Chip>
             </li>
           ))}
         </ul>
@@ -281,9 +276,8 @@ export function CandidateCard({
 
       {/* ----- SDB recommendation (highlighted) + strengths ----- */}
       {row.recruiterRecommendation !== null ? (
-        <div className="rounded-md border-l-4 border-brand-blue bg-brand-blue-subtle px-3 py-2.5">
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-tight text-brand-blue">
-            <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
+        <InsetPanel tone="brand" accent>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-blue">
             SDB recommendation
           </p>
           {/* The view row carries no presenter name — attribute to the team
@@ -296,13 +290,11 @@ export function CandidateCard({
           <p className="mt-1 text-sm leading-relaxed text-neutral-800">
             {row.recruiterRecommendation}
           </p>
-        </div>
+        </InsetPanel>
       ) : null}
       {row.strengths !== null ? (
         <div>
-          <p className="text-xs font-medium uppercase tracking-tight text-neutral-500">
-            Strengths
-          </p>
+          <p className="text-xs font-medium text-neutral-500">Strengths</p>
           <p className="mt-1 text-sm leading-relaxed text-neutral-800">
             {row.strengths}
           </p>
@@ -311,14 +303,14 @@ export function CandidateCard({
 
       {/* ----- Note from the SDB team ----- */}
       {row.clientNote !== null && row.clientNote.trim() !== "" ? (
-        <div className="rounded-md bg-surface-subtle px-3 py-2.5">
-          <p className="text-xs font-medium uppercase tracking-tight text-neutral-500">
+        <InsetPanel tone="surface">
+          <p className="text-xs font-medium text-neutral-500">
             Note from your SDB team
           </p>
           <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-800">
             {row.clientNote}
           </p>
-        </div>
+        </InsetPanel>
       ) : null}
 
       {/* ----- Files ----- */}
@@ -339,15 +331,18 @@ export function CandidateCard({
 
       {/* ----- Terminal / celebratory banners ----- */}
       {isCelebratory ? (
-        <p className="flex items-center gap-2 rounded-md bg-success-subtle px-3 py-2.5 text-sm font-medium text-success-text">
+        <InsetPanel
+          tone="success"
+          className="flex items-center gap-2 text-sm font-medium text-success-text"
+        >
           <PartyPopper aria-hidden="true" className="h-4 w-4 shrink-0" />
           {row.stage === "placed"
             ? `${row.displayName} is joining your team. Congratulations!`
             : `An offer is out to ${row.displayName} — nearly there.`}
-        </p>
+        </InsetPanel>
       ) : null}
       {row.stage === "rejected_by_client" ? (
-        <div className="rounded-md bg-surface-subtle px-3 py-2.5 text-sm text-neutral-600">
+        <InsetPanel tone="surface" className="text-sm text-neutral-600">
           <p>
             {row.rejectionReasonLabel !== null
               ? `You declined — ${row.rejectionReasonLabel}`
@@ -358,17 +353,17 @@ export function CandidateCard({
               {row.rejectionDetail}
             </p>
           ) : null}
-        </div>
+        </InsetPanel>
       ) : null}
       {row.stage === "closed_not_selected" ? (
-        <p className="rounded-md bg-surface-subtle px-3 py-2.5 text-sm text-neutral-600">
+        <InsetPanel tone="surface" className="text-sm text-neutral-600">
           This position has been filled.
-        </p>
+        </InsetPanel>
       ) : null}
 
       {/* ----- Actions ----- */}
       {row.stage === "presented" || row.stage === "client_reviewing" ? (
-        <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border-default pt-4">
+        <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-4">
           {row.stage === "presented" ? (
             // ONE primary action at presented (UX 3.1) — moving forward IS
             // the approval; the reject path is the only alternative.
@@ -399,7 +394,7 @@ export function CandidateCard({
         </div>
       ) : null}
       {showInterviews ? (
-        <div className="mt-auto flex justify-end border-t border-border-default pt-4">
+        <div className="mt-auto flex justify-end border-t border-neutral-200 pt-4">
           <Button
             variant="ghost"
             size="sm"

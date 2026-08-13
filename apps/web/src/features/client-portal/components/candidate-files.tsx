@@ -139,9 +139,7 @@ export function CandidateFiles({
   if (files.length === 0) return null;
   return (
     <div>
-      <p className="text-xs font-medium uppercase tracking-tight text-neutral-500">
-        Files
-      </p>
+      <p className="text-xs font-medium text-neutral-500">Files</p>
       <ul
         aria-label={`Files for ${candidateName}`}
         className="mt-2 space-y-3"

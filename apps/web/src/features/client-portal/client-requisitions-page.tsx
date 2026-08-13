@@ -30,13 +30,13 @@ function RequisitionCard({
 }) {
   const days = daysSince(requisition.submittedAt);
   return (
-    <Card>
-      <CardContent className="space-y-3 p-5">
+    <Card className="group relative motion-safe:transition-shadow motion-safe:duration-fast hover:shadow-md">
+      <CardContent className="space-y-3 p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <Link
               to={`/client/requisitions/${requisition.id}`}
-              className="text-base font-semibold text-brand-navy-ink hover:text-brand-blue hover:underline"
+              className="text-base font-semibold text-brand-navy-ink after:absolute after:inset-0 group-hover:text-brand-blue group-hover:underline"
             >
               {requisition.advertisedTitle ?? "Untitled role"}
             </Link>

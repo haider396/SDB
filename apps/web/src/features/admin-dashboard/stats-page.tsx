@@ -25,8 +25,10 @@ function StatTile({
 }) {
   return (
     <div className="rounded-lg bg-surface-raised p-6 shadow-sm">
-      <p className="text-sm font-medium text-neutral-500">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-brand-navy-ink">
+      <p className="text-2xs font-medium uppercase tracking-wide text-neutral-500">
+        {label}
+      </p>
+      <p className="mt-2 text-4xl font-semibold tabular-nums tracking-tight text-brand-navy-ink">
         {value}
       </p>
       <p className="mt-1 text-xs text-neutral-500">{hint}</p>

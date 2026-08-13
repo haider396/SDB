@@ -135,7 +135,7 @@ function SectionNavCard() {
               <li key={section.id}>
                 <SectionJumpLink
                   sectionId={section.id}
-                  className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-sm text-neutral-700 hover:text-brand-navy-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+                  className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-sm text-neutral-600 hover:text-brand-navy-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
                 >
                   {section.label}
                   {dirtySet.has(section.id) ? (
@@ -169,7 +169,7 @@ function UnsavedChangesBar() {
     <div
       role="region"
       aria-label="Unsaved changes"
-      className="sticky bottom-0 z-10 -mx-2 mt-6 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-t-lg border border-border-default bg-surface-raised px-4 py-2.5 shadow-lg"
+      className="sticky bottom-0 z-10 -mx-2 mt-6 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-t-lg bg-surface-raised px-4 py-2.5 shadow-lg"
     >
       <p className="text-sm font-medium text-neutral-800">
         {count} section{count === 1 ? " has" : "s have"} unsaved changes
@@ -268,9 +268,15 @@ export function CandidateDetailPage() {
         <PageHeader
           breadcrumbs={[...BREADCRUMBS, { label: fullName }]}
           title={fullName}
-          subtitle={`${candidate.reference} · via ${
-            SUBMISSION_CHANNEL_LABELS[candidate.submittedVia]
-          } · added ${formatDate(candidate.createdAt)}`}
+          subtitle={`Added ${formatDate(candidate.createdAt)}`}
+          meta={
+            <>
+              <span className="font-mono">{candidate.reference}</span>
+              <span>
+                via {SUBMISSION_CHANNEL_LABELS[candidate.submittedVia]}
+              </span>
+            </>
+          }
         />
 
         {candidate.archivedAt !== null ? (

@@ -172,7 +172,7 @@ export function StageTracker({
           </p>
         ) : targets.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-tight text-neutral-500">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Move to
             </p>
             <div className="flex flex-col gap-2">

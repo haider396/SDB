@@ -110,7 +110,7 @@ function CategoryRow({
           "min-w-0 flex-1 truncate rounded-sm px-1 py-0.5 text-left text-sm",
           isSelected
             ? "font-semibold text-brand-navy-ink"
-            : "text-neutral-700 hover:text-brand-navy-ink",
+            : "text-neutral-600 hover:text-brand-navy-ink",
         )}
       >
         {category.label}
@@ -123,7 +123,7 @@ function CategoryRow({
         type="button"
         aria-label={`Rename ${category.label}`}
         onClick={() => setIsEditing(true)}
-        className="rounded-sm p-1 text-neutral-400 hover:text-neutral-700"
+        className="rounded-sm p-1 text-neutral-400 hover:text-neutral-800"
       >
         <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
       </button>

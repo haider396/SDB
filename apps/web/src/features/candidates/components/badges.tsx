@@ -91,7 +91,7 @@ export function VisibilityChip({ visibility }: { visibility: FieldVisibility }) 
   if (visibility === "gated") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-info-subtle px-1.5 py-0.5 text-[11px] font-medium text-info"
+        className="inline-flex items-center gap-1 rounded-full bg-info-subtle px-1.5 py-0.5 text-2xs font-medium text-info"
         title="Clients see this only once an interview is scheduled"
       >
         <Lock aria-hidden="true" className="h-3 w-3" />
@@ -102,7 +102,7 @@ export function VisibilityChip({ visibility }: { visibility: FieldVisibility }) 
   if (visibility === "internal") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600"
+        className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-1.5 py-0.5 text-2xs font-medium text-neutral-600"
         title="Never shown to clients"
       >
         <EyeOff aria-hidden="true" className="h-3 w-3" />
@@ -112,7 +112,7 @@ export function VisibilityChip({ visibility }: { visibility: FieldVisibility }) 
   }
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-success-subtle px-1.5 py-0.5 text-[11px] font-medium text-success-text"
+      className="inline-flex items-center gap-1 rounded-full bg-success-subtle px-1.5 py-0.5 text-2xs font-medium text-success-text"
       title="Shown to clients from the presented stage"
     >
       <Eye aria-hidden="true" className="h-3 w-3" />

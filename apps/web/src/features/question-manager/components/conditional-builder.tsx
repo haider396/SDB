@@ -97,7 +97,7 @@ export function ConditionalBuilder({
               {activeOptions.map((option) => (
                 <label
                   key={option.id}
-                  className="flex items-center gap-1.5 text-sm text-neutral-700"
+                  className="flex items-center gap-1.5 text-sm text-neutral-800"
                 >
                   <input
                     type="checkbox"

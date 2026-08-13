@@ -70,12 +70,12 @@ export function StageColumn({
         )}
       >
         <span
-          className="rounded-full bg-neutral-100 px-1.5 text-[11px] font-medium tabular-nums text-neutral-600"
+          className="rounded-full bg-neutral-100 px-1.5 text-2xs font-medium tabular-nums text-neutral-600"
           aria-label={`${count} candidates`}
         >
           {count}
         </span>
-        <h3 className="text-xs font-semibold uppercase tracking-tight text-neutral-600 [writing-mode:vertical-rl]">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600 [writing-mode:vertical-rl]">
           {STAGE_LABELS[stage]}
         </h3>
         {/* Children stay out of the DOM — an empty column has none worth
@@ -97,11 +97,11 @@ export function StageColumn({
       )}
     >
       <header className="flex items-center gap-2 px-3 pb-1 pt-3">
-        <h3 className="text-xs font-semibold uppercase tracking-tight text-neutral-600">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">
           {STAGE_LABELS[stage]}
         </h3>
         <span
-          className="rounded-full bg-neutral-100 px-1.5 text-[11px] font-medium tabular-nums text-neutral-600"
+          className="rounded-full bg-neutral-100 px-1.5 text-2xs font-medium tabular-nums text-neutral-600"
           aria-label={`${count} candidates`}
         >
           {count}

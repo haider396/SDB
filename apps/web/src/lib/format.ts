@@ -53,6 +53,57 @@ export function formatBudget(args: {
   return budgetUnit === null ? range : `${range} / ${RATE_UNIT_LABELS[budgetUnit]}`;
 }
 
+// ---------------------------------------------------------------------------
+// Structured money parts — the "instrument" treatment (amount emphasized,
+// currency + unit as a muted suffix). The string formatters above remain for
+// non-visual uses (plain text, aria labels, exports).
+// ---------------------------------------------------------------------------
+
+export interface MoneyParts {
+  /** The emphasized tabular figure, e.g. "1,500–2,500". */
+  amount: string;
+  /** Muted suffix, e.g. "USD / month"; null when neither part exists. */
+  suffix: string | null;
+}
+
+function moneySuffix(currency: string | null, unit: RateUnit | null): string | null {
+  const parts = [
+    ...(currency !== null && currency !== "" ? [currency] : []),
+    ...(unit !== null ? [`/ ${RATE_UNIT_LABELS[unit]}`] : []),
+  ];
+  return parts.length === 0 ? null : parts.join(" ");
+}
+
+/** Structured variant of formatBudget; null when no amount exists. */
+export function budgetParts(args: {
+  budgetMin: number | null;
+  budgetMax: number | null;
+  budgetCurrency: string | null;
+  budgetUnit: RateUnit | null;
+}): MoneyParts | null {
+  const { budgetMin, budgetMax, budgetCurrency, budgetUnit } = args;
+  if (budgetMin === null && budgetMax === null) return null;
+  const figure = (value: number) => value.toLocaleString("en-US");
+  const amount =
+    budgetMin !== null && budgetMax !== null && budgetMin !== budgetMax
+      ? `${figure(budgetMin)}–${figure(budgetMax)}`
+      : figure(budgetMin ?? budgetMax ?? 0);
+  return { amount, suffix: moneySuffix(budgetCurrency, budgetUnit) };
+}
+
+/** Structured variant of formatRate; null when no amount exists. */
+export function rateParts(
+  amount: number | null,
+  unit: RateUnit | null,
+  currency: string | null,
+): MoneyParts | null {
+  if (amount === null) return null;
+  return {
+    amount: amount.toLocaleString("en-US"),
+    suffix: moneySuffix(currency, unit),
+  };
+}
+
 /** "team_size_band" → "Team size band" for snapshot/category keys. */
 export function humanizeKey(key: string): string {
   const spaced = key.replace(/[_-]+/g, " ").trim();

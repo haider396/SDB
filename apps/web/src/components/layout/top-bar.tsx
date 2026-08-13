@@ -40,11 +40,8 @@ export function TopBar({ onOpenNav }: TopBarProps) {
       ) : null}
       <div className="min-w-0 flex-1 text-sm text-neutral-500">
         {me ? (
-          <p className="truncate">
-            Signed in as{" "}
-            <span className="font-medium text-neutral-800">
-              {me.user.fullName || me.user.email}
-            </span>
+          <p className="truncate font-medium text-neutral-800">
+            {me.user.fullName || me.user.email}
           </p>
         ) : null}
       </div>

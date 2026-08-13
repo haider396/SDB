@@ -112,7 +112,7 @@ function ReasonRow({ group, max }: { group: ReasonGroup; max: number }) {
             <ul className="space-y-1">
               {otherTexts.map((entry, index) => (
                 <li key={index} className="flex gap-2 text-sm text-neutral-600">
-                  <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+                  <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-2xs font-medium text-neutral-600">
                     {ACTOR_LABELS[entry.actor]}
                   </span>
                   <span className="min-w-0">{entry.text}</span>

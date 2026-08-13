@@ -4,11 +4,12 @@
  * action (typed-name confirm, soft delete).
  */
 import { Archive } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { CandidateDetail, PoolStatus } from "@sdb/contracts";
 import { PoolStatusSchema } from "@sdb/contracts";
+import { MoneyFigure } from "@/components/patterns/money-figure";
 import { TypedConfirmDialog } from "@/components/patterns/typed-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,12 +21,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { ApiError } from "@/lib/api-client";
-import { formatDate } from "@/lib/format";
+import { formatDate, rateParts } from "@/lib/format";
 import { useArchiveCandidate, usePoolStatus, useTaxonomyOptions } from "../api";
 import {
   ACCENT_LABELS,
   countryFlag,
-  formatRate,
   LANGUAGE_LEVEL_LABELS,
   POOL_STATUS_LABELS,
 } from "../labels";
@@ -95,8 +95,8 @@ export function ProfileRailCard({ candidate }: { candidate: CandidateDetail }) {
             }}
             className={
               candidate.hasConsentToShareProfile
-                ? "inline-flex items-center gap-1 rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text hover:underline"
-                : "inline-flex items-center gap-1 rounded-full bg-danger-subtle px-2 py-0.5 text-[11px] font-medium text-danger-text hover:underline"
+                ? "inline-flex items-center gap-1 rounded-full bg-success-subtle px-2 py-0.5 text-2xs font-medium text-success-text hover:underline"
+                : "inline-flex items-center gap-1 rounded-full bg-danger-subtle px-2 py-0.5 text-2xs font-medium text-danger-text hover:underline"
             }
           >
             {candidate.hasConsentToShareProfile
@@ -126,7 +126,7 @@ export function ProfileRailCard({ candidate }: { candidate: CandidateDetail }) {
   );
 }
 
-function FactRow({ label, value }: { label: string; value: string }) {
+function FactRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
       <dt className="shrink-0 text-sm text-neutral-500">{label}</dt>
@@ -180,11 +180,15 @@ export function QuickFactsCard({ candidate }: { candidate: CandidateDetail }) {
           />
           <FactRow
             label="Expected rate"
-            value={formatRate(
-              candidate.expectedRateAmount,
-              candidate.expectedRateUnit,
-              candidate.expectedRateCurrency,
-            )}
+            value={
+              <MoneyFigure
+                parts={rateParts(
+                  candidate.expectedRateAmount,
+                  candidate.expectedRateUnit,
+                  candidate.expectedRateCurrency,
+                )}
+              />
+            }
           />
           <FactRow
             label="Available from"

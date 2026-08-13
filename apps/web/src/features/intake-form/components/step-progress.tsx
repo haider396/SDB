@@ -44,7 +44,10 @@ export function StepProgress({
                     aria-hidden="true"
                     className={cn(
                       "mx-1 h-px w-4 sm:w-6",
-                      isDone || isCurrent ? "bg-brand-blue" : "bg-border-default",
+                      // 05 §3.5: determinate progress uses --gradient-progress
+                      isDone || isCurrent
+                        ? "bg-gradient-progress"
+                        : "bg-border-default",
                     )}
                   />
                 ) : null}
@@ -64,7 +67,7 @@ export function StepProgress({
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "flex h-4 w-4 items-center justify-center rounded-full text-[0.625rem] tabular-nums",
+                      "flex h-4 w-4 items-center justify-center rounded-full text-2xs tabular-nums",
                       isCurrent && "bg-brand-blue text-brand-on-dark",
                       isDone && "bg-success-subtle text-success-text",
                       !isCurrent && !isDone && "bg-surface-subtle",

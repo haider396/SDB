@@ -145,18 +145,26 @@ export function RequisitionDetailPage() {
       <PageHeader
         breadcrumbs={[...breadcrumbs, { label: requisition.reference }]}
         title={title}
-        subtitle={`${requisition.reference} · ${taxonomyPath !== "" ? `${taxonomyPath} · ` : ""}submitted ${formatDate(requisition.submittedAt)}`}
+        subtitle={
+          taxonomyPath !== ""
+            ? `${taxonomyPath} · submitted ${formatDate(requisition.submittedAt)}`
+            : `Submitted ${formatDate(requisition.submittedAt)}`
+        }
+        meta={
+          <>
+            <span className="font-mono">{requisition.reference}</span>
+            <span>
+              Client:{" "}
+              <Link
+                to={`/admin/clients/${requisition.clientId}`}
+                className="font-medium text-brand-blue hover:underline"
+              >
+                {requisition.clientName}
+              </Link>
+            </span>
+          </>
+        }
       />
-
-      <p className="-mt-6 mb-6 text-sm text-neutral-500">
-        Client:{" "}
-        <Link
-          to={`/admin/clients/${requisition.clientId}`}
-          className="font-medium text-brand-blue hover:underline"
-        >
-          {requisition.clientName}
-        </Link>
-      </p>
 
       <div
         role="tablist"

@@ -8,6 +8,8 @@
  * NEVER rendered — no empty labels, no blank rows.
  */
 import { Linkedin, Lock, Mail, MessageCircle, Phone } from "lucide-react";
+import { Chip } from "@/components/ui/chip";
+import { InsetPanel } from "@/components/ui/inset-panel";
 import { GATED_PII_FIELDS } from "@sdb/contracts";
 import type { ClientVisibleAssignment } from "@sdb/contracts";
 import { GATED_FIELD_LABELS } from "../labels";
@@ -20,7 +22,7 @@ export function hasUnlockedPii(row: ClientVisibleAssignment): boolean {
 export function ContactPanel({ row }: { row: ClientVisibleAssignment }) {
   if (!hasUnlockedPii(row)) {
     return (
-      <div className="rounded-md bg-surface-subtle px-3 py-2.5">
+      <InsetPanel tone="surface">
         <p className="flex items-center gap-1.5 text-xs font-medium text-neutral-600">
           <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
           Full contact details unlock once an interview is scheduled
@@ -31,14 +33,14 @@ export function ContactPanel({ row }: { row: ClientVisibleAssignment }) {
         >
           {GATED_PII_FIELDS.map((field) => (
             <li key={field}>
-              <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+              <Chip tone="neutral" size="sm">
                 <Lock aria-hidden="true" className="h-3 w-3" />
                 {GATED_FIELD_LABELS[field]}
-              </span>
+              </Chip>
             </li>
           ))}
         </ul>
-      </div>
+      </InsetPanel>
     );
   }
 
@@ -50,10 +52,8 @@ export function ContactPanel({ row }: { row: ClientVisibleAssignment }) {
       : null;
 
   return (
-    <div className="rounded-md bg-success-subtle px-3 py-2.5">
-      <p className="text-xs font-semibold uppercase tracking-tight text-success-text">
-        Contact details
-      </p>
+    <InsetPanel tone="success">
+      <p className="text-xs font-medium text-neutral-500">Contact details</p>
       <dl className="mt-2 space-y-1.5 text-sm">
         {fullName !== null ? (
           <div className="flex items-baseline gap-2">
@@ -127,6 +127,6 @@ export function ContactPanel({ row }: { row: ClientVisibleAssignment }) {
           </div>
         ) : null}
       </dl>
-    </div>
+    </InsetPanel>
   );
 }

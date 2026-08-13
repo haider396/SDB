@@ -66,6 +66,7 @@ const config: Config = {
       mono: "var(--font-mono)",
     },
     fontSize: {
+      "2xs": ["var(--text-2xs)", { lineHeight: "var(--leading-normal)" }],
       xs: ["var(--text-xs)", { lineHeight: "var(--leading-normal)" }],
       sm: ["var(--text-sm)", { lineHeight: "var(--leading-normal)" }],
       base: ["var(--text-base)", { lineHeight: "var(--leading-normal)" }],
@@ -83,6 +84,7 @@ const config: Config = {
     letterSpacing: {
       tight: "var(--tracking-tight)",
       normal: "0",
+      wide: "var(--tracking-wide)",
     },
     borderRadius: {
       none: "0",
@@ -126,6 +128,51 @@ const config: Config = {
       backgroundImage: {
         "gradient-brand": "var(--gradient-brand)",
         "gradient-progress": "var(--gradient-progress)",
+      },
+      // Overlay motion (05 §3: ≤200ms, opacity/transform only). The global
+      // prefers-reduced-motion kill switch in globals.css zeroes
+      // animation-duration, so these respect reduced motion.
+      keyframes: {
+        // The dialog is centred with translate(-50%,-50%); the keyframes
+        // carry that offset so the panel does not jump while animating.
+        dialogIn: {
+          from: {
+            opacity: "0",
+            transform: "translate(-50%, calc(-50% + 4px))",
+          },
+          to: { opacity: "1", transform: "translate(-50%, -50%)" },
+        },
+        dialogOut: {
+          from: { opacity: "1", transform: "translate(-50%, -50%)" },
+          to: {
+            opacity: "0",
+            transform: "translate(-50%, calc(-50% + 4px))",
+          },
+        },
+        sheetIn: {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        sheetOut: {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(100%)" },
+        },
+        drawerIn: {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        drawerOut: {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(-100%)" },
+        },
+      },
+      animation: {
+        "dialog-in": "dialogIn var(--duration-base) var(--ease-out)",
+        "dialog-out": "dialogOut var(--duration-base) var(--ease-out)",
+        "sheet-in": "sheetIn var(--duration-base) var(--ease-out)",
+        "sheet-out": "sheetOut var(--duration-base) var(--ease-out)",
+        "drawer-in": "drawerIn var(--duration-base) var(--ease-out)",
+        "drawer-out": "drawerOut var(--duration-base) var(--ease-out)",
       },
       maxWidth: {
         content: "1440px",

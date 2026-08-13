@@ -27,12 +27,13 @@ import {
   DataTable,
   type DataTableColumnMeta,
 } from "@/components/patterns/data-table";
+import { MoneyFigure } from "@/components/patterns/money-figure";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { SENIORITY_LABELS } from "@/lib/format";
+import { rateParts, SENIORITY_LABELS } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import {
   CANDIDATE_PAGE_SIZE,
@@ -44,7 +45,6 @@ import {
   ACCENT_LABELS,
   COUNTRY_NAMES,
   countryFlag,
-  formatRate,
   LANGUAGE_LEVEL_LABELS,
   POOL_STATUS_LABELS,
   VETTING_STATUS_LABELS,
@@ -148,14 +148,14 @@ function buildColumns(
       cell: ({ row }) => (
         <span className="inline-flex items-center gap-1">
           {row.original.englishSpokenLevel !== null ? (
-            <span className="rounded-full bg-info-subtle px-2 py-0.5 text-[11px] font-medium text-info">
+            <span className="rounded-full bg-info-subtle px-2 py-0.5 text-2xs font-medium text-info">
               {LANGUAGE_LEVEL_LABELS[row.original.englishSpokenLevel]}
             </span>
           ) : (
             "—"
           )}
           {row.original.accentStrength !== null ? (
-            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-2xs font-medium text-neutral-600">
               {ACCENT_LABELS[row.original.accentStrength]}
             </span>
           ) : null}
@@ -167,12 +167,15 @@ function buildColumns(
       accessorFn: (row) => row.expectedRateAmount ?? null,
       header: "Expected rate",
       meta: meta({ numeric: true }),
-      cell: ({ row }) =>
-        formatRate(
-          row.original.expectedRateAmount,
-          row.original.expectedRateUnit,
-          row.original.expectedRateCurrency,
-        ),
+      cell: ({ row }) => (
+        <MoneyFigure
+          parts={rateParts(
+            row.original.expectedRateAmount,
+            row.original.expectedRateUnit,
+            row.original.expectedRateCurrency,
+          )}
+        />
+      ),
     },
     {
       id: "poolStatus",
@@ -340,8 +343,8 @@ export function CandidatesListPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-end gap-4">
-        <div className="w-64 space-y-1.5">
+      <div className="mb-4 grid items-end gap-3 [grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))]">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-search">Search</Label>
           <Input
             id="candidates-search"
@@ -354,7 +357,7 @@ export function CandidatesListPage() {
             }}
           />
         </div>
-        <div className="w-56 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-role-category">Role category</Label>
           <NativeSelect
             id="candidates-role-category"
@@ -369,7 +372,7 @@ export function CandidatesListPage() {
             ))}
           </NativeSelect>
         </div>
-        <div className="w-44 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-country">Country</Label>
           <Input
             id="candidates-country"
@@ -388,7 +391,7 @@ export function CandidatesListPage() {
             ))}
           </datalist>
         </div>
-        <div className="w-44 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-english">English (spoken)</Label>
           <NativeSelect
             id="candidates-english"
@@ -405,7 +408,7 @@ export function CandidatesListPage() {
             ))}
           </NativeSelect>
         </div>
-        <div className="w-44 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-accent">Max accent</Label>
           <NativeSelect
             id="candidates-accent"
@@ -422,7 +425,7 @@ export function CandidatesListPage() {
             ))}
           </NativeSelect>
         </div>
-        <div className="w-40 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-pool">Pool status</Label>
           <NativeSelect
             id="candidates-pool"
@@ -437,7 +440,7 @@ export function CandidatesListPage() {
             ))}
           </NativeSelect>
         </div>
-        <div className="w-40 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-vetting">Vetting</Label>
           <NativeSelect
             id="candidates-vetting"
@@ -480,7 +483,7 @@ export function CandidatesListPage() {
             </p>
           ) : null}
         </div>
-        <div className="w-64 space-y-1.5">
+        <div className="space-y-1.5">
           <Label htmlFor="candidates-tools">Tools (must have all)</Label>
           <MultiSelectCombobox
             inputId="candidates-tools"
@@ -551,7 +554,8 @@ export function CandidatesListPage() {
         onLoadMore={() => void query.fetchNextPage()}
         hasMore={query.hasNextPage && lastPageFull}
         isLoadingMore={query.isFetchingNextPage}
-        footer={`${rows.length} candidate${rows.length === 1 ? "" : "s"} loaded`}
+        // meta.total arrives on the first page; keep it while paginating.
+        totalCount={query.data?.pages[0]?.meta.total}
       />
     </div>
   );

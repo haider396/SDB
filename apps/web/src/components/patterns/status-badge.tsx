@@ -8,7 +8,7 @@ import type {
   ClientStatus,
   RequisitionStatus,
 } from "@sdb/contracts";
-import { cn } from "@/lib/utils";
+import { Chip, type ChipProps } from "@/components/ui/chip";
 
 type StageGroup = "internal" | "presented" | "interview" | "offer" | "terminal";
 
@@ -28,12 +28,12 @@ const STAGE_META: Record<AssignmentStage, { label: string; group: StageGroup }> 
   closed_not_selected: { label: "Not selected", group: "terminal" },
 };
 
-const GROUP_CLASSES: Record<StageGroup, string> = {
-  internal: "text-neutral-600 bg-neutral-100",
-  presented: "text-info bg-info-subtle",
-  interview: "text-warning-text bg-warning-subtle",
-  offer: "text-success-text bg-success-subtle",
-  terminal: "text-danger-text bg-danger-subtle",
+const GROUP_TONES: Record<StageGroup, ChipProps["tone"]> = {
+  internal: "neutral",
+  presented: "info",
+  interview: "warning",
+  offer: "success",
+  terminal: "danger",
 };
 
 export interface StatusBadgeProps {
@@ -44,15 +44,9 @@ export interface StatusBadgeProps {
 export function StatusBadge({ stage, className }: StatusBadgeProps) {
   const meta = STAGE_META[stage];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        GROUP_CLASSES[meta.group],
-        className,
-      )}
-    >
+    <Chip tone={GROUP_TONES[meta.group]} className={className}>
       {meta.label}
-    </span>
+    </Chip>
   );
 }
 
@@ -88,15 +82,9 @@ export function RequisitionStatusBadge({
 }) {
   const meta = REQUISITION_STATUS_META[status];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        GROUP_CLASSES[meta.group],
-        className,
-      )}
-    >
+    <Chip tone={GROUP_TONES[meta.group]} className={className}>
       {meta.label}
-    </span>
+    </Chip>
   );
 }
 
@@ -123,14 +111,8 @@ export function ClientStatusBadge({
 }) {
   const meta = CLIENT_STATUS_META[status];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        GROUP_CLASSES[meta.group],
-        className,
-      )}
-    >
+    <Chip tone={GROUP_TONES[meta.group]} className={className}>
       {meta.label}
-    </span>
+    </Chip>
   );
 }

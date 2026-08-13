@@ -60,7 +60,9 @@ describe("commercial field gating", () => {
     expect(
       await screen.findByRole("columnheader", { name: /budget/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("USD 1,500–USD 2,500 / month")).toBeInTheDocument();
+    // MoneyFigure: emphasized amount + muted currency/unit suffix.
+    expect(screen.getByText("1,500–2,500")).toBeInTheDocument();
+    expect(screen.getByText("USD / month")).toBeInTheDocument();
   });
 
   it("omits the budget fieldset on the detail without crashing", async () => {

@@ -41,13 +41,13 @@ function RequisitionSummaryCard({
 }) {
   const days = daysSince(requisition.submittedAt);
   return (
-    <Card>
-      <CardContent className="space-y-3 p-5">
+    <Card className="group relative motion-safe:transition-shadow motion-safe:duration-fast hover:shadow-md">
+      <CardContent className="space-y-3 p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <Link
               to={`/client/requisitions/${requisition.id}`}
-              className="text-base font-semibold text-brand-navy-ink hover:text-brand-blue hover:underline"
+              className="text-base font-semibold text-brand-navy-ink after:absolute after:inset-0 group-hover:text-brand-blue group-hover:underline"
             >
               {requisition.advertisedTitle ?? "Untitled role"}
             </Link>
@@ -195,20 +195,22 @@ export function ClientDashboardPage() {
             <ul className="space-y-3">
               {principalApprovals.map((item) => (
                 <li key={item.requisitionId}>
-                  <Card className="border border-warning">
-                    <CardContent className="flex flex-wrap items-center gap-3 p-4">
+                  <Card className="border-l-2 border-warning">
+                    <CardContent className="grid grid-cols-[auto_6.5rem_1fr_auto] items-center gap-3 p-4">
                       <ShieldCheck
                         aria-hidden="true"
                         className="h-5 w-5 shrink-0 text-warning-text"
                       />
-                      <div className="min-w-0 flex-1">
+                      <span className="font-mono text-xs text-neutral-500">
+                        {item.reference}
+                      </span>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-brand-navy-ink">
                           Brief awaiting your approval
                         </p>
                         <p className="truncate text-xs text-neutral-500">
-                          {item.advertisedTitle ?? "Untitled role"} ·{" "}
-                          <span className="font-mono">{item.reference}</span> ·
-                          waiting {formatRelative(item.since).replace(" ago", "")}
+                          {item.advertisedTitle ?? "Untitled role"} · waiting{" "}
+                          {formatRelative(item.since).replace(" ago", "")}
                         </p>
                       </div>
                       <Button asChild size="sm">
@@ -223,24 +225,24 @@ export function ClientDashboardPage() {
               ))}
               {candidatesAwaitingReview.map((item) => (
                 <li key={item.assignmentId}>
-                  <Card className="border border-info">
-                    <CardContent className="flex flex-wrap items-center gap-3 p-4">
+                  <Card className="border-l-2 border-info">
+                    <CardContent className="grid grid-cols-[auto_6.5rem_1fr_auto] items-center gap-3 p-4">
                       <UserSearch
                         aria-hidden="true"
                         className="h-5 w-5 shrink-0 text-info"
                       />
-                      <div className="min-w-0 flex-1">
+                      <span className="font-mono text-xs text-neutral-500">
+                        {item.requisitionReference}
+                      </span>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-brand-navy-ink">
                           {item.displayName} is ready for your review
                         </p>
-                        <p className="truncate text-xs text-neutral-500">
-                          <span className="font-mono">
-                            {item.requisitionReference}
-                          </span>
-                          {item.presentedAt !== null
-                            ? ` · presented ${formatRelative(item.presentedAt)}`
-                            : ""}
-                        </p>
+                        {item.presentedAt !== null ? (
+                          <p className="truncate text-xs text-neutral-500">
+                            Presented {formatRelative(item.presentedAt)}
+                          </p>
+                        ) : null}
                       </div>
                       <Button asChild size="sm">
                         <Link
@@ -327,7 +329,7 @@ export function ClientDashboardPage() {
             </p>
           </div>
           <Card>
-            <CardContent className="p-5">
+            <CardContent className="p-6">
               <RecentActivity events={dashboard.recentEvents} />
             </CardContent>
           </Card>

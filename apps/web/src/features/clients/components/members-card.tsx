@@ -65,16 +65,16 @@ export function MembersCard({ client }: { client: Client }) {
             <table className="w-full border-collapse text-sm" aria-label="Members">
               <thead>
                 <tr className="border-b border-border-default">
-                  <th scope="col" className="h-10 px-3 text-left text-xs font-semibold uppercase tracking-tight text-neutral-500">
+                  <th scope="col" className="h-10 px-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
                     Name
                   </th>
-                  <th scope="col" className="h-10 px-3 text-left text-xs font-semibold uppercase tracking-tight text-neutral-500">
+                  <th scope="col" className="h-10 px-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
                     Role
                   </th>
-                  <th scope="col" className="h-10 px-3 text-left text-xs font-semibold uppercase tracking-tight text-neutral-500">
+                  <th scope="col" className="h-10 px-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
                     Status
                   </th>
-                  <th scope="col" className="h-10 px-3 text-right text-xs font-semibold uppercase tracking-tight text-neutral-500">
+                  <th scope="col" className="h-10 px-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500">
                     Actions
                   </th>
                 </tr>
@@ -83,7 +83,7 @@ export function MembersCard({ client }: { client: Client }) {
                 {members.map((member) => (
                   <tr
                     key={member.id}
-                    className="border-b border-border-default last:border-b-0"
+                    className="border-b border-neutral-200 last:border-b-0"
                   >
                     <td className="h-10 px-3">
                       <div className="flex flex-col py-1">

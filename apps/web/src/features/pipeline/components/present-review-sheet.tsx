@@ -358,11 +358,11 @@ export function PresentReviewSheet({
                       </p>
                     </div>
                     {!row.candidate.hasConsentToShareProfile ? (
-                      <span className="ml-auto shrink-0 rounded-full bg-danger-subtle px-2 py-0.5 text-[11px] font-medium text-danger-text">
+                      <span className="ml-auto shrink-0 rounded-full bg-danger-subtle px-2 py-0.5 text-2xs font-medium text-danger-text">
                         Consent missing
                       </span>
                     ) : (
-                      <span className="ml-auto shrink-0 rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success-text">
+                      <span className="ml-auto shrink-0 rounded-full bg-success-subtle px-2 py-0.5 text-2xs font-medium text-success-text">
                         Consent on file
                       </span>
                     )}
@@ -396,7 +396,7 @@ export function PresentReviewSheet({
                     >
                       {GATED_PII_FIELDS.map((field) => (
                         <li key={field}>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-2xs font-medium text-neutral-600">
                             <Lock aria-hidden="true" className="h-3 w-3" />
                             <span className="line-through">
                               {GATED_FIELD_LABELS[field]}

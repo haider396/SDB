@@ -280,7 +280,7 @@ export function ValidationRulesEditor({
                     return (
                       <label
                         key={unit}
-                        className="flex items-center gap-1.5 text-sm text-neutral-700"
+                        className="flex items-center gap-1.5 text-sm text-neutral-800"
                       >
                         <input
                           type="checkbox"
@@ -317,7 +317,7 @@ export function ValidationRulesEditor({
                     return (
                       <label
                         key={mimeType}
-                        className="flex items-center gap-1.5 text-sm text-neutral-700"
+                        className="flex items-center gap-1.5 text-sm text-neutral-800"
                       >
                         <input
                           type="checkbox"

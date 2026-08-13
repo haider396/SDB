@@ -80,10 +80,12 @@ export function LoginPage() {
         alt="Business Done Better"
         className="mb-8 h-12 w-auto"
       />
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md overflow-hidden">
+        {/* Brand moment: 4px gradient strip, rounded with the card. */}
+        <div aria-hidden="true" className="h-1 bg-gradient-brand" />
         <CardHeader>
           <CardTitle>
-            <h1 className="text-2xl font-semibold tracking-tight text-brand-navy-ink">
+            <h1 className="text-3xl font-semibold tracking-tight text-brand-navy-ink">
               Sign in
             </h1>
           </CardTitle>

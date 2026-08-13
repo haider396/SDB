@@ -5,6 +5,7 @@
  * never rendered.
  */
 import type { ClientDashboardRequisition } from "@sdb/contracts";
+import { Chip } from "@/components/ui/chip";
 import { daysSince } from "@/lib/format";
 import { CLIENT_STAGE_ORDER, CLIENT_STAGE_LABELS } from "../labels";
 
@@ -53,12 +54,11 @@ export function StageCountStrip({
   return (
     <ul aria-label="Candidates by stage" className="flex flex-wrap gap-1.5">
       {entries.map(({ stage, count }) => (
-        <li
-          key={stage}
-          className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-medium text-neutral-600"
-        >
-          <span className="tabular-nums text-brand-navy-ink">{count}</span>
-          {CLIENT_STAGE_LABELS[stage]}
+        <li key={stage}>
+          <Chip tone="surface" size="sm">
+            <span className="tabular-nums text-brand-navy-ink">{count}</span>
+            {CLIENT_STAGE_LABELS[stage]}
+          </Chip>
         </li>
       ))}
     </ul>

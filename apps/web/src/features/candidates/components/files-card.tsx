@@ -217,7 +217,7 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
               className="h-1.5 w-full overflow-hidden rounded-full bg-surface-subtle"
             >
               <div
-                className="h-full rounded-full bg-brand-blue transition-all duration-fast"
+                className="h-full rounded-full bg-gradient-progress transition-all duration-fast"
                 style={{ width: `${percent}%` }}
               />
             </div>
@@ -290,16 +290,16 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
                   </Button>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 pl-6">
-                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-2xs font-medium text-neutral-600">
                     {FILE_TYPE_LABELS[file.fileType]}
                   </span>
                   {candidate.cvPrimaryFileId === file.id ? (
-                    <span className="rounded-full bg-brand-blue-subtle px-2 py-0.5 text-[11px] font-medium text-brand-blue">
+                    <span className="rounded-full bg-brand-blue-subtle px-2 py-0.5 text-2xs font-medium text-brand-blue">
                       Primary CV
                     </span>
                   ) : null}
                   {file.virusScanStatus === "pending" ? (
-                    <span className="rounded-full bg-warning-subtle px-2 py-0.5 text-[11px] font-medium text-warning-text">
+                    <span className="rounded-full bg-warning-subtle px-2 py-0.5 text-2xs font-medium text-warning-text">
                       Pending
                     </span>
                   ) : null}

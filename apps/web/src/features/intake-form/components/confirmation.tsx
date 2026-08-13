@@ -47,7 +47,7 @@ export function Confirmation({
             className="h-6 w-6 text-success-text"
           />
         </div>
-        <CardTitle>Request received</CardTitle>
+        <CardTitle className="text-3xl">Request received</CardTitle>
         <CardDescription>
           Thank you — your hiring request has been submitted. Our team reviews
           new requests within 2 business days.

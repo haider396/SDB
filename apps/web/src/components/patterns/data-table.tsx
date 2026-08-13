@@ -20,7 +20,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { EmptyState, type EmptyStateProps } from "@/components/patterns/empty-state";
 import { ErrorState } from "@/components/patterns/error-state";
@@ -56,8 +56,12 @@ export interface DataTableProps<TData> {
   initialColumnVisibility?: VisibilityState;
   /** Skeleton row count matching the expected final layout (05 §4.3). */
   skeletonRows?: number;
-  /** Optional caption/footer line under the table (e.g. result counts). */
-  footer?: ReactNode;
+  /**
+   * Server-reported total (meta.total, sent on first pages). When present
+   * the header count line reads "N of M"; callers keep the first page's
+   * total while paginating.
+   */
+  totalCount?: number;
 }
 
 export function DataTable<TData>({
@@ -75,7 +79,7 @@ export function DataTable<TData>({
   isLoadingMore = false,
   initialColumnVisibility,
   skeletonRows = 8,
-  footer,
+  totalCount,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -124,6 +128,13 @@ export function DataTable<TData>({
 
   return (
     <div>
+      <div className="mb-2 flex items-baseline justify-end">
+        <p className="text-sm tabular-nums text-neutral-500">
+          {totalCount !== undefined
+            ? `${data.length} of ${totalCount}`
+            : `${data.length} loaded`}
+        </p>
+      </div>
       <div className="overflow-x-auto rounded-lg bg-surface-raised shadow-sm">
         <table className="w-full border-collapse text-sm" aria-label={label}>
           <thead>
@@ -149,7 +160,7 @@ export function DataTable<TData>({
                               : undefined
                       }
                       className={cn(
-                        "h-10 whitespace-nowrap px-4 text-left text-xs font-semibold uppercase tracking-tight text-neutral-500",
+                        "h-10 whitespace-nowrap px-4 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500",
                         meta?.numeric && "text-right",
                         meta?.className,
                       )}
@@ -202,7 +213,7 @@ export function DataTable<TData>({
               <tr
                 key={row.id}
                 className={cn(
-                  "border-b border-border-default last:border-b-0",
+                  "border-b border-neutral-200 last:border-b-0",
                   getRowHref &&
                     "cursor-pointer transition-colors duration-fast hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
                 )}
@@ -236,9 +247,6 @@ export function DataTable<TData>({
           </tbody>
         </table>
       </div>
-      {footer !== undefined ? (
-        <div className="mt-2 text-xs text-neutral-500">{footer}</div>
-      ) : null}
       {onLoadMore && hasMore ? (
         <div className="mt-4 flex justify-center">
           <Button

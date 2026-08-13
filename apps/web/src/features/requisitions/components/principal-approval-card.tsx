@@ -83,7 +83,7 @@ export function PrincipalApprovalCard({
         {requisition.status === "changes_requested" &&
         requisition.principalChangeRequest !== null ? (
           <div className="rounded-md bg-warning-subtle px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-tight text-warning-text">
+            <p className="text-xs font-semibold uppercase tracking-wide text-warning-text">
               Changes requested
             </p>
             <p className="mt-1 whitespace-pre-wrap text-sm text-warning-text">
