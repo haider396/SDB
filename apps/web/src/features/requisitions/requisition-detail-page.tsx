@@ -155,6 +155,9 @@ export function RequisitionDetailPage() {
             <span className="font-mono">{requisition.reference}</span>
             <span>
               Client:{" "}
+              {/* TODO(api follow-up): RequisitionDetail carries no client
+                  publicId, so this link still shows the client's UUID (the
+                  API resolves it fine). Switch once the payload adds it. */}
               <Link
                 to={`/admin/clients/${requisition.clientId}`}
                 className="font-medium text-brand-blue hover:underline"

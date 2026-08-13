@@ -99,7 +99,7 @@ export function AssignmentCard({
     {
       key: "view",
       label: "View candidate",
-      onSelect: () => navigate(`/admin/candidates/${row.candidateId}`),
+      onSelect: () => navigate(`/admin/candidates/${row.candidate.publicId}`),
     },
     {
       key: "history",
@@ -245,7 +245,7 @@ export function AssignmentCard({
           {consentMissing ? (
             // Links to the candidate page, where consent is captured.
             <Link
-              to={`/admin/candidates/${row.candidateId}`}
+              to={`/admin/candidates/${row.candidate.publicId}`}
               className="rounded-sm text-warning-text hover:text-warning-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
               title="Consent to share profile is missing — capture it on the candidate page"
             >

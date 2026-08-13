@@ -35,7 +35,7 @@ function RequisitionCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <Link
-              to={`/client/requisitions/${requisition.id}`}
+              to={`/client/requisitions/${requisition.publicId}`}
               className="text-base font-semibold text-brand-navy-ink after:absolute after:inset-0 group-hover:text-brand-blue group-hover:underline"
             >
               {requisition.advertisedTitle ?? "Untitled role"}

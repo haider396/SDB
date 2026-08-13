@@ -89,9 +89,16 @@ export function useRequisitionEvents(id: string) {
 
 function useInvalidateRequisition() {
   const queryClient = useQueryClient();
-  return (id: string) => {
-    void queryClient.invalidateQueries({ queryKey: requisitionKeys.detail(id) });
-    void queryClient.invalidateQueries({ queryKey: requisitionKeys.events(id) });
+  return (_id: string) => {
+    // Mutations pass the requisition's UUID, but the detail page keys its
+    // queries by the route param — which may be the short public id — so
+    // invalidate the detail/events ROOTS rather than miss one form.
+    void queryClient.invalidateQueries({
+      queryKey: [...requisitionKeys.root, "detail"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: [...requisitionKeys.root, "events"],
+    });
     void queryClient.invalidateQueries({ queryKey: ["requisitions", "list"] });
   };
 }

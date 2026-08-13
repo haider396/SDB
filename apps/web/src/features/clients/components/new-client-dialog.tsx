@@ -68,7 +68,7 @@ export function NewClientDialog({
       const created = await createClient.mutateAsync(body);
       form.reset();
       onClose();
-      navigate(`/admin/clients/${created.id}`);
+      navigate(`/admin/clients/${created.publicId}`);
     } catch (cause) {
       form.setError("root", {
         message:

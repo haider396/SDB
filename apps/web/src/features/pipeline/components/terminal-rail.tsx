@@ -81,7 +81,7 @@ export function TerminalRail({ rows }: TerminalRailProps) {
                         className="rounded-md bg-surface-raised px-2 py-1.5 shadow-xs"
                       >
                         <Link
-                          to={`/admin/candidates/${row.candidateId}`}
+                          to={`/admin/candidates/${row.candidate.publicId}`}
                           className="block truncate text-sm font-medium text-brand-navy-ink hover:underline"
                         >
                           {row.candidate.displayName}

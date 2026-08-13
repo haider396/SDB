@@ -216,7 +216,8 @@ export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const candidateId = id ?? "";
   const query = useCandidate(candidateId);
-  const eventsQuery = useCandidateEvents(candidateId);
+  // The route param may be a public id; /events needs the real UUID.
+  const eventsQuery = useCandidateEvents(query.data?.id);
 
   if (query.isPending) {
     return (

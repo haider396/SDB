@@ -56,11 +56,19 @@ export const BUCKET_ALL_CLEAR: Record<AttentionQueueBucketKey, string> = {
  * one reference; its pipeline tab is one click away.
  */
 export function queueItemHref(
-  item: Pick<AttentionQueueItem, "entityType" | "entityId" | "reference">,
+  item: Pick<
+    AttentionQueueItem,
+    "entityType" | "entityId" | "reference" | "requisitionPublicId"
+  >,
 ): string {
   switch (item.entityType) {
     case "requisition":
-      return `/admin/requisitions/${item.entityId}`;
+      // Short public id when the API provides it; the UUID still works as a
+      // route param (the API accepts both), it is just longer in the URL.
+      return `/admin/requisitions/${item.requisitionPublicId ?? item.entityId}`;
+    // TODO(api follow-up): queue items carry no client/candidate public id,
+    // so these two links still show the UUID. Once the API adds a public-id
+    // field for client/candidate items, switch to it here.
     case "client":
       return `/admin/clients/${item.entityId}`;
     case "candidate":

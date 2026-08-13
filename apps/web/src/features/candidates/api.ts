@@ -114,9 +114,16 @@ export function useCandidate(id: string) {
  * Audit trail for one candidate via the global event log
  * (04 §12 GET /events?entityType=candidate&entityId=…, 06 §7).
  */
-export function useCandidateEvents(id: string) {
+/**
+ * `id` must be the candidate's UUID (the `/events` filter validates
+ * `entityId` as a uuid — it does NOT resolve public ids, unlike the
+ * single-entity routes). Pass the loaded detail's `id`, never the route
+ * param, and leave it undefined until the detail has loaded.
+ */
+export function useCandidateEvents(id: string | undefined) {
   return useQuery<EntityEvent[]>({
-    queryKey: candidateKeys.events(id),
+    queryKey: candidateKeys.events(id ?? ""),
+    enabled: id !== undefined,
     queryFn: async () => {
       const { data } = await apiFetchCollection<EntityEvent>("/events", {
         query: { entityType: "candidate", entityId: id, limit: 50 },
@@ -128,8 +135,14 @@ export function useCandidateEvents(id: string) {
 
 function useInvalidateCandidate() {
   const queryClient = useQueryClient();
-  return (id: string) => {
-    void queryClient.invalidateQueries({ queryKey: candidateKeys.detail(id) });
+  return (_id: string) => {
+    // Mutations are keyed by the candidate's UUID, but the detail page keys
+    // its query by the route param — which may be the short public id — so
+    // the same entity can live under either key. Invalidate the detail ROOT
+    // rather than miss one of the two forms.
+    void queryClient.invalidateQueries({
+      queryKey: [...candidateKeys.root, "detail"],
+    });
     void queryClient.invalidateQueries({ queryKey: ["candidates", "list"] });
   };
 }
@@ -308,7 +321,11 @@ export function useInvalidateFiles() {
   const queryClient = useQueryClient();
   return (id: string) => {
     void queryClient.invalidateQueries({ queryKey: candidateKeys.files(id) });
-    void queryClient.invalidateQueries({ queryKey: candidateKeys.detail(id) });
+    // Detail may be cached under the UUID or the public id (route param) —
+    // invalidate the root so both forms refresh (photo, cvPrimaryFileId).
+    void queryClient.invalidateQueries({
+      queryKey: [...candidateKeys.root, "detail"],
+    });
   };
 }
 

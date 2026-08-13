@@ -98,7 +98,8 @@ export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const clientId = id ?? "";
   const query = useClient(clientId);
-  const eventsQuery = useClientEvents(clientId);
+  // The route param may be a public id; /events needs the real UUID.
+  const eventsQuery = useClientEvents(query.data?.id);
   const revokeAccess = useRevokeAccess();
 
   const [isEditOpen, setIsEditOpen] = useState(false);

@@ -298,7 +298,7 @@ export function RequisitionsListPage() {
             ? "No requisitions match these filters. Clear them to see the full list."
             : "Requisitions appear here when a prospect submits the intake form.",
         }}
-        getRowHref={(requisition) => `/admin/requisitions/${requisition.id}`}
+        getRowHref={(requisition) => `/admin/requisitions/${requisition.publicId}`}
         pagination={{
           page: pager.page,
           pageSize: pager.pageSize,

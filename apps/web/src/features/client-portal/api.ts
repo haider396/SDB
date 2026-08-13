@@ -124,8 +124,11 @@ function useInvalidateAfterDecision(requisitionId: string) {
     void queryClient.invalidateQueries({
       queryKey: clientPortalKeys.assignments(requisitionId),
     });
+    // The page keys the requisition detail by the route param (possibly the
+    // public id) while decisions carry the UUID — invalidate the detail
+    // ROOT so both forms refresh.
     void queryClient.invalidateQueries({
-      queryKey: requisitionKeys.detail(requisitionId),
+      queryKey: [...requisitionKeys.root, "detail"],
     });
     void queryClient.invalidateQueries({
       queryKey: clientPortalKeys.dashboard,
@@ -254,8 +257,13 @@ export function useRequestInterview(requisitionId: string) {
 
 function useInvalidatePrincipal() {
   const queryClient = useQueryClient();
-  return (id: string) => {
-    void queryClient.invalidateQueries({ queryKey: requisitionKeys.detail(id) });
+  return (_id: string) => {
+    // The approval panel mutates with the requisition's UUID while the page
+    // keys its detail query by the route param (possibly the public id) —
+    // invalidate the detail ROOT so both forms refresh.
+    void queryClient.invalidateQueries({
+      queryKey: [...requisitionKeys.root, "detail"],
+    });
     void queryClient.invalidateQueries({
       queryKey: clientPortalKeys.dashboard,
     });

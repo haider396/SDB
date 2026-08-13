@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   installApiMock,
   makeCandidate,
+  makeDetail,
   makeState,
   renderCandidates,
   type RecordedRequest,
@@ -153,5 +154,36 @@ describe("candidates list", () => {
     expect(incomplete.className).toContain("bg-warning-subtle");
     const complete = screen.getByText("Complete");
     expect(complete.className).not.toContain("bg-warning-subtle");
+  });
+
+  it("row activation navigates to the candidate's short public-id URL, never the UUID", async () => {
+    const user = userEvent.setup();
+    const candidate = makeCandidate({ firstName: "Maria", lastName: "Santos" });
+    const state = makeState({
+      candidates: [candidate],
+      detailsById: { [candidate.id]: makeDetail(candidate) },
+    });
+    const mock = installApiMock(state);
+    renderCandidates("/admin/candidates");
+
+    await user.click(await screen.findByText("Maria S."));
+
+    // The detail page keys and fetches by the route param — the public id.
+    await waitFor(() => {
+      expect(
+        mock.requests.some(
+          (request) =>
+            request.method === "GET" &&
+            request.pathname === `/api/v1/candidates/${candidate.publicId}`,
+        ),
+      ).toBe(true);
+    });
+    expect(
+      mock.requests.some(
+        (request) =>
+          request.method === "GET" &&
+          request.pathname === `/api/v1/candidates/${candidate.id}`,
+      ),
+    ).toBe(false);
   });
 });

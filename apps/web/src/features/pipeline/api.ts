@@ -391,11 +391,14 @@ export function usePlaceAssignment(requisitionId: string) {
         method: "POST",
         body,
       }),
-    onSuccess: (placement) => {
+    onSuccess: () => {
       invalidate();
-      // Placement flips the candidate's pool_status too (AC-PL-13).
+      // Placement flips the candidate's pool_status too (AC-PL-13). The
+      // payload carries only the UUID, but detail pages key by their route
+      // param — which may be the candidate's public id — so invalidate the
+      // whole detail root rather than miss the public-id-keyed entry.
       void queryClient.invalidateQueries({
-        queryKey: candidateKeys.detail(placement.candidateId),
+        queryKey: [...candidateKeys.root, "detail"],
       });
       void queryClient.invalidateQueries({ queryKey: ["candidates", "list"] });
     },

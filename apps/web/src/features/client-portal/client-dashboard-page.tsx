@@ -46,7 +46,7 @@ function RequisitionSummaryCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <Link
-              to={`/client/requisitions/${requisition.id}`}
+              to={`/client/requisitions/${requisition.publicId}`}
               className="text-base font-semibold text-brand-navy-ink after:absolute after:inset-0 group-hover:text-brand-blue group-hover:underline"
             >
               {requisition.advertisedTitle ?? "Untitled role"}
@@ -75,7 +75,14 @@ function RequisitionSummaryCard({
   );
 }
 
-function RecentActivity({ events }: { events: ClientDashboardEvent[] }) {
+function RecentActivity({
+  events,
+  requisitionHref,
+}: {
+  events: ClientDashboardEvent[];
+  /** Maps a requisition UUID to its short-public-id detail URL. */
+  requisitionHref: (requisitionId: string) => string;
+}) {
   if (events.length === 0) {
     return (
       <p className="text-sm text-neutral-500">
@@ -89,7 +96,7 @@ function RecentActivity({ events }: { events: ClientDashboardEvent[] }) {
         <li key={event.id} className="border-l-2 border-border-default pl-3">
           <p className="text-sm text-neutral-800">
             <Link
-              to={`/client/requisitions/${event.entityId}`}
+              to={requisitionHref(event.entityId)}
               className="font-medium text-brand-navy-ink hover:text-brand-blue hover:underline"
             >
               {event.requisitionTitle ?? event.requisitionReference}
@@ -157,6 +164,17 @@ export function ClientDashboardPage() {
   if (dashboard === undefined) return header;
 
   const { principalApprovals } = dashboard.pendingActions;
+  // Pending actions and events carry only requisition UUIDs; resolve them to
+  // short public-id URLs via the dashboard's own requisition list. The UUID
+  // fallback still routes (the API accepts both) — it is just longer.
+  const publicIdById = new Map(
+    dashboard.requisitions.map((requisition) => [
+      requisition.id,
+      requisition.publicId,
+    ]),
+  );
+  const requisitionHref = (requisitionId: string) =>
+    `/client/requisitions/${publicIdById.get(requisitionId) ?? requisitionId}`;
   // A filled or closed search never asks for candidate review (UX 3.3).
   const statusById = new Map(
     dashboard.requisitions.map((requisition) => [
@@ -214,7 +232,7 @@ export function ClientDashboardPage() {
                         </p>
                       </div>
                       <Button asChild size="sm">
-                        <Link to={`/client/requisitions/${item.requisitionId}`}>
+                        <Link to={requisitionHref(item.requisitionId)}>
                           Review brief
                           <ArrowRight aria-hidden="true" />
                         </Link>
@@ -246,7 +264,7 @@ export function ClientDashboardPage() {
                       </div>
                       <Button asChild size="sm">
                         <Link
-                          to={`/client/requisitions/${item.requisitionId}#candidates`}
+                          to={`${requisitionHref(item.requisitionId)}#candidates`}
                         >
                           Review candidate
                           <ArrowRight aria-hidden="true" />
@@ -330,7 +348,10 @@ export function ClientDashboardPage() {
           </div>
           <Card>
             <CardContent className="p-6">
-              <RecentActivity events={dashboard.recentEvents} />
+              <RecentActivity
+                events={dashboard.recentEvents}
+                requisitionHref={requisitionHref}
+              />
             </CardContent>
           </Card>
         </section>

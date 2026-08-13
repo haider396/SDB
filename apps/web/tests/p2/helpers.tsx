@@ -277,6 +277,8 @@ export interface ApiMock {
 }
 
 const UUID = "[0-9a-f-]{36}";
+/** Single-entity routes accept a UUID OR a 12-char public id, like the API. */
+const ENTITY_REF = "[0-9A-Za-z]{12}|[0-9a-f-]{36}";
 
 export function installApiMock(
   state: ServerState,
@@ -395,12 +397,14 @@ export function installApiMock(
 
       const clientAction = path.match(
         new RegExp(
-          `^/clients/(${UUID})(?:/(confirm-payment|grant-access|revoke-access))?$`,
+          `^/clients/(${ENTITY_REF})(?:/(confirm-payment|grant-access|revoke-access))?$`,
         ),
       );
       if (clientAction !== null) {
         const [, id = "", action] = clientAction;
-        const client = state.clients.find((entry) => entry.id === id);
+        const client = state.clients.find(
+          (entry) => entry.id === id || entry.publicId === id,
+        );
         if (client === undefined) {
           return errorResponse("NOT_FOUND", "Client not found.", 404);
         }
@@ -438,22 +442,22 @@ export function installApiMock(
             isPrincipal: boolean;
           };
           const created = makeMember({
-            clientId: id,
+            clientId: client.id,
             email: payload.primaryContactEmail,
             fullName: payload.primaryContactName,
             role: "client_admin",
             isPrimaryContact: true,
             isPrincipal: payload.isPrincipal,
           });
-          state.membersByClientId[id] = [
-            ...(state.membersByClientId[id] ?? []),
+          state.membersByClientId[client.id] = [
+            ...(state.membersByClientId[client.id] ?? []),
             created,
           ];
           return jsonResponse({ data: client });
         }
         if (method === "POST" && action === "revoke-access") {
           client.portalAccessEnabledAt = null;
-          const deactivated = (state.membersByClientId[id] ?? []).map(
+          const deactivated = (state.membersByClientId[client.id] ?? []).map(
             (member) => member.userId,
           );
           return jsonResponse({
@@ -476,12 +480,16 @@ export function installApiMock(
 
       const requisitionAction = path.match(
         new RegExp(
-          `^/requisitions/(${UUID})(?:/(transition|request-principal-approval|events))?$`,
+          `^/requisitions/(${ENTITY_REF})(?:/(transition|request-principal-approval|events))?$`,
         ),
       );
       if (requisitionAction !== null) {
         const [, id = "", action] = requisitionAction;
-        const detail = state.detailsById[id];
+        const detail =
+          state.detailsById[id] ??
+          Object.values(state.detailsById).find(
+            (entry) => entry.publicId === id,
+          );
         if (detail === undefined) {
           return errorResponse("NOT_FOUND", "Requisition not found.", 404);
         }
@@ -489,7 +497,7 @@ export function installApiMock(
           return jsonResponse({ data: detail });
         }
         if (method === "GET" && action === "events") {
-          return collection(state.eventsByRequisitionId[id] ?? []);
+          return collection(state.eventsByRequisitionId[detail.id] ?? []);
         }
         if (method === "PATCH" && action === undefined) {
           Object.assign(detail, body);

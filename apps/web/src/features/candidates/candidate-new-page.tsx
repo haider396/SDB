@@ -45,7 +45,7 @@ export function CandidateNewPage() {
     };
     try {
       const created = await createCandidate.mutateAsync(body);
-      navigate(`/admin/candidates/${created.id}`, { replace: true });
+      navigate(`/admin/candidates/${created.publicId}`, { replace: true });
     } catch (cause) {
       form.setError("root", {
         message:

@@ -98,6 +98,10 @@ export function ClientRequisitionNewPage() {
             toast.success(
               `Request ${result.requisitionReference} submitted.`,
             );
+            // TODO(api follow-up): InPortalRequisitionResponse carries no
+            // publicId yet, so this redirect still lands on the UUID URL
+            // (which the API resolves fine). Switch to result.publicId once
+            // the create response includes it.
             navigate(`/client/requisitions/${result.id}`);
           }}
         />

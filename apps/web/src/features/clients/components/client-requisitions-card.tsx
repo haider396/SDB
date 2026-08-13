@@ -53,7 +53,7 @@ export function ClientRequisitionsCard({ clientId }: { clientId: string }) {
               {requisitions.map((requisition) => (
                 <li key={requisition.id}>
                   <Link
-                    to={`/admin/requisitions/${requisition.id}`}
+                    to={`/admin/requisitions/${requisition.publicId}`}
                     className="flex h-10 items-center justify-between gap-4 rounded-sm px-1 text-sm transition-colors duration-fast hover:bg-surface-subtle"
                   >
                     <span className="flex min-w-0 items-center gap-3">

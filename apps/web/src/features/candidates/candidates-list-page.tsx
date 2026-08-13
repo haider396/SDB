@@ -561,7 +561,7 @@ export function CandidatesListPage() {
             </Button>
           ),
         }}
-        getRowHref={(candidate) => `/admin/candidates/${candidate.id}`}
+        getRowHref={(candidate) => `/admin/candidates/${candidate.publicId}`}
         pagination={{
           page: pager.page,
           pageSize: pager.pageSize,

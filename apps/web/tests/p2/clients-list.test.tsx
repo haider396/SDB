@@ -196,4 +196,32 @@ describe("clients list", () => {
       expect(latest?.search.get("cursor")).toBeNull();
     });
   });
+
+  it("row activation navigates to the client's short public-id URL, never the UUID", async () => {
+    const user = userEvent.setup();
+    const client = makeClient({ companyName: "Acme Corp" });
+    const state = makeState({ clients: [client] });
+    const mock = installApiMock(state);
+    renderAdmin("/admin/clients");
+
+    await user.click(await screen.findByText("Acme Corp"));
+
+    // The detail page keys and fetches by the route param — the public id.
+    await waitFor(() => {
+      expect(
+        mock.requests.some(
+          (request) =>
+            request.method === "GET" &&
+            request.pathname === `/api/v1/clients/${client.publicId}`,
+        ),
+      ).toBe(true);
+    });
+    expect(
+      mock.requests.some(
+        (request) =>
+          request.method === "GET" &&
+          request.pathname === `/api/v1/clients/${client.id}`,
+      ),
+    ).toBe(false);
+  });
 });

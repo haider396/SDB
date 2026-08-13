@@ -233,7 +233,7 @@ export function ClientsListPage() {
               ? "No clients match these filters. Clear them to see the full list."
               : "Clients appear here when a prospect submits the intake form, ready for payment confirmation and portal access.",
         }}
-        getRowHref={(client) => `/admin/clients/${client.id}`}
+        getRowHref={(client) => `/admin/clients/${client.publicId}`}
         pagination={{
           page: pager.page,
           pageSize: pager.pageSize,

@@ -84,9 +84,16 @@ export function useClient(id: string) {
  * Audit trail for one client via the global event log
  * (04 §12 GET /events?entityType=client&entityId=…, 06 §7).
  */
-export function useClientEvents(id: string) {
+/**
+ * `id` must be the client's UUID (the `/events` filter validates `entityId`
+ * as a uuid — it does NOT resolve public ids, unlike the single-entity
+ * routes). Pass the loaded detail's `id`, never the route param, and leave
+ * it undefined until the detail has loaded.
+ */
+export function useClientEvents(id: string | undefined) {
   return useQuery<EntityEvent[]>({
-    queryKey: clientKeys.events(id),
+    queryKey: clientKeys.events(id ?? ""),
+    enabled: id !== undefined,
     queryFn: async () => {
       const { data } = await apiFetchCollection<EntityEvent>("/events", {
         query: { entityType: "client", entityId: id, limit: 50 },
@@ -111,7 +118,12 @@ export function useClientMembers(id: string) {
 function useInvalidateClient() {
   const queryClient = useQueryClient();
   return (id: string, options?: { members?: boolean }) => {
-    void queryClient.invalidateQueries({ queryKey: clientKeys.detail(id) });
+    // Mutations pass the client's UUID, but the detail page keys its query
+    // by the route param — which may be the short public id — so invalidate
+    // the detail ROOT rather than miss one of the two forms.
+    void queryClient.invalidateQueries({
+      queryKey: [...clientKeys.root, "detail"],
+    });
     void queryClient.invalidateQueries({ queryKey: ["clients", "list"] });
     if (options?.members === true) {
       void queryClient.invalidateQueries({ queryKey: clientKeys.members(id) });
@@ -125,7 +137,10 @@ export function useCreateClient() {
   return useMutation<Client, unknown, CreateClientBody>({
     mutationFn: (body) => apiFetch<Client>("/clients", { method: "POST", body }),
     onSuccess: (created) => {
-      queryClient.setQueryData(clientKeys.detail(created.id), created);
+      // The new-client dialog navigates to the publicId URL, so seed the
+      // cache under the key that page will read (detail pages key by the
+      // route param).
+      queryClient.setQueryData(clientKeys.detail(created.publicId), created);
       void queryClient.invalidateQueries({ queryKey: ["clients", "list"] });
     },
   });

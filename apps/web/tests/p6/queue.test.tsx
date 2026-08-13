@@ -141,6 +141,24 @@ describe("attention queue page", () => {
     ).toHaveAttribute("href", "/admin/requisitions?search=REQ-000301");
   });
 
+  it("links requisition items with the short public id when the API provides one", async () => {
+    const withPublicId = makeQueueItem("requisition", {
+      reference: "REQ-000401",
+      label: "REQ-000401 — Ops Manager",
+      requisitionPublicId: "lSbqRVXPbTmC",
+    });
+    installDashboardApiMock(
+      makeDashboardState({
+        queue: makeQueue({ new_intake_submissions: [withPublicId] }),
+      }),
+    );
+    renderDashboardPage("/admin");
+
+    expect(
+      await screen.findByRole("link", { name: /REQ-000401/ }),
+    ).toHaveAttribute("href", "/admin/requisitions/lSbqRVXPbTmC");
+  });
+
   it("shows relative since-times with the absolute instant on hover", async () => {
     const item = makeQueueItem("requisition", {
       since: "2026-08-09T09:00:00+00:00",

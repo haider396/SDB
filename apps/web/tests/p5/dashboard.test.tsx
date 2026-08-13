@@ -43,8 +43,23 @@ describe("client dashboard", () => {
 
   it("renders pending actions first, each linking straight to the work", async () => {
     const requisitionId = testUuid();
+    const publicId = testPublicId();
     const state = makeState({
       dashboard: makeDashboard({
+        // The requisition list supplies the short public id the pending
+        // actions link with (pending-action items carry only the UUID).
+        requisitions: [
+          {
+            id: requisitionId,
+            publicId,
+            reference: "REQ-000101",
+            advertisedTitle: "Executive Assistant",
+            status: "sourcing",
+            submittedAt: NOW,
+            updatedAt: NOW,
+            stageCounts: {},
+          },
+        ],
         pendingActions: {
           principalApprovals: [
             {
@@ -79,12 +94,13 @@ describe("client dashboard", () => {
       screen.getByText("Maria G. is ready for your review"),
     ).toBeInTheDocument();
 
+    // Short public-id URLs — never the requisition's UUID.
     expect(
       screen.getByRole("link", { name: /review brief/i }),
-    ).toHaveAttribute("href", `/client/requisitions/${requisitionId}`);
+    ).toHaveAttribute("href", `/client/requisitions/${publicId}`);
     expect(
       screen.getByRole("link", { name: /review candidate/i }),
-    ).toHaveAttribute("href", `/client/requisitions/${requisitionId}#candidates`);
+    ).toHaveAttribute("href", `/client/requisitions/${publicId}#candidates`);
   });
 
   it("shows the being-reviewed empty state for a brand-new client", async () => {
@@ -133,8 +149,23 @@ describe("client dashboard", () => {
 
   it("humanizes the activity feed: title, client-language from→to, actor, link (UX 3.3)", async () => {
     const requisitionId = testUuid();
+    const publicId = testPublicId();
     const state = makeState({
       dashboard: makeDashboard({
+        // Events carry the requisition UUID; the feed resolves it to the
+        // short public id via the dashboard's requisition list.
+        requisitions: [
+          {
+            id: requisitionId,
+            publicId,
+            reference: "REQ-000101",
+            advertisedTitle: "Executive Assistant",
+            status: "sourcing",
+            submittedAt: NOW,
+            updatedAt: NOW,
+            stageCounts: {},
+          },
+        ],
         recentEvents: [
           {
             id: testUuid(),
@@ -157,12 +188,14 @@ describe("client dashboard", () => {
     installClientPortalApiMock(state);
     renderClientPortal("/client");
 
-    // Title links to the requisition; the sentence is client wording —
-    // never the raw enum values.
-    const link = await screen.findByRole("link", {
+    // Title links to the requisition's SHORT public-id URL; the sentence is
+    // client wording — never the raw enum values.
+    const links = await screen.findAllByRole("link", {
       name: "Executive Assistant",
     });
-    expect(link).toHaveAttribute("href", `/client/requisitions/${requisitionId}`);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", `/client/requisitions/${publicId}`);
+    }
     expect(
       screen.getByText(/moved from being reviewed to sourcing candidates/i),
     ).toBeInTheDocument();

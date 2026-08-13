@@ -300,6 +300,8 @@ export interface ApiMock {
 }
 
 const UUID = "[0-9a-f-]{36}";
+/** Single-entity routes accept a UUID OR a 12-char public id, like the API. */
+const ENTITY_REF = "[0-9A-Za-z]{12}|[0-9a-f-]{36}";
 
 export function installApiMock(
   state: ServerState,
@@ -527,11 +529,15 @@ export function installApiMock(
 
       // ----- candidate CRUD + actions -----
       const candidateAction = path.match(
-        new RegExp(`^/candidates/(${UUID})(?:/(archive|consent))?$`),
+        new RegExp(`^/candidates/(${ENTITY_REF})(?:/(archive|consent))?$`),
       );
       if (candidateAction !== null) {
         const [, id = "", action] = candidateAction;
-        const detail = state.detailsById[id];
+        const detail =
+          state.detailsById[id] ??
+          Object.values(state.detailsById).find(
+            (entry) => entry.publicId === id,
+          );
         if (detail === undefined) {
           return errorResponse("NOT_FOUND", "Candidate not found.", 404);
         }
