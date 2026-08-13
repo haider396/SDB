@@ -53,7 +53,6 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileType, setFileType] = useState<CandidateFileType>("cv");
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [deleting, setDeleting] = useState<CandidateFile | null>(null);
@@ -65,7 +64,6 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
       return;
     }
     setUploadError(null);
-    setUploadSuccess(null);
     setIsUploading(true);
     setProgress({ loaded: 0, total: file.size });
     try {
@@ -85,7 +83,7 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
         becameProfilePhoto = true;
       }
       invalidateFiles(candidate.id);
-      setUploadSuccess(
+      toast.success(
         becameProfilePhoto
           ? `${file.name} uploaded and set as the profile photo.`
           : `${file.name} uploaded.`,
@@ -225,11 +223,6 @@ export function FilesCard({ candidate }: { candidate: CandidateDetail }) {
           {uploadError !== null ? (
             <p role="alert" className="text-xs text-danger-text">
               {uploadError}
-            </p>
-          ) : null}
-          {uploadSuccess !== null ? (
-            <p aria-live="polite" className="text-xs text-success-text">
-              {uploadSuccess}
             </p>
           ) : null}
         </div>

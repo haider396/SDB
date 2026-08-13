@@ -54,9 +54,9 @@ export function ProfileRailCard({ candidate }: { candidate: CandidateDetail }) {
     <Card>
       <CardContent className="pt-6">
         <div className="flex items-center gap-3">
-          {candidate.photoPath !== null ? (
+          {candidate.photoUrl !== null ? (
             <img
-              src={candidate.photoPath}
+              src={candidate.photoUrl}
               alt={`Photo of ${candidate.displayName}`}
               className="h-14 w-14 rounded-full object-cover"
             />

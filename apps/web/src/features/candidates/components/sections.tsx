@@ -140,13 +140,21 @@ function PhotoSlot({ candidate }: SectionProps) {
 
   return (
     <div className="mt-4 flex items-center gap-3 rounded-md border border-dashed border-border-default p-3">
-      <div
-        aria-hidden="true"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue-subtle text-sm font-semibold text-brand-blue"
-      >
-        {candidate.firstName.charAt(0)}
-        {candidate.lastName.charAt(0)}
-      </div>
+      {candidate.photoUrl !== null ? (
+        <img
+          src={candidate.photoUrl}
+          alt={`Photo of ${candidate.displayName}`}
+          className="h-10 w-10 shrink-0 rounded-full object-cover"
+        />
+      ) : (
+        <div
+          aria-hidden="true"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue-subtle text-sm font-semibold text-brand-blue"
+        >
+          {candidate.firstName.charAt(0)}
+          {candidate.lastName.charAt(0)}
+        </div>
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-neutral-800">Profile photo</p>
         <p className="text-xs text-neutral-500">
