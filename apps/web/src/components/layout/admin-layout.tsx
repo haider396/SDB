@@ -48,7 +48,15 @@ export function AdminLayout() {
       : item,
   );
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-page">
+    // `relative` makes the shell the containing block for any absolutely
+    // positioned descendant that lacks a positioned ancestor (e.g. Tailwind's
+    // `sr-only`, which is position:absolute). Without it those elements
+    // resolve to the initial containing block, escape this clipped shell,
+    // and stretch the DOCUMENT's scroll height past the viewport.
+    // `overflow-clip` (not `overflow-hidden`): hidden boxes are still
+    // programmatically scrollable, so scrollIntoView anywhere inside would
+    // shift the fixed chrome out of view; clip forbids scrolling entirely.
+    <div className="relative flex h-screen overflow-clip bg-surface-page">
       <DirtyNavigationBlocker />
       <Sidebar items={nav} areaLabel="Admin" />
       <MobileNavDrawer
@@ -64,7 +72,11 @@ export function AdminLayout() {
             pages: fixed filters, scrolling table). Pages without that root
             keep the old behaviour — content grows and main scrolls. */}
         <main className="flex flex-1 flex-col overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-content flex-1 flex-col px-4 py-6 md:px-8 md:py-8">
+          {/* min-h-0 lifts the wrapper's min-height:auto floor so a page
+              root's `flex-1 min-h-0` opt-in can actually bound its scroll
+              region at the viewport; without it the wrapper always grows to
+              its content and the opt-in silently degrades to main-scroll. */}
+          <div className="mx-auto flex min-h-0 w-full max-w-content flex-1 flex-col px-4 py-6 md:px-8 md:py-8">
             <Suspense
               fallback={
                 <LoadingSkeleton variant="card" rows={3} label="Loading…" />

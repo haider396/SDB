@@ -54,7 +54,8 @@ function ResultControl({
       className="inline-flex gap-1 rounded-md border border-border-default bg-surface-subtle p-1"
     >
       {RESULT_OPTIONS.map((option) => (
-        <label key={option.value} className="cursor-pointer">
+        // `relative` contains the absolutely-positioned sr-only input.
+        <label key={option.value} className="relative cursor-pointer">
           <input
             type="radio"
             name={id}

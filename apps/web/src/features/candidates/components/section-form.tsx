@@ -348,7 +348,8 @@ function RatingControl({
       className="inline-flex gap-1 rounded-md border border-border-default bg-surface-subtle p-1"
     >
       {options.map((option) => (
-        <label key={option} className="cursor-pointer">
+        // `relative` contains the absolutely-positioned sr-only input.
+        <label key={option} className="relative cursor-pointer">
           <input
             type="radio"
             name={id}

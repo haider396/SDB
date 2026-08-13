@@ -53,7 +53,15 @@ export function ClientLayout() {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-page">
+    // `relative` makes the shell the containing block for any absolutely
+    // positioned descendant that lacks a positioned ancestor (e.g. Tailwind's
+    // `sr-only`, which is position:absolute). Without it those elements
+    // resolve to the initial containing block, escape this clipped shell,
+    // and stretch the DOCUMENT's scroll height past the viewport.
+    // `overflow-clip` (not `overflow-hidden`): hidden boxes are still
+    // programmatically scrollable, so scrollIntoView anywhere inside would
+    // shift the fixed chrome out of view; clip forbids scrolling entirely.
+    <div className="relative flex h-screen overflow-clip bg-surface-page">
       <DirtyNavigationBlocker />
       <Sidebar items={items} areaLabel="Client portal" contact={CLIENT_CONTACT} />
       <MobileNavDrawer

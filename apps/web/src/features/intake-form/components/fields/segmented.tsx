@@ -46,7 +46,9 @@ export function SegmentedControl({
       {options.map((option) => (
         <label
           key={option.value}
-          className={cn("cursor-pointer", stretch && "flex-1")}
+          // `relative` contains the absolutely-positioned sr-only input; without
+          // it the input escapes every overflow ancestor and stretches the page.
+          className={cn("relative cursor-pointer", stretch && "flex-1")}
         >
           <input
             type="radio"

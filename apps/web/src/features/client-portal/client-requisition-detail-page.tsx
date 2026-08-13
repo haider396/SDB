@@ -34,15 +34,45 @@ export function ClientRequisitionDetailPage() {
   const isLoaded = requisitionQuery.data !== undefined;
 
   // /client/requisitions/:id#candidates lands ON the candidates section
-  // (UX 3.5): scroll once the data — and therefore the section — rendered.
+  // (UX 3.5). Two subtleties:
+  //
+  // - Scroll the layout's <main> scroller explicitly rather than calling
+  //   scrollIntoView: scrollIntoView scrolls EVERY scrollable ancestor,
+  //   including the shell's overflow-hidden box (hidden overflow is still
+  //   programmatically scrollable), which shifted the fixed chrome (top
+  //   bar) out of view.
+  // - The candidates grid loads through its own query, so right after the
+  //   requisition renders the page is often too short to scroll — a single
+  //   scrollTo would clamp to 0. Poll each animation frame (bounded) until
+  //   the scroller can actually reach the section, then scroll once.
   useEffect(() => {
     if (!isLoaded || location.hash !== "#candidates") return;
-    const frame = requestAnimationFrame(() => {
+    const deadline = performance.now() + 3000;
+    let frame = 0;
+    const attempt = () => {
       const section = document.getElementById("candidates");
-      if (section !== null && typeof section.scrollIntoView === "function") {
-        section.scrollIntoView({ behavior: "smooth", block: "start" });
+      const scroller = section?.closest("main");
+      if (section != null && scroller != null) {
+        const top =
+          section.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top +
+          scroller.scrollTop;
+        const maxTop = scroller.scrollHeight - scroller.clientHeight;
+        if (maxTop >= top - 1) {
+          scroller.scrollTo({ top, behavior: "smooth" });
+          return;
+        }
+        if (performance.now() > deadline) {
+          // Content never grew tall enough — best effort.
+          if (maxTop > 0) scroller.scrollTo({ top: maxTop, behavior: "smooth" });
+          return;
+        }
+      } else if (performance.now() > deadline) {
+        return;
       }
-    });
+      frame = requestAnimationFrame(attempt);
+    };
+    frame = requestAnimationFrame(attempt);
     return () => cancelAnimationFrame(frame);
   }, [isLoaded, location.hash]);
 
