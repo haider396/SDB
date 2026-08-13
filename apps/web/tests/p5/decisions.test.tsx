@@ -21,6 +21,7 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 });
 
 import {
+  NOW,
   SKILLS_GAP_REASON_ID,
   errorResponse,
   installClientPortalApiMock,
@@ -53,7 +54,7 @@ describe("client decisions", () => {
     vi.unstubAllEnvs();
   });
 
-  it("approve: confirm dialog → POST approve-for-interview (no body) → card shows approved", async () => {
+  it("move forward: ONE primary action at presented → POST approve-for-interview (no body) → card shows approved", async () => {
     const user = userEvent.setup();
     const { state, requisition, row } = presentedState();
     const { requests } = installClientPortalApiMock(state);
@@ -62,12 +63,19 @@ describe("client decisions", () => {
     const card = await screen.findByRole("article", {
       name: "Candidate Maria G.",
     });
+    // UX 3.1: no separate "Request interview" at presented — one primary.
+    expect(
+      within(card).queryByRole("button", { name: "Request interview" }),
+    ).not.toBeInTheDocument();
     await user.click(
-      within(card).getByRole("button", { name: "Approve for interview" }),
+      within(card).getByRole("button", { name: "Move forward to interview" }),
     );
     const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(/they'll coordinate scheduling with you/i),
+    ).toBeInTheDocument();
     await user.click(
-      within(dialog).getByRole("button", { name: "Approve for interview" }),
+      within(dialog).getByRole("button", { name: "Move forward to interview" }),
     );
 
     await waitFor(() => {
@@ -103,11 +111,11 @@ describe("client decisions", () => {
       name: "Candidate Maria G.",
     });
     await user.click(
-      within(card).getByRole("button", { name: "Approve for interview" }),
+      within(card).getByRole("button", { name: "Move forward to interview" }),
     );
     const dialog = await screen.findByRole("dialog");
     await user.click(
-      within(dialog).getByRole("button", { name: "Approve for interview" }),
+      within(dialog).getByRole("button", { name: "Move forward to interview" }),
     );
 
     // The dialog surfaces the error…
@@ -175,19 +183,33 @@ describe("client decisions", () => {
       });
     });
 
-    // The card moves to the muted declined state with the reason shown.
+    // The card moves to the muted declined state with the SERVER's reason
+    // label (UX 3.2) — plus the free-text detail.
     await waitFor(() => {
+      const declinedCard = screen.getByRole("article", {
+        name: "Candidate Maria G.",
+      });
       expect(
-        within(
-          screen.getByRole("article", { name: "Candidate Maria G." }),
-        ).getByText(/you declined this candidate: skills gap/i),
+        within(declinedCard).getByText(/you declined — skills gap/i),
+      ).toBeInTheDocument();
+      expect(
+        within(declinedCard).getByText("Needs stronger reporting skills."),
       ).toBeInTheDocument();
     });
   });
 
-  it("request interview: confirm → POST request-interview → chip, stage unchanged", async () => {
+  it("request interview (client_reviewing): confirm → POST request-interview → server-backed chip, stage unchanged", async () => {
     const user = userEvent.setup();
-    const { state, requisition, row } = presentedState();
+    const requisition = makeRequisition({ status: "candidates_presented" });
+    const row = makeClientAssignment({
+      requisitionId: requisition.id,
+      displayName: "Maria G.",
+      stage: "client_reviewing",
+    });
+    const state = makeState({
+      requisitionDetail: requisition,
+      assignmentsByRequisitionId: { [requisition.id]: [row] },
+    });
     const { requests } = installClientPortalApiMock(state);
     renderClientPortal(`/client/requisitions/${requisition.id}`);
 
@@ -213,10 +235,41 @@ describe("client decisions", () => {
       ).toBe(true);
     });
     const updated = screen.getByRole("article", { name: "Candidate Maria G." });
+    // The chip is driven by the server's interviewRequestedAt (UX 3.2),
+    // with the relative time appended.
     expect(
-      await within(updated).findByText("Interview requested"),
+      await within(updated).findByText(/interview requested .*ago/i),
     ).toBeInTheDocument();
-    // No stage change (scheduling is the admin's move).
-    expect(within(updated).getByText("Awaiting your review")).toBeInTheDocument();
+    // No stage change (scheduling is the admin's move)…
+    expect(
+      within(updated).getByText("Approved for interview"),
+    ).toBeInTheDocument();
+    // …and the nudge button disappears once requested.
+    expect(
+      within(updated).queryByRole("button", { name: "Request interview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("presented card renders the server's interviewRequestedAt chip on load", async () => {
+    const requisition = makeRequisition({ status: "candidates_presented" });
+    const row = makeClientAssignment({
+      requisitionId: requisition.id,
+      displayName: "Maria G.",
+      stage: "client_reviewing",
+      interviewRequestedAt: NOW,
+    });
+    const state = makeState({
+      requisitionDetail: requisition,
+      assignmentsByRequisitionId: { [requisition.id]: [row] },
+    });
+    installClientPortalApiMock(state);
+    renderClientPortal(`/client/requisitions/${requisition.id}`);
+
+    const card = await screen.findByRole("article", {
+      name: "Candidate Maria G.",
+    });
+    expect(
+      within(card).getByText(/interview requested .*ago/i),
+    ).toBeInTheDocument();
   });
 });

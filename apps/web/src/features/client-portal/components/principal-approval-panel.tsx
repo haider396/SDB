@@ -92,9 +92,9 @@ export function PrincipalApprovalPanel({
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-neutral-600">
-          As the principal for this hire, review the brief below. Approving
-          starts candidate sourcing; requesting changes sends it back to the
-          team with your comment.
+          As the principal for this hire, review the brief on this page.
+          Approving starts candidate sourcing; requesting changes sends it
+          back to the team with your comment.
         </p>
         <div className="flex flex-col gap-2">
           <Button size="sm" onClick={() => setOpenDialog("approve")}>

@@ -53,15 +53,9 @@ export function CandidatesSection({ requisitionId }: { requisitionId: string }) 
 
   const [dialog, setDialog] = useState<DialogState>(null);
   const [announcement, setAnnouncement] = useState("");
-  /** assignmentIds this session asked an interview for (no stage change). */
-  const [requestedIds, setRequestedIds] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
-  /** Reason labels for candidates declined this session. */
-  const [rejectionLabels, setRejectionLabels] = useState<
-    Readonly<Record<string, string>>
-  >({});
 
+  // Decision state (interview requested / declined reason) now comes from
+  // the server row itself (UX 3.2) — nothing is session-local.
   const rows = [...(assignmentsQuery.data ?? [])].sort(reviewOrder);
 
   return (
@@ -103,8 +97,6 @@ export function CandidatesSection({ requisitionId }: { requisitionId: string }) 
             <CandidateCard
               key={row.assignmentId}
               row={row}
-              isInterviewRequested={requestedIds.has(row.assignmentId)}
-              rejectionReasonLabel={rejectionLabels[row.assignmentId]}
               onApprove={(target) => setDialog({ kind: "approve", row: target })}
               onRequestInterview={(target) =>
                 setDialog({ kind: "request", row: target })
@@ -115,23 +107,23 @@ export function CandidatesSection({ requisitionId }: { requisitionId: string }) 
         </div>
       )}
 
-      {/* ----- Approve for interview ----- */}
+      {/* ----- Move forward to interview (approve) ----- */}
       <ConfirmDecisionDialog
         row={dialog?.kind === "approve" ? dialog.row : null}
-        title={(name) => `Approve ${name} for interview?`}
-        description="We will let your Staffing Done Better team know you want to move forward. They will coordinate an interview time with you, and the candidate's full contact details unlock once it is scheduled."
-        confirmLabel="Approve for interview"
-        pendingLabel="Approving…"
+        title={(name) => `Move ${name} forward to interview?`}
+        description="We'll let the SDB team know — they'll coordinate scheduling with you. The candidate's full contact details unlock once the interview is scheduled."
+        confirmLabel="Move forward to interview"
+        pendingLabel="Sending…"
         isPending={approve.isPending}
         onConfirm={async (row) => {
           await approve.mutateAsync({ assignmentId: row.assignmentId });
-          setAnnouncement(`${row.displayName} approved for interview.`);
-          toast.success(`${row.displayName} approved for interview.`);
+          setAnnouncement(`${row.displayName} is moving forward to interview.`);
+          toast.success(`${row.displayName} is moving forward to interview.`);
         }}
         onClose={() => setDialog(null)}
       />
 
-      {/* ----- Request interview ----- */}
+      {/* ----- Request interview (client_reviewing nudge) ----- */}
       <ConfirmDecisionDialog
         row={dialog?.kind === "request" ? dialog.row : null}
         title={(name) => `Request an interview with ${name}?`}
@@ -141,7 +133,6 @@ export function CandidatesSection({ requisitionId }: { requisitionId: string }) 
         isPending={requestInterview.isPending}
         onConfirm={async (row) => {
           await requestInterview.mutateAsync({ assignmentId: row.assignmentId });
-          setRequestedIds((previous) => new Set([...previous, row.assignmentId]));
           setAnnouncement(`Interview requested for ${row.displayName}.`);
           toast.success(`Interview requested for ${row.displayName}.`);
         }}
@@ -152,12 +143,8 @@ export function CandidatesSection({ requisitionId }: { requisitionId: string }) 
       <ClientRejectDialog
         row={dialog?.kind === "reject" ? dialog.row : null}
         isPending={reject.isPending}
-        onReject={async (row, body, reasonLabel) => {
+        onReject={async (row, body) => {
           await reject.mutateAsync({ assignmentId: row.assignmentId, body });
-          setRejectionLabels((previous) => ({
-            ...previous,
-            [row.assignmentId]: reasonLabel,
-          }));
           setAnnouncement(`${row.displayName} declined.`);
           toast.success(`${row.displayName} declined.`);
         }}

@@ -9,8 +9,9 @@
  * Timezone helpers implement NFR-11: timestamps render in the VIEWING
  * user's timezone with an explicit zone label.
  */
-import type { RequisitionStatus } from "@sdb/contracts";
+import type { EntityEvent, RequisitionStatus } from "@sdb/contracts";
 import type { ClientVisibleStage, GatedPiiField } from "@sdb/contracts";
+import { humanizeKey } from "@/lib/format";
 
 /** Ordered as a client experiences the journey. */
 export const CLIENT_STAGE_ORDER: readonly ClientVisibleStage[] = [
@@ -66,6 +67,41 @@ export const CLIENT_REQUISITION_STATUS_LABELS: Record<
   closed_unfilled: "Closed",
 };
 
+/**
+ * Client-language label for an event's from/to value (UX 3.3): requisition
+ * statuses map through CLIENT_REQUISITION_STATUS_LABELS; anything else is
+ * humanized — a raw enum value never reaches the page.
+ */
+export function clientValueLabel(value: string): string {
+  const statusLabel = (
+    CLIENT_REQUISITION_STATUS_LABELS as Partial<Record<string, string>>
+  )[value];
+  if (statusLabel !== undefined) return statusLabel;
+  const stageLabel = (
+    CLIENT_STAGE_LABELS as Partial<Record<string, string>>
+  )[value];
+  if (stageLabel !== undefined) return stageLabel;
+  return humanizeKey(value);
+}
+
+/**
+ * One human sentence for a dashboard feed event (UX 3.3/1.3): client
+ * wording, no raw enum values, no event-type jargon.
+ */
+export function clientEventSentence(
+  event: Pick<EntityEvent, "eventType" | "fromValue" | "toValue">,
+): string {
+  const from = event.fromValue !== null ? clientValueLabel(event.fromValue) : null;
+  const to = event.toValue !== null ? clientValueLabel(event.toValue) : null;
+  if (from !== null && to !== null) {
+    return `Moved from ${from} to ${to}`;
+  }
+  if (to !== null) {
+    return `Now ${to}`;
+  }
+  return humanizeKey(event.eventType);
+}
+
 /** Human labels for the gated fields, in GATED_PII_FIELDS order. */
 export const GATED_FIELD_LABELS: Record<GatedPiiField, string> = {
   lastName: "Last name",
@@ -86,11 +122,12 @@ export function viewerTimezone(): string {
 }
 
 /**
- * "12 Aug 2026, 14:05" in the VIEWER's timezone. Pair with
- * `viewerTimezone()` for the explicit label NFR-11 requires.
+ * "12 Aug 2026, 14:05" (browser locale) in the VIEWER's timezone. Pair with
+ * `viewerTimezone()` for the explicit label NFR-11 requires. Locale is
+ * deliberately undefined — the browser's own locale wins (UX 3.7).
  */
 export function formatInViewerTimezone(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(undefined, {
     day: "numeric",
     month: "short",
     year: "numeric",

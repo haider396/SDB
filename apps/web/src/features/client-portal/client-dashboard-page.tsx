@@ -17,16 +17,20 @@ import {
   UserSearch,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { ClientDashboardRequisition, EntityEvent } from "@sdb/contracts";
+import type {
+  ClientDashboardEvent,
+  ClientDashboardRequisition,
+} from "@sdb/contracts";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { ErrorState } from "@/components/patterns/error-state";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { daysSince, formatDateTime, formatRelative, humanizeKey } from "@/lib/format";
+import { daysSince, formatDateTime, formatRelative } from "@/lib/format";
 import { useMe } from "@/lib/permissions";
 import { useClientDashboard } from "./api";
+import { clientEventSentence } from "./labels";
 import { ClientStatusBadgePill } from "./components/client-stage-tracker";
 import { StageCountStrip, totalCandidates } from "./components/stage-count-strip";
 
@@ -53,7 +57,16 @@ function RequisitionSummaryCard({
           </div>
           <ClientStatusBadgePill status={requisition.status} />
         </div>
-        <StageCountStrip stageCounts={requisition.stageCounts} />
+        <StageCountStrip
+          stageCounts={requisition.stageCounts}
+          // The dashboard payload carries no sourcingStartedAt — submittedAt
+          // is the elapsed-time anchor here (UX 3.3).
+          sourcingSince={
+            requisition.status === "sourcing"
+              ? requisition.submittedAt
+              : undefined
+          }
+        />
         <p className="text-xs tabular-nums text-neutral-500">
           Submitted {days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}
         </p>
@@ -62,7 +75,7 @@ function RequisitionSummaryCard({
   );
 }
 
-function RecentActivity({ events }: { events: EntityEvent[] }) {
+function RecentActivity({ events }: { events: ClientDashboardEvent[] }) {
   if (events.length === 0) {
     return (
       <p className="text-sm text-neutral-500">
@@ -74,8 +87,17 @@ function RecentActivity({ events }: { events: EntityEvent[] }) {
     <ol className="space-y-3">
       {events.map((event) => (
         <li key={event.id} className="border-l-2 border-border-default pl-3">
-          <p className="text-sm font-medium text-brand-navy-ink">
-            {humanizeKey(event.eventType)}
+          <p className="text-sm text-neutral-800">
+            <Link
+              to={`/client/requisitions/${event.entityId}`}
+              className="font-medium text-brand-navy-ink hover:text-brand-blue hover:underline"
+            >
+              {event.requisitionTitle ?? event.requisitionReference}
+            </Link>
+            : {clientEventSentence(event)}
+            {event.actorName !== null ? (
+              <span className="text-neutral-500"> by {event.actorName}</span>
+            ) : null}
           </p>
           <p className="text-xs text-neutral-500">
             <time
@@ -134,8 +156,19 @@ export function ClientDashboardPage() {
   const dashboard = dashboardQuery.data;
   if (dashboard === undefined) return header;
 
-  const { principalApprovals, candidatesAwaitingReview } =
-    dashboard.pendingActions;
+  const { principalApprovals } = dashboard.pendingActions;
+  // A filled or closed search never asks for candidate review (UX 3.3).
+  const statusById = new Map(
+    dashboard.requisitions.map((requisition) => [
+      requisition.id,
+      requisition.status,
+    ]),
+  );
+  const candidatesAwaitingReview =
+    dashboard.pendingActions.candidatesAwaitingReview.filter((item) => {
+      const status = statusById.get(item.requisitionId);
+      return status !== "placed" && status !== "closed_unfilled";
+    });
   const pendingCount = principalApprovals.length + candidatesAwaitingReview.length;
 
   // Brand-new client: requisitions exist but nothing has happened yet.
@@ -278,13 +311,21 @@ export function ClientDashboardPage() {
 
         {/* ----- Recent activity ----- */}
         <section aria-labelledby="recent-activity-heading">
-          <h2
-            id="recent-activity-heading"
-            className="mb-3 flex items-center gap-2 text-lg font-semibold tracking-tight text-brand-navy-ink"
-          >
-            <History aria-hidden="true" className="h-4 w-4 text-neutral-500" />
-            Recent activity
-          </h2>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2
+              id="recent-activity-heading"
+              className="flex items-center gap-2 text-lg font-semibold tracking-tight text-brand-navy-ink"
+            >
+              <History aria-hidden="true" className="h-4 w-4 text-neutral-500" />
+              Recent activity
+            </h2>
+            <p className="text-xs text-neutral-500">
+              as of{" "}
+              {formatDateTime(
+                new Date(dashboardQuery.dataUpdatedAt || Date.now()).toISOString(),
+              )}
+            </p>
+          </div>
           <Card>
             <CardContent className="p-5">
               <RecentActivity events={dashboard.recentEvents} />

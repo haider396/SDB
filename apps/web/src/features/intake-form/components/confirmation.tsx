@@ -1,8 +1,11 @@
 /**
  * Confirmation screen (05 §5 req 9, 01 §3 J1 step 7): requisition reference
- * and what happens next. No account is created and none is offered.
+ * (with copy-to-clipboard), the review-time expectation, and what happens
+ * next. No sign-up is created and none is offered.
  */
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Copy } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -22,6 +25,19 @@ export function Confirmation({
 }: {
   requisitionReference: string;
 }) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
+
+  async function copyReference() {
+    try {
+      await navigator.clipboard.writeText(requisitionReference);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="items-center text-center">
@@ -33,7 +49,8 @@ export function Confirmation({
         </div>
         <CardTitle>Request received</CardTitle>
         <CardDescription>
-          Thank you — your hiring request has been submitted.
+          Thank you — your hiring request has been submitted. Our team reviews
+          new requests within 2 business days.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -42,8 +59,26 @@ export function Confirmation({
           <p className="mt-1 font-mono text-lg font-semibold tracking-tight text-brand-navy-ink">
             {requisitionReference}
           </p>
-          <p className="mt-1 text-xs text-neutral-500">
-            Keep this handy when contacting us about this request.
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="mt-2"
+            onClick={() => void copyReference()}
+          >
+            <Copy aria-hidden="true" />
+            {copyState === "copied" ? "Copied" : "Copy reference"}
+          </Button>
+          <p aria-live="polite" className="sr-only">
+            {copyState === "copied" ? "Reference copied to clipboard." : ""}
+            {copyState === "failed"
+              ? "Copying failed — select the reference text to copy it."
+              : ""}
+          </p>
+          <p className="mt-2 text-xs text-neutral-500">
+            {copyState === "failed"
+              ? "Copying is not available here — select the reference above to copy it."
+              : "Keep this handy when contacting us about this request."}
           </p>
         </div>
         <div>

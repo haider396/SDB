@@ -1,4 +1,5 @@
 export { IntakeForm } from "./intake-form";
+export { useIntakeForm } from "./api";
 // Renderer building blocks reused by the admin question manager's live
 // preview (05 §4.7) so the preview IS the client form, not a copy of it.
 export { QuestionField } from "./components/question-field";

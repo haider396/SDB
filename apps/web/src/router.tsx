@@ -1,48 +1,130 @@
 /**
  * React Router 6 data router. Three trees (05-FRONTEND.md §2):
- *   - public:  /intake, /login, /accept-invitation
+ *   - public:  /intake, /login, /forgot-password, /reset-password,
+ *              /accept-invitation — served from the ENTRY chunk
  *   - admin:   /admin/* — RequireAuth + per-page RequirePermission
  *   - client:  /client/* — RequireAuth + RequireClientContext
  * Admin and client trees are separate; no shared layout, no role branching
  * inside pages.
+ *
+ * Code splitting (UX 3.6): the admin and client trees are React.lazy —
+ * Recharts, dnd-kit, and TanStack Table never load on the public pages.
+ * Layouts wrap their Outlet in a Suspense so per-page chunks resolve inside
+ * the shell; this top-level fallback covers the layout chunk itself.
  */
+import { Suspense, lazy } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { RequireAuth } from "@/components/guards/require-auth";
 import { RequireClientContext } from "@/components/guards/require-client-context";
 import { RequirePermission } from "@/components/guards/require-permission";
-import { AdminLayout } from "@/components/layout/admin-layout";
-import { ClientLayout } from "@/components/layout/client-layout";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { useSession } from "@/lib/auth";
 import { homePathFor, useMe } from "@/lib/permissions";
-import {
-  CandidateDetailPage,
-  CandidateNewPage,
-  CandidatesListPage,
-} from "@/features/candidates";
-import { ClientDetailPage, ClientsListPage } from "@/features/clients";
-import { QuestionManagerPage } from "@/features/question-manager";
-import {
-  RequisitionDetailPage,
-  RequisitionsListPage,
-} from "@/features/requisitions";
-import {
-  AttentionQueuePage,
-  RejectionReasonsReportPage,
-  StatsPage,
-} from "@/features/admin-dashboard";
-import { NotificationsPage } from "@/features/notifications";
-import { SettingsPage } from "@/routes/admin/index-pages";
-import {
-  ClientDashboardPage,
-  ClientRequisitionDetailPage,
-  ClientRequisitionNewPage,
-  ClientRequisitionsPage,
-} from "@/features/client-portal";
 import { NotFoundPage } from "@/routes/not-found-page";
 import { AcceptInvitationPage } from "@/routes/public/accept-invitation-page";
+import { ForgotPasswordPage } from "@/routes/public/forgot-password-page";
 import { IntakePage } from "@/routes/public/intake-page";
 import { LoginPage } from "@/routes/public/login-page";
+import { ResetPasswordPage } from "@/routes/public/reset-password-page";
+
+// ----- Lazy admin tree -----
+const AdminLayout = lazy(() =>
+  import("@/components/layout/admin-layout").then((m) => ({
+    default: m.AdminLayout,
+  })),
+);
+const AttentionQueuePage = lazy(() =>
+  import("@/features/admin-dashboard").then((m) => ({
+    default: m.AttentionQueuePage,
+  })),
+);
+const StatsPage = lazy(() =>
+  import("@/features/admin-dashboard").then((m) => ({ default: m.StatsPage })),
+);
+const RejectionReasonsReportPage = lazy(() =>
+  import("@/features/admin-dashboard").then((m) => ({
+    default: m.RejectionReasonsReportPage,
+  })),
+);
+const ClientsListPage = lazy(() =>
+  import("@/features/clients").then((m) => ({ default: m.ClientsListPage })),
+);
+const ClientDetailPage = lazy(() =>
+  import("@/features/clients").then((m) => ({ default: m.ClientDetailPage })),
+);
+const RequisitionsListPage = lazy(() =>
+  import("@/features/requisitions").then((m) => ({
+    default: m.RequisitionsListPage,
+  })),
+);
+const RequisitionDetailPage = lazy(() =>
+  import("@/features/requisitions").then((m) => ({
+    default: m.RequisitionDetailPage,
+  })),
+);
+const CandidatesListPage = lazy(() =>
+  import("@/features/candidates").then((m) => ({
+    default: m.CandidatesListPage,
+  })),
+);
+const CandidateNewPage = lazy(() =>
+  import("@/features/candidates").then((m) => ({ default: m.CandidateNewPage })),
+);
+const CandidateDetailPage = lazy(() =>
+  import("@/features/candidates").then((m) => ({
+    default: m.CandidateDetailPage,
+  })),
+);
+const QuestionManagerPage = lazy(() =>
+  import("@/features/question-manager").then((m) => ({
+    default: m.QuestionManagerPage,
+  })),
+);
+const NotificationsPage = lazy(() =>
+  import("@/features/notifications").then((m) => ({
+    default: m.NotificationsPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("@/routes/admin/index-pages").then((m) => ({
+    default: m.SettingsPage,
+  })),
+);
+
+// ----- Lazy client tree -----
+const ClientLayout = lazy(() =>
+  import("@/components/layout/client-layout").then((m) => ({
+    default: m.ClientLayout,
+  })),
+);
+const ClientDashboardPage = lazy(() =>
+  import("@/features/client-portal").then((m) => ({
+    default: m.ClientDashboardPage,
+  })),
+);
+const ClientRequisitionsPage = lazy(() =>
+  import("@/features/client-portal").then((m) => ({
+    default: m.ClientRequisitionsPage,
+  })),
+);
+const ClientRequisitionNewPage = lazy(() =>
+  import("@/features/client-portal").then((m) => ({
+    default: m.ClientRequisitionNewPage,
+  })),
+);
+const ClientRequisitionDetailPage = lazy(() =>
+  import("@/features/client-portal").then((m) => ({
+    default: m.ClientRequisitionDetailPage,
+  })),
+);
+
+function RouteFallback() {
+  return (
+    <div className="mx-auto max-w-content p-8">
+      <LoadingSkeleton variant="card" rows={3} label="Loading…" />
+    </div>
+  );
+}
 
 /** Lands signed-in users on their role's home; everyone else on /login. */
 function RootRedirect() {
@@ -50,11 +132,7 @@ function RootRedirect() {
   const { data: me, isLoading: isMeLoading } = useMe();
 
   if (isLoading || (session && isMeLoading)) {
-    return (
-      <div className="mx-auto max-w-content p-8">
-        <LoadingSkeleton variant="card" rows={3} label="Loading…" />
-      </div>
-    );
+    return <RouteFallback />;
   }
 
   if (!session) return <Navigate to="/login" replace />;
@@ -65,9 +143,11 @@ function RootRedirect() {
 export const router = createBrowserRouter([
   { path: "/", element: <RootRedirect /> },
 
-  // ----- Public tree -----
+  // ----- Public tree (entry chunk) -----
   { path: "/intake", element: <IntakePage /> },
   { path: "/login", element: <LoginPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/accept-invitation", element: <AcceptInvitationPage /> },
 
   // ----- Admin tree -----
@@ -75,7 +155,9 @@ export const router = createBrowserRouter([
     path: "/admin",
     element: (
       <RequireAuth>
-        <AdminLayout />
+        <Suspense fallback={<RouteFallback />}>
+          <AdminLayout />
+        </Suspense>
       </RequireAuth>
     ),
     children: [
@@ -196,7 +278,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RequireClientContext>
-          <ClientLayout />
+          <Suspense fallback={<RouteFallback />}>
+            <ClientLayout />
+          </Suspense>
         </RequireClientContext>
       </RequireAuth>
     ),

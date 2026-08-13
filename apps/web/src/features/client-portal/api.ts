@@ -226,9 +226,12 @@ export function useRejectCandidate(requisitionId: string) {
 
 /**
  * Request interview: records the request and notifies the admin — the stage
- * does NOT change (scheduling is the admin's move, J7).
+ * does NOT change (scheduling is the admin's move, J7). The returned row
+ * carries `interviewRequestedAt` (UX 3.2), settled into the cache so the
+ * card's chip appears without waiting for the refetch.
  */
 export function useRequestInterview(requisitionId: string) {
+  const optimistic = useOptimisticStage(requisitionId);
   const invalidate = useInvalidateAfterDecision(requisitionId);
   return useMutation<ClientVisibleAssignment, unknown, { assignmentId: string }>(
     {
@@ -237,7 +240,10 @@ export function useRequestInterview(requisitionId: string) {
           `/assignments/${assignmentId}/request-interview`,
           { method: "POST" },
         ),
-      onSuccess: () => invalidate(),
+      onSuccess: (updated) => {
+        optimistic.settle(updated);
+        invalidate();
+      },
     },
   );
 }

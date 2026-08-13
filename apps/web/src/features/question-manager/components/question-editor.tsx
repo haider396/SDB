@@ -7,11 +7,10 @@
  * Server rejections (CIRCULAR_CONDITION, INVALID_VALIDATION_RULE, …) land
  * inline next to the responsible section. Dirty-form guard per AC-UI-09.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import type { FieldErrors, Resolver } from "react-hook-form";
 import { z } from "zod";
-import { useBlocker } from "react-router-dom";
 import {
   ConditionalOperatorSchema,
   QuestionAudienceSchema,
@@ -47,6 +46,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ApiError } from "@/lib/api-client";
+import { useDirtyGuard } from "@/lib/use-dirty-guard";
 import {
   roleCategoryChoices,
   useAllQuestions,
@@ -197,14 +197,6 @@ export function QuestionEditor({
   }, [state.mode, keyTouched, label, form]);
 
   // ----- Dirty-form guards (AC-UI-09) -----
-  useEffect(() => {
-    const handler = (event: BeforeUnloadEvent) => {
-      if (isDirty) event.preventDefault();
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty]);
-
   // Discard-confirmation via the app's dialog pattern (05 §4.4) — never
   // window.confirm. `discardPrompt` holds what to do on either choice.
   const [discardPrompt, setDiscardPrompt] = useState<{
@@ -212,15 +204,16 @@ export function QuestionEditor({
     keepEditing: () => void;
   } | null>(null);
 
-  const blocker = useBlocker(isDirty);
-  useEffect(() => {
-    if (blocker.state === "blocked") {
-      setDiscardPrompt({
-        discard: () => blocker.proceed(),
-        keepEditing: () => blocker.reset(),
-      });
-    }
-  }, [blocker]);
+  // beforeunload + registration with the layout's single navigation blocker
+  // (lib/use-dirty-guard.ts — one useBlocker per page). Blocked in-app
+  // navigation opens this editor's own discard dialog.
+  const onBlocked = useCallback(
+    (proceed: () => void, reset: () => void) => {
+      setDiscardPrompt({ discard: proceed, keepEditing: reset });
+    },
+    [],
+  );
+  useDirtyGuard(isDirty, { onBlocked });
 
   const requestClose = () => {
     if (isDirty) {

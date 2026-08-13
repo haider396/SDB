@@ -37,7 +37,8 @@ export function SegmentedControl({
   return (
     <div
       className={cn(
-        "inline-flex gap-1 rounded-md border border-border-default bg-surface-subtle p-1",
+        // flex-wrap keeps a 1–10 scale usable at 360px-wide viewports.
+        "inline-flex flex-wrap gap-1 rounded-md border border-border-default bg-surface-subtle p-1",
         invalid && "border-danger",
         stretch && "flex w-full",
       )}

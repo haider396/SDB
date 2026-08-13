@@ -399,10 +399,21 @@ export function installClientPortalApiMock(
           return jsonResponse({ data: row });
         }
         if (method === "POST" && action === "reject") {
+          // Mirror the API: the view row carries the client rejection's
+          // reason label + detail from the next read (UX 3.2).
+          const payload = body as { reasonId?: string; reasonOther?: string; detail?: string };
           row.stage = "rejected_by_client";
+          row.rejectionReasonLabel =
+            state.rejectionReasons.find((reason) => reason.id === payload.reasonId)
+              ?.label ??
+            payload.reasonOther ??
+            null;
+          row.rejectionDetail = payload.detail ?? null;
           return jsonResponse({ data: { id: row.assignmentId } });
         }
         if (method === "POST" && action === "request-interview") {
+          // Mirror the API: the latest interview_requested event's instant.
+          row.interviewRequestedAt = NOW;
           return jsonResponse({ data: row });
         }
       }

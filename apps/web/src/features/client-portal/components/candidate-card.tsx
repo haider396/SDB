@@ -7,12 +7,16 @@
  * (features/pipeline/components/present-review-sheet.tsx): what the admin
  * was promised the client sees is exactly what this card shows.
  *
- * Actions by stage:
- *   presented            → Approve for interview · Request interview · Decline
- *   client_reviewing     → Request interview · Decline (+ "Approved" chip)
+ * Actions by stage (UX 3.1 — one primary decision per stage):
+ *   presented            → Move forward to interview (primary) · Decline
+ *   client_reviewing     → Request interview (nudge) · Decline (+ "Approved")
  *   interview_scheduled / interviewed → interview details + Decline
  *   offer / placed       → celebratory banner
  *   rejected_by_client / closed_not_selected → muted, no actions
+ *
+ * Decision state comes from the SERVER row (UX 3.2): interviewRequestedAt
+ * drives the "Interview requested" chip and rejectionReasonLabel/-Detail the
+ * declined summary — nothing is session-local anymore.
  */
 import {
   CalendarPlus,
@@ -27,7 +31,7 @@ import { isPiiUnlockedStage } from "@sdb/contracts";
 import type { ClientVisibleStage } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 import { ENGAGEMENT_LABELS, SENIORITY_LABELS } from "@/lib/format";
 import {
   ACCENT_LABELS,
@@ -145,10 +149,6 @@ function profileFacts(row: ClientVisibleAssignment): Fact[] {
 
 export interface CandidateCardProps {
   row: ClientVisibleAssignment;
-  /** The client asked for an interview this session (no stage change). */
-  isInterviewRequested: boolean;
-  /** Reason label captured when this session declined the candidate. */
-  rejectionReasonLabel: string | undefined;
   onApprove: (row: ClientVisibleAssignment) => void;
   onRequestInterview: (row: ClientVisibleAssignment) => void;
   onReject: (row: ClientVisibleAssignment) => void;
@@ -156,14 +156,13 @@ export interface CandidateCardProps {
 
 export function CandidateCard({
   row,
-  isInterviewRequested,
-  rejectionReasonLabel,
   onApprove,
   onRequestInterview,
   onReject,
 }: CandidateCardProps) {
   const isMuted = isMutedStage(row.stage);
   const isCelebratory = isCelebratoryStage(row.stage);
+  const isInterviewRequested = row.interviewRequestedAt !== null;
   const showInterviews =
     row.stage === "interview_scheduled" || row.stage === "interviewed";
   const interviewsQuery = useAssignmentInterviews(
@@ -199,9 +198,10 @@ export function CandidateCard({
     >
       {/* ----- Identity row ----- */}
       <div className="flex items-start gap-3">
-        {row.photoPath !== null ? (
+        {row.photoUrl !== null ? (
+          // photoUrl is a 300 s signed URL, resolved at render time only.
           <img
-            src={row.photoPath}
+            src={row.photoUrl}
             alt=""
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
@@ -239,10 +239,10 @@ export function CandidateCard({
               Approved
             </span>
           ) : null}
-          {isInterviewRequested && !showInterviews && !isMuted ? (
+          {row.interviewRequestedAt !== null && !showInterviews && !isMuted ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-info-subtle px-2 py-0.5 text-[11px] font-medium text-info">
               <CalendarPlus aria-hidden="true" className="h-3 w-3" />
-              Interview requested
+              Interview requested {formatRelative(row.interviewRequestedAt)}
             </span>
           ) : null}
         </div>
@@ -286,6 +286,13 @@ export function CandidateCard({
             <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
             SDB recommendation
           </p>
+          {/* The view row carries no presenter name — attribute to the team
+              with the presented date rather than inventing an API change. */}
+          {row.presentedAt !== null ? (
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Presented {formatDate(row.presentedAt)} by the SDB team
+            </p>
+          ) : null}
           <p className="mt-1 text-sm leading-relaxed text-neutral-800">
             {row.recruiterRecommendation}
           </p>
@@ -340,12 +347,18 @@ export function CandidateCard({
         </p>
       ) : null}
       {row.stage === "rejected_by_client" ? (
-        <p className="rounded-md bg-surface-subtle px-3 py-2.5 text-sm text-neutral-600">
-          You declined this candidate
-          {rejectionReasonLabel !== undefined
-            ? `: ${rejectionReasonLabel}`
-            : "."}
-        </p>
+        <div className="rounded-md bg-surface-subtle px-3 py-2.5 text-sm text-neutral-600">
+          <p>
+            {row.rejectionReasonLabel !== null
+              ? `You declined — ${row.rejectionReasonLabel}`
+              : "You declined this candidate."}
+          </p>
+          {row.rejectionDetail !== null && row.rejectionDetail.trim() !== "" ? (
+            <p className="mt-1 text-xs text-neutral-500">
+              {row.rejectionDetail}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {row.stage === "closed_not_selected" ? (
         <p className="rounded-md bg-surface-subtle px-3 py-2.5 text-sm text-neutral-600">
@@ -357,12 +370,14 @@ export function CandidateCard({
       {row.stage === "presented" || row.stage === "client_reviewing" ? (
         <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border-default pt-4">
           {row.stage === "presented" ? (
+            // ONE primary action at presented (UX 3.1) — moving forward IS
+            // the approval; the reject path is the only alternative.
             <Button size="sm" onClick={() => onApprove(row)}>
               <ThumbsUp aria-hidden="true" />
-              Approve for interview
+              Move forward to interview
             </Button>
-          ) : null}
-          {!isInterviewRequested ? (
+          ) : !isInterviewRequested ? (
+            // client_reviewing: the scheduling nudge.
             <Button
               variant="secondary"
               size="sm"

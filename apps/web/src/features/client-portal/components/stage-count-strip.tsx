@@ -5,6 +5,7 @@
  * never rendered.
  */
 import type { ClientDashboardRequisition } from "@sdb/contracts";
+import { daysSince } from "@/lib/format";
 import { CLIENT_STAGE_ORDER, CLIENT_STAGE_LABELS } from "../labels";
 
 export function totalCandidates(
@@ -18,8 +19,15 @@ export function totalCandidates(
 
 export function StageCountStrip({
   stageCounts,
+  sourcingSince,
 }: {
   stageCounts: ClientDashboardRequisition["stageCounts"];
+  /**
+   * Momentum framing (UX 3.3): pass when the requisition is actively
+   * sourcing so the empty line reads as progress, not silence. The instant
+   * is sourcingStartedAt when the payload carries it, else submittedAt.
+   */
+  sourcingSince?: string;
 }) {
   const entries = CLIENT_STAGE_ORDER.flatMap((stage) => {
     const count = stageCounts[stage];
@@ -27,6 +35,16 @@ export function StageCountStrip({
   });
 
   if (entries.length === 0) {
+    if (sourcingSince !== undefined) {
+      const day = daysSince(sourcingSince) + 1;
+      return (
+        <p className="text-xs text-neutral-600">
+          We&rsquo;re sourcing candidates — day{" "}
+          <span className="tabular-nums">{day}</span>. Typical first
+          candidates within ~21 days.
+        </p>
+      );
+    }
     return (
       <p className="text-xs text-neutral-500">No candidates presented yet</p>
     );

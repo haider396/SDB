@@ -6,7 +6,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { signInWithPassword } from "@/lib/auth";
 import { fetchMe, homePathFor, ME_QUERY_KEY } from "@/lib/permissions";
 import { queryClient } from "@/lib/query-client";
@@ -34,6 +35,12 @@ type LoginValues = z.infer<typeof loginSchema>;
 export function LoginPage() {
   usePageTitle("Sign in");
   const navigate = useNavigate();
+  const location = useLocation();
+  // Success banner handed over by accept-invitation / reset-password.
+  const notice =
+    typeof (location.state as { notice?: unknown } | null)?.notice === "string"
+      ? ((location.state as { notice: string }).notice)
+      : null;
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
@@ -90,6 +97,14 @@ export function LoginPage() {
             onSubmit={(event) => void handleSubmit(onSubmit)(event)}
             className="space-y-5"
           >
+            {notice !== null && formError === null ? (
+              <div
+                role="status"
+                className="rounded-md bg-success-subtle px-4 py-3 text-sm text-success-text"
+              >
+                {notice}
+              </div>
+            ) : null}
             {formError ? (
               <div
                 role="alert"
@@ -118,10 +133,17 @@ export function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
+              <div className="flex items-baseline justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-brand-blue hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="current-password"
                 aria-invalid={errors.password ? true : undefined}
                 aria-describedby={errors.password ? "password-error" : undefined}

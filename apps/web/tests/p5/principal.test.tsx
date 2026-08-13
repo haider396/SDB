@@ -64,6 +64,22 @@ describe("principal approval panel", () => {
     expect(screen.getByText("We need a senior EA.")).toBeInTheDocument();
   });
 
+  it("shows a 'brief is being finalised' card instead of the approve CTA when the brief is empty (UX 3.4)", async () => {
+    const { mock, me, requisition } = pendingApprovalState(null);
+    requisition.principalUserId = me.user.id;
+    requisition.briefMarkdown = null;
+    installClientPortalApiMock(mock);
+    renderClientPortal(`/client/requisitions/${requisition.id}`);
+
+    expect(
+      await screen.findByText("The brief is being finalised"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Your approval is needed")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Approve brief" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("stays hidden for a client user who is not the principal", async () => {
     const { mock, requisition } = pendingApprovalState(testUuid());
     installClientPortalApiMock(mock);

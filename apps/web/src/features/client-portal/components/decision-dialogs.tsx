@@ -109,12 +109,11 @@ export function ConfirmDecisionDialog({
 export interface ClientRejectDialogProps {
   row: ClientVisibleAssignment | null;
   isPending: boolean;
-  /** Resolves on success; the chosen reason label is handed back so the
-   * caller can show it on the now-muted card. */
+  /** Resolves on success. The refetched row carries the reason label
+   * (rejectionReasonLabel) — nothing is handed back session-side (UX 3.2). */
   onReject: (
     row: ClientVisibleAssignment,
     body: RejectBody,
-    reasonLabel: string,
   ) => Promise<void>;
   onClose: () => void;
 }
@@ -172,10 +171,9 @@ export function ClientRejectDialog({
           : {}),
       ...(detail.trim() === "" ? {} : { detail: detail.trim() }),
     };
-    const reasonLabel = chosen.isOther ? otherText.trim() : chosen.label;
 
     try {
-      await onReject(row, body, reasonLabel);
+      await onReject(row, body);
       onClose();
     } catch (cause) {
       setValidationError(
@@ -207,8 +205,15 @@ export function ClientRejectDialog({
               value={reasonKey}
               onChange={(event) => setReasonKey(event.target.value)}
               aria-invalid={validationError !== null && chosen === undefined}
+              aria-describedby={
+                validationError !== null && chosen === undefined
+                  ? "client-reject-error"
+                  : undefined
+              }
             >
-              <option value="">Choose a reason…</option>
+              <option value="">
+                {reasonsQuery.isLoading ? "Loading reasons…" : "Choose a reason…"}
+              </option>
               {reasons.map((reason) => (
                 <option key={reason.key} value={reason.key}>
                   {reason.label}
@@ -226,6 +231,11 @@ export function ClientRejectDialog({
                 onChange={(event) => setOtherText(event.target.value)}
                 maxLength={1000}
                 aria-invalid={validationError !== null && otherText.trim() === ""}
+                aria-describedby={
+                  validationError !== null && otherText.trim() === ""
+                    ? "client-reject-error"
+                    : undefined
+                }
               />
             </div>
           ) : null}
@@ -244,7 +254,11 @@ export function ClientRejectDialog({
           </div>
 
           {validationError !== null ? (
-            <p role="alert" className="text-sm text-danger-text">
+            <p
+              id="client-reject-error"
+              role="alert"
+              className="text-sm text-danger-text"
+            >
               {validationError}
             </p>
           ) : null}
@@ -254,9 +268,11 @@ export function ClientRejectDialog({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
+          {/* Disabled while the reasons list is still loading — a structured
+              reason is required, so submitting earlier can only fail. */}
           <Button
             variant="destructive"
-            disabled={isPending}
+            disabled={isPending || reasonsQuery.isLoading}
             onClick={() => void submit()}
           >
             {isPending ? "Declining…" : "Decline candidate"}

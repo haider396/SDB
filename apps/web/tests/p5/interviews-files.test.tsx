@@ -60,9 +60,10 @@ describe("interviews and files", () => {
     });
     expect(await within(card).findByText(/round 1/i)).toBeInTheDocument();
 
-    // NFR-11: the scheduled instant, formatted for the VIEWING user's zone…
+    // NFR-11: the scheduled instant, formatted for the VIEWING user's zone
+    // in the browser's own locale (UX 3.7 — no hard-coded en-GB)…
     const viewerZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const expected = new Intl.DateTimeFormat("en-GB", {
+    const expected = new Intl.DateTimeFormat(undefined, {
       day: "numeric",
       month: "short",
       year: "numeric",

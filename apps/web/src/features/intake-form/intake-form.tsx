@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { ErrorState } from "@/components/patterns/error-state";
+import { useDirtyGuard } from "@/lib/use-dirty-guard";
 import {
   useIntakeForm,
   usePublicTaxonomy,
@@ -55,7 +56,7 @@ import {
   type TaxonomySelection,
 } from "./components/taxonomy-step";
 
-const ROLE_STEP: ProgressStep = { key: "__role", label: "Role" };
+const ROLE_STEP: ProgressStep = { key: "__role", label: "Role", questionCount: 3 };
 
 function bySortOrder<T extends { sortOrder: number }>(a: T, b: T): number {
   return a.sortOrder - b.sortOrder;
@@ -174,33 +175,48 @@ export function IntakeForm({
   const values = form.watch();
   const { errors: fieldErrors, isDirty, isSubmitted } = form.formState;
 
-  // Unsaved-changes guard (05 §4.4, AC-UI-09) — browser prompt only; the
-  // public page has no in-app navigation away from the form.
-  useEffect(() => {
-    const handler = (event: BeforeUnloadEvent) => {
-      if (isDirty && submitted === null) {
-        event.preventDefault();
-      }
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty, submitted]);
-
-  const steps: ProgressStep[] = useMemo(
-    () => [
-      ROLE_STEP,
-      ...categories.map((category) => ({
-        key: category.key,
-        label: category.label,
-      })),
-    ],
-    [categories],
-  );
+  // Unsaved-changes guard (05 §4.4, AC-UI-09). Both modes confirm before
+  // tab close; in portal mode the registration additionally arms the client
+  // layout's single in-app navigation blocker (UX 3.5 — the public page has
+  // no in-app navigation, and mounts no blocker).
+  useDirtyGuard(isDirty && submitted === null);
 
   const visibleByCategory = (category: IntakeFormCategory) =>
     category.questions.filter((question) =>
       isQuestionVisible(question, allQuestions, values),
     );
+
+  // Per-step question counts feed the visible "Step n of N · k questions"
+  // line; counts follow conditional visibility, so they shift as answers do.
+  const steps: ProgressStep[] = [
+    ROLE_STEP,
+    ...categories.map((category) => ({
+      key: category.key,
+      label: category.label,
+      questionCount: visibleByCategory(category).length,
+    })),
+  ];
+
+  // A category step whose questions are ALL conditionally hidden is skipped
+  // on Next/Back (UX 3.5). Its pill stays; landing on it directly (via the
+  // pill) still renders the "no questions apply" note.
+  const isSkippableStep = (index: number): boolean => {
+    if (index === 0) return false;
+    const category = categories[index - 1];
+    return category !== undefined && visibleByCategory(category).length === 0;
+  };
+  const nextEnabledStep = (from: number): number | null => {
+    for (let index = from + 1; index < steps.length; index += 1) {
+      if (!isSkippableStep(index)) return index;
+    }
+    return null;
+  };
+  const previousEnabledStep = (from: number): number => {
+    for (let index = from - 1; index > 0; index -= 1) {
+      if (!isSkippableStep(index)) return index;
+    }
+    return 0;
+  };
 
   const stepIndexOfQuestion = (questionKey: string): number => {
     const categoryIndex = categories.findIndex((category) =>
@@ -209,14 +225,32 @@ export function IntakeForm({
     return categoryIndex === -1 ? stepIndex : categoryIndex + 1;
   };
 
-  const goToStep = (index: number) => {
+  const goToStep = (index: number, skippedLabels: string[] = []) => {
     const step = steps[index];
     if (step === undefined) return;
     setStepIndex(index);
-    setAnnouncement(`Step ${index + 1} of ${steps.length}: ${step.label}`);
+    const skipNote =
+      skippedLabels.length > 0
+        ? `Skipped ${skippedLabels.join(", ")} — no questions apply. `
+        : "";
+    setAnnouncement(
+      `${skipNote}Step ${index + 1} of ${steps.length}: ${step.label}`,
+    );
     if (typeof window.scrollTo === "function") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  };
+
+  /** Labels of the skippable steps strictly between two step indexes. */
+  const skippedLabelsBetween = (from: number, to: number): string[] => {
+    const labels: string[] = [];
+    for (let index = from + 1; index < to; index += 1) {
+      if (isSkippableStep(index)) {
+        const label = steps[index]?.label;
+        if (label !== undefined) labels.push(label);
+      }
+    }
+    return labels;
   };
 
   const navigateToField = (questionKey: string) => {
@@ -229,7 +263,8 @@ export function IntakeForm({
       const errors = validateTaxonomySelection(selection);
       setTaxonomyErrors(errors);
       if (Object.keys(errors).length > 0) return;
-      goToStep(1);
+      const next = nextEnabledStep(0);
+      if (next !== null) goToStep(next, skippedLabelsBetween(0, next));
       return;
     }
     const category = categories[stepIndex - 1];
@@ -241,7 +276,8 @@ export function IntakeForm({
       if (firstInvalid !== undefined) focusField(firstInvalid);
       return;
     }
-    goToStep(stepIndex + 1);
+    const next = nextEnabledStep(stepIndex);
+    if (next !== null) goToStep(next, skippedLabelsBetween(stepIndex, next));
   };
 
   const onValid = async (parsedValues: IntakeValues) => {
@@ -338,7 +374,9 @@ export function IntakeForm({
     );
   }
 
-  const isLastStep = stepIndex === steps.length - 1;
+  // Last step = nothing enabled after this one (trailing all-hidden steps
+  // are skipped, so Submit can surface earlier than the final pill).
+  const isLastStep = nextEnabledStep(stepIndex) === null;
   const currentCategory =
     stepIndex > 0 ? categories[stepIndex - 1] : undefined;
   const summaryEntries: SummaryEntry[] = allQuestions
@@ -462,7 +500,10 @@ export function IntakeForm({
         <Button
           type="button"
           variant="secondary"
-          onClick={() => goToStep(stepIndex - 1)}
+          onClick={() => {
+            const previous = previousEnabledStep(stepIndex);
+            goToStep(previous, skippedLabelsBetween(previous, stepIndex));
+          }}
           className={stepIndex === 0 ? "invisible" : undefined}
         >
           Back

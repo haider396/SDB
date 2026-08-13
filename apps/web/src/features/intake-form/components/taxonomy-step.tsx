@@ -31,7 +31,8 @@ export function validateTaxonomySelection(
 ): TaxonomyErrors {
   const errors: TaxonomyErrors = {};
   if (selection.engineId === undefined) {
-    errors.engineId = "Choose an engine.";
+    // Client-facing wording: "area", never the internal "engine" jargon.
+    errors.engineId = "Choose an area.";
   }
   if (selection.departmentId === undefined) {
     errors.departmentId = "Choose a department.";
@@ -117,7 +118,7 @@ export function TaxonomyStep({
       <SelectRow
         id="taxonomy-engine"
         label="Which part of your business is this hire for?"
-        placeholder="Select an engine…"
+        placeholder="Select an area…"
         value={selection.engineId}
         options={taxonomy.engines}
         disabled={false}
@@ -142,7 +143,7 @@ export function TaxonomyStep({
         value={selection.departmentId}
         options={engine?.departments ?? []}
         disabled={engine === undefined}
-        disabledHint="Choose an engine first"
+        disabledHint="Choose an area first"
         error={errors.departmentId}
         onChange={(departmentId) =>
           onChange({

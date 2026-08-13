@@ -47,7 +47,14 @@ function RequisitionCard({
           <ClientStatusBadgePill status={requisition.status} />
         </div>
         {stageCounts !== undefined ? (
-          <StageCountStrip stageCounts={stageCounts} />
+          <StageCountStrip
+            stageCounts={stageCounts}
+            sourcingSince={
+              requisition.status === "sourcing"
+                ? requisition.sourcingStartedAt ?? requisition.submittedAt
+                : undefined
+            }
+          />
         ) : null}
         <p className="text-xs tabular-nums text-neutral-500">
           Submitted {days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}
