@@ -64,14 +64,20 @@ interface FormQuestionRow {
 }
 
 /**
- * The active configuration for the public form (03 §3.2 rules 1–5):
- * active questions in active categories, audience 'client' only, universal
- * questions always, scoped questions only for the matching role category —
- * universal-only when roleCategoryId is null. Options: active only.
+ * The active configuration for a public form (03 §3.2 rules 1–5):
+ * active questions in active categories, universal questions always, scoped
+ * questions only for the matching role category — universal-only when
+ * roleCategoryId is null. Options: active only.
+ *
+ * `audience` selects the library: 'client' for the intake form, 'candidate'
+ * for the registration form (T38). It is a caller-supplied enum value, never
+ * request input — the public routes pin it, so `audience=internal` can never
+ * be reached from outside (AC-IF-02).
  */
 export async function getActiveFormQuestions(
   sql: Queryable,
   roleCategoryId: string | null,
+  audience: 'client' | 'candidate' = 'client',
 ): Promise<FormQuestionRecord[]> {
   const rows = await sql<FormQuestionRow[]>`
     select q.id, q.key, q.label, q.help_text, q.placeholder, q.question_type,
@@ -85,7 +91,7 @@ export async function getActiveFormQuestions(
     where q.is_active
       and q.archived_at is null
       and c.is_active
-      and q.audience = 'client'
+      and q.audience = ${audience}::question_audience
       and (
         not exists (select 1 from question_role_scopes s where s.question_id = q.id)
         ${
@@ -274,6 +280,12 @@ export interface RequisitionInsert {
   intakeContactName: string | null;
   intakeContactEmail: string | null;
   intakeCompletedBy: string | null;
+  /** T16 — mapped from the client's intake answers. */
+  jobDescription: string | null;
+  roleDescription: string | null;
+  /** T14 — part-time start that grows to full-time. */
+  startsPartTime: boolean | null;
+  fullTimeTransitionAfter: string | null;
 }
 
 /**
@@ -294,7 +306,9 @@ export async function insertRequisition(
       overlap_start, overlap_end, overlap_timezone,
       target_start_date, region_preference,
       english_spoken_required, english_written_required, max_accent_strength,
-      intake_contact_name, intake_contact_email, intake_completed_by
+      intake_contact_name, intake_contact_email, intake_completed_by,
+      job_description, role_description,
+      starts_part_time, full_time_transition_after
     ) values (
       'REQ-' || lpad(nextval('requisition_reference_seq')::text, 6, '0'),
       ${input.clientId}, ${input.engineId}, ${input.departmentId},
@@ -308,7 +322,9 @@ export async function insertRequisition(
       ${input.englishSpokenRequired}::language_level,
       ${input.englishWrittenRequired}::language_level,
       ${input.maxAccentStrength}::accent_strength,
-      ${input.intakeContactName}, ${input.intakeContactEmail}, ${input.intakeCompletedBy}
+      ${input.intakeContactName}, ${input.intakeContactEmail}, ${input.intakeCompletedBy},
+      ${input.jobDescription}, ${input.roleDescription},
+      ${input.startsPartTime}, ${input.fullTimeTransitionAfter}
     )
     returning id, reference
   `;

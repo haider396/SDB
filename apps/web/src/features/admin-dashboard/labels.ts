@@ -43,7 +43,7 @@ export const BUCKET_ALL_CLEAR: Record<AttentionQueueBucketKey, string> = {
   awaiting_principal_approval: "No approvals have been waiting too long.",
   payment_confirmed_access_not_granted:
     "Every paying client has portal access.",
-  no_candidates_presented: "No requisition has been sourcing too long.",
+  no_candidates_presented: "No placement has been sourcing too long.",
   awaiting_client_feedback: "No presented candidate is waiting on a client.",
   interview_without_outcome: "Every past interview has an outcome.",
   incomplete_webhook_candidates: "No webhook candidates need completing.",

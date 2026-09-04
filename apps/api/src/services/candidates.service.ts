@@ -13,6 +13,7 @@
  *   (CLAUDE.md rule 6).
  * - `source` is always set explicitly on insert (defective 0007 default).
  */
+import type { JsonValue } from '@sdb/contracts';
 import type {
   Candidate,
   CandidateConsentBody,
@@ -72,11 +73,36 @@ export interface CandidatesServiceDeps {
   db: Db;
   /** Storage port for read-time photoUrl signing on the detail read (UX 1.4). */
   storage: SupabaseStoragePort;
+  /**
+   * Optional, and used for exactly one thing: an answer with no submission is
+   * a data bug after 0021's backfill, and silently dropping it would hide that.
+   */
+  logger?: { warn(obj: Record<string, unknown>, msg: string): void };
 }
 
 interface PgError {
   code?: string;
   constraint_name?: string;
+}
+
+/**
+ * Email is unique among live candidates (0024). Without this mapping an admin
+ * who types an address that already exists gets a 500 with no idea which field
+ * is wrong; with it they get the field back, the same as any other validation
+ * failure. Archived rows are outside the index, so a freed address is silent.
+ */
+const CANDIDATE_EMAIL_INDEX = 'idx_candidates_email_live';
+
+function mapCandidateWriteError(error: unknown): never {
+  const pg = error as PgError;
+  if (pg.code === '23505' && pg.constraint_name === CANDIDATE_EMAIL_INDEX) {
+    throw new ApiError(
+      'VALIDATION_FAILED',
+      'Another candidate already uses this email address.',
+      { fields: { email: 'Already used by another candidate.' } },
+    );
+  }
+  throw error;
 }
 
 /** Map FK/unique violations on child writes to a 422, not a 500. */
@@ -244,7 +270,7 @@ export interface CandidatesService {
 export function createCandidatesService(
   deps: CandidatesServiceDeps,
 ): CandidatesService {
-  const { db, storage } = deps;
+  const { db, storage, logger } = deps;
 
   /** The internal pool is admin-only; a client-scoped caller sees nothing. */
   function assertAdminSurface(actor: CandidateActor): void {
@@ -373,16 +399,18 @@ export function createCandidatesService(
       assertAdminSurface(actor);
       return withTransaction(db, async (tx) => {
         const { firstName, lastName, source, externalId, ...rest } = body;
-        const candidate = await repo.insertCandidate(tx, {
-          firstName,
-          lastName,
-          // Explicit always — never the (historically defective) column default.
-          source: source ?? 'other',
-          submittedVia: 'manual',
-          dataCompleteness: computeDataCompleteness(body),
-          externalId: externalId ?? null,
-          fields: rest,
-        });
+        const candidate = await repo
+          .insertCandidate(tx, {
+            firstName,
+            lastName,
+            // Explicit always — never the (historically defective) column default.
+            source: source ?? 'other',
+            submittedVia: 'manual',
+            dataCompleteness: computeDataCompleteness(body),
+            externalId: externalId ?? null,
+            fields: rest,
+          })
+          .catch(mapCandidateWriteError);
         await emitEvent(tx, {
           entityType: 'candidate',
           entityId: candidate.id,
@@ -412,6 +440,8 @@ export function createCandidatesService(
         disqualifierChecks,
         assessments,
         files,
+        submissionRows,
+        answerRows,
       ] = await Promise.all([
         repo.listLanguages(db, candidateId),
         repo.listTools(db, candidateId),
@@ -424,7 +454,87 @@ export function createCandidatesService(
         repo.listDisqualifierChecks(db, candidateId),
         repo.listAssessments(db, candidateId),
         listFiles(db, candidateId),
+        repo.getSubmissionsForCandidate(db, candidateId),
+        repo.getAnswersForCandidate(db, candidateId),
       ]);
+
+      // Grouping is business logic, so it lives here rather than in SQL
+      // (the repo/service split is ESLint-enforced).
+      //
+      // 0021's backfill guarantees every answer has a submission, so an
+      // orphan is a data bug rather than an expected case — logged and
+      // omitted rather than silently swallowed or crashing the page.
+      // Label and type are lifted from the SNAPSHOT, falling back to the key —
+      // identical to how requisitions.service renders its answers. The snapshot
+      // is authoritative (03 §1.4): editing a form must never change what a
+      // candidate is recorded as having been asked.
+      const toAnswer = (answer: (typeof answerRows)[number]) => {
+        const snapshot = answer.questionSnapshot;
+        return {
+          id: answer.id,
+          questionId: answer.questionId,
+          questionKey: answer.questionKey,
+          label:
+            typeof snapshot['label'] === 'string'
+              ? snapshot['label']
+              : answer.questionKey,
+          questionType:
+            typeof snapshot['questionType'] === 'string'
+              ? snapshot['questionType']
+              : 'unknown',
+          valueText: answer.valueText,
+          valueNumber: answer.valueNumber,
+          valueBoolean: answer.valueBoolean,
+          valueDate: answer.valueDate,
+          // Narrowed the same way the form services do: the column is jsonb,
+          // so nested content is JSON by construction.
+          valueJson: (answer.valueJson ?? null) as JsonValue | null,
+          selectedOptions: answer.selectedOptions,
+          questionSnapshot: snapshot,
+          answeredBy: answer.answeredBy,
+          createdAt: answer.createdAt,
+          updatedAt: answer.updatedAt,
+        };
+      };
+
+      const answersBySubmission = new Map<string, ReturnType<typeof toAnswer>[]>();
+      let orphanedAnswers = 0;
+      for (const answer of answerRows) {
+        if (answer.submissionId === null) {
+          orphanedAnswers += 1;
+          continue;
+        }
+        const list = answersBySubmission.get(answer.submissionId) ?? [];
+        list.push(toAnswer(answer));
+        answersBySubmission.set(answer.submissionId, list);
+      }
+      if (orphanedAnswers > 0) {
+        logger?.warn(
+          { candidateId, orphanedAnswers },
+          'candidate answers with no submission were omitted',
+        );
+      }
+      const submissions = submissionRows.map((submission) => ({
+        id: submission.id,
+        formId: submission.formId,
+        formKey: submission.formKey,
+        formLabel: submission.formLabel,
+        formSlug: submission.formSlug,
+        versionNumber: submission.versionNumber,
+        roleCategory:
+          submission.roleCategoryId === null ||
+          submission.roleCategoryKey === null ||
+          submission.roleCategoryLabel === null
+            ? null
+            : {
+                id: submission.roleCategoryId,
+                key: submission.roleCategoryKey,
+                label: submission.roleCategoryLabel,
+              },
+        source: submission.source as 'public_form' | 'backfill' | 'admin',
+        submittedAt: submission.submittedAt.toISOString(),
+        answers: answersBySubmission.get(submission.id) ?? [],
+      }));
       // UX 2.5: name the missing required fields when incomplete; [] otherwise.
       const missingFields =
         candidate.dataCompleteness === 'incomplete'
@@ -451,6 +561,7 @@ export function createCandidatesService(
         disqualifierChecks,
         assessments,
         files,
+        submissions,
       };
     },
 
@@ -459,11 +570,9 @@ export function createCandidatesService(
       return withTransaction(db, async (tx) => {
         const existing = await requireCandidate(tx, candidateId);
         candidateId = existing.id;
-        const updated = await repo.updateCandidate(
-          tx,
-          candidateId,
-          body as Record<string, unknown>,
-        );
+        const updated = await repo
+          .updateCandidate(tx, candidateId, body as Record<string, unknown>)
+          .catch(mapCandidateWriteError);
         if (!updated) throw new ApiError('NOT_FOUND', 'Candidate not found.');
         const changedKeys = Object.keys(body).filter(
           (key) => body[key as keyof UpdateCandidateBody] !== undefined,

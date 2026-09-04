@@ -12,11 +12,13 @@ import type { Logger } from '../lib/logger.js';
 import type { SupabaseStoragePort } from '../lib/supabase-storage.js';
 import type { AttentionQueueService } from '../services/attention-queue.service.js';
 import type { NotificationDispatchService } from '../services/notification-dispatch.service.js';
+import { closeElapsedPlacements } from './close-elapsed-placements.js';
 import { expireStaleInvitations } from './expire-stale-invitations.js';
 import { extractCvText } from './extract-cv-text.js';
 import { flagIncompleteCandidates } from './flag-incomplete-candidates.js';
 import { refreshAttentionQueueCache } from './refresh-attention-queue-cache.js';
 import { retryFailedNotifications } from './retry-failed-notifications.js';
+import { sweepRegistrationSessions } from './sweep-registration-sessions.js';
 
 export interface ScheduledJobs {
   stop: () => void;
@@ -56,6 +58,43 @@ export function registerJobs(deps: JobDeps): ScheduledJobs {
             'job failed',
           );
         });
+      },
+      { timezone: 'UTC' },
+    ),
+  );
+
+  // close-elapsed-placements — daily 04:00 UTC (T31). Runs after the 02:00
+  // invitation sweep so a day's scheduled work is spread rather than stacked.
+  tasks.push(
+    cron.schedule(
+      '0 4 * * *',
+      () => {
+        closeElapsedPlacements({ db, logger }).catch((error: unknown) => {
+          logger.error(
+            { job: 'close-elapsed-placements', err: String(error) },
+            'job failed',
+          );
+        });
+      },
+      { timezone: 'UTC' },
+    ),
+  );
+
+  // sweep-registration-sessions — daily 02:30 UTC. Sits between the 02:00
+  // invitation sweep and the 03:00 completeness pass, keeping the day's
+  // scheduled work spread rather than stacked.
+  tasks.push(
+    cron.schedule(
+      '30 2 * * *',
+      () => {
+        sweepRegistrationSessions(db, storage, { logger }).catch(
+          (error: unknown) => {
+            logger.error(
+              { job: 'sweep-registration-sessions', err: String(error) },
+              'job failed',
+            );
+          },
+        );
       },
       { timezone: 'UTC' },
     ),

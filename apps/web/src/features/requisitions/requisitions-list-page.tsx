@@ -229,9 +229,9 @@ export function RequisitionsListPage() {
       <PageHeader
         breadcrumbs={[
           { label: "Admin", to: "/admin" },
-          { label: "Requisitions" },
+          { label: "Placements" },
         ]}
-        title="Requisitions"
+        title="Placements"
         subtitle="Every open role across all clients"
       />
 
@@ -286,17 +286,17 @@ export function RequisitionsListPage() {
       <DataTable
         columns={columns}
         data={rows}
-        label="Requisitions"
+        label="Placements"
         isLoading={query.isPending}
         isError={query.isError}
         error={query.error}
         onRetry={() => void query.refetch()}
         empty={{
           icon: ClipboardList,
-          title: "No requisitions",
+          title: "No placements",
           description: hasFilters
-            ? "No requisitions match these filters. Clear them to see the full list."
-            : "Requisitions appear here when a prospect submits the intake form.",
+            ? "No placements match these filters. Clear them to see the full list."
+            : "Placements appear here when a prospect submits the intake form.",
         }}
         getRowHref={(requisition) => `/admin/requisitions/${requisition.publicId}`}
         pagination={{

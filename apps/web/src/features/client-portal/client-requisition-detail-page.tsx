@@ -24,6 +24,7 @@ import { SimpleMarkdown } from "@/lib/simple-markdown";
 import { useClientRequisition } from "./api";
 import { CandidatesSection } from "./components/candidates-section";
 import { ClientStageTracker } from "./components/client-stage-tracker";
+import { GuaranteeProgress } from "@/components/patterns/guarantee-progress";
 import { PrincipalApprovalPanel } from "./components/principal-approval-panel";
 
 export function ClientRequisitionDetailPage() {
@@ -82,12 +83,12 @@ export function ClientRequisitionDetailPage() {
         <PageHeader
           breadcrumbs={[
             { label: "Dashboard", to: "/client" },
-            { label: "My requisitions", to: "/client/requisitions" },
-            { label: "Requisition" },
+            { label: "My placements", to: "/client/requisitions" },
+            { label: "Placement" },
           ]}
-          title="Loading requisition…"
+          title="Loading placement…"
         />
-        <LoadingSkeleton variant="card" rows={3} label="Loading requisition…" />
+        <LoadingSkeleton variant="card" rows={3} label="Loading placement…" />
       </>
     );
   }
@@ -97,10 +98,10 @@ export function ClientRequisitionDetailPage() {
         <PageHeader
           breadcrumbs={[
             { label: "Dashboard", to: "/client" },
-            { label: "My requisitions", to: "/client/requisitions" },
-            { label: "Requisition" },
+            { label: "My placements", to: "/client/requisitions" },
+            { label: "Placement" },
           ]}
-          title="Requisition"
+          title="Placement"
         />
         <ErrorState
           error={requisitionQuery.error}
@@ -118,20 +119,22 @@ export function ClientRequisitionDetailPage() {
     requisition.principalUserId !== null &&
     me.user.id === requisition.principalUserId;
 
+  // T16: the client reads the job description they (or SDB) wrote — the
+  // admin-authored brief was retired in 0018.
   const hasBrief =
-    requisition.briefMarkdown !== null &&
-    requisition.briefMarkdown.trim() !== "";
+    requisition.jobDescription !== null &&
+    requisition.jobDescription.trim() !== "";
 
   return (
     <>
       <PageHeader
         breadcrumbs={[
           { label: "Dashboard", to: "/client" },
-          { label: "My requisitions", to: "/client/requisitions" },
-          { label: requisition.reference },
+          { label: "My placements", to: "/client/requisitions" },
+          { label: requisition.advertisedTitle ?? "Untitled role" },
         ]}
         title={requisition.advertisedTitle ?? "Untitled role"}
-        subtitle={`${requisition.reference} · submitted ${formatDate(requisition.submittedAt)}`}
+        subtitle={`Opened ${formatDate(requisition.submittedAt)}`}
       />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -164,6 +167,17 @@ export function ClientRequisitionDetailPage() {
             )
           ) : null}
           <ClientStageTracker status={requisition.status} />
+
+          {/* Post-hire guarantee (T31). Rebecca, 37:34: "under hire, let's
+              have it automatically say like first 30-day period, 60-day,
+              90-day." Sits under the tracker, which ends at "Hired". */}
+          {requisition.placement !== null ? (
+            <Card>
+              <CardContent className="p-4">
+                <GuaranteeProgress placement={requisition.placement} />
+              </CardContent>
+            </Card>
+          ) : null}
         </aside>
 
         {/* ----- Main column ----- */}
@@ -175,10 +189,10 @@ export function ClientRequisitionDetailPage() {
                   aria-hidden="true"
                   className="h-4 w-4 text-neutral-500"
                 />
-                <CardTitle className="text-base">Role brief</CardTitle>
+                <CardTitle className="text-base">Job description</CardTitle>
               </CardHeader>
               <CardContent>
-                <SimpleMarkdown source={requisition.briefMarkdown ?? ""} />
+                <SimpleMarkdown source={requisition.jobDescription ?? ""} />
               </CardContent>
             </Card>
           ) : null}

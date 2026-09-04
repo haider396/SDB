@@ -173,7 +173,7 @@ export function IntakeForm({
     defaultValues: prefill === undefined ? {} : { ...prefill },
   });
   const values = form.watch();
-  const { errors: fieldErrors, isDirty, isSubmitted } = form.formState;
+  const { errors: fieldErrors, isDirty } = form.formState;
 
   // Unsaved-changes guard (05 §4.4, AC-UI-09). Both modes confirm before
   // tab close; in portal mode the registration additionally arms the client
@@ -296,7 +296,7 @@ export function IntakeForm({
       if (isPortal) {
         const result = await submitInPortalMutation.mutateAsync(submission);
         setAnnouncement(
-          `Your request was submitted. Reference ${result.requisitionReference}.`,
+          "Your request was submitted.",
         );
         onSubmitted?.(result);
         return;
@@ -304,7 +304,7 @@ export function IntakeForm({
       const result = await submitMutation.mutateAsync(submission);
       setSubmitted(result);
       setAnnouncement(
-        `Your request was submitted. Reference ${result.requisitionReference}.`,
+        "Your request was submitted.",
       );
     } catch (error) {
       const mapped = mapSubmissionError(error);
@@ -369,7 +369,7 @@ export function IntakeForm({
         <p aria-live="polite" className="sr-only">
           {announcement}
         </p>
-        <Confirmation requisitionReference={submitted.requisitionReference} />
+        <Confirmation />
       </div>
     );
   }
@@ -387,8 +387,21 @@ export function IntakeForm({
       message:
         fieldErrors[question.key]?.message ?? "This answer needs attention.",
     }));
-  const showSummary =
-    serverError !== null || (isSubmitted && summaryEntries.length > 0);
+  /**
+   * Summary for SERVER errors only.
+   *
+   * 05 §4.4 asks for "errors summarised at the top with anchor links to each
+   * field", and that earns its place when the offending field is on another
+   * step or otherwise off-screen — which is exactly the server-error case,
+   * since the server validates every step at once.
+   *
+   * It does NOT earn its place for client-side required checks: those fields
+   * are on the step you are looking at, already carry an inline message
+   * directly beneath them, and the banner just restates all of them at once —
+   * which reads as a wall of red rather than as help. Client-side errors are
+   * inline only.
+   */
+  const showSummary = serverError !== null;
 
   return (
     <form

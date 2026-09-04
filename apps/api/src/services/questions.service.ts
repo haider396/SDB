@@ -5,7 +5,10 @@
  * Guard rails enforced here:
  * - `key` immutable after creation (auto-slug from label at create only)
  * - `question_type` frozen once answered → 409 QUESTION_TYPE_LOCKED
- * - mapped question keys cannot be archived or re-keyed → 409 MAPPED_QUESTION_PROTECTED
+ * - mapped question keys — CLIENT and CANDIDATE alike — cannot be archived or
+ *   re-keyed → 409 MAPPED_QUESTION_PROTECTED
+ * - the identity question ('email') cannot be deactivated → 409
+ * - a question cannot leave audience 'candidate' while a form still uses it → 409
  * - validation bag strict-parsed → 422 INVALID_VALIDATION_RULE
  * - conditional cycles rejected → 422 CIRCULAR_CONDITION
  * - deactivating a question with conditional dependents → 200 + warnings[]
@@ -15,12 +18,14 @@
  */
 import {
   ValidationRulesSchema,
+  isCandidateMappedQuestionKey,
   isMappedQuestionKey,
   type CreateQuestionBody,
   type CreateQuestionCategoryBody,
   type CreateQuestionOptionBody,
   type ListQuestionsQuery,
   type Question,
+  type QuestionAudience,
   type QuestionCategory,
   type QuestionConditional,
   type QuestionDeactivateWarning,
@@ -67,6 +72,7 @@ import {
   type CategoryRecord,
   type QuestionRecord,
 } from '../repositories/questions.repo.js';
+import { listFormsUsingQuestion } from '../repositories/candidate-forms.repo.js';
 import { emitEvent } from './events.js';
 
 export interface Actor {
@@ -79,6 +85,49 @@ export interface QuestionsServiceDeps {
   /** Intake-form cache invalidation hook — called on every write. */
   invalidateFormCache: () => void;
 }
+
+/**
+ * Mapped in EITHER direction.
+ *
+ * Two lists exist — MAPPED_QUESTION_KEYS (client) and
+ * CANDIDATE_MAPPED_QUESTION_KEYS (candidate) — and until now only the client
+ * one was enforced, so `DELETE /questions/<the email question>` archived the
+ * field that identifies every candidate and returned 204. Both lists name
+ * questions whose answers project onto real columns, so both deserve the same
+ * protection.
+ */
+function isProtectedQuestionKey(key: string): boolean {
+  return isMappedQuestionKey(key) || isCandidateMappedQuestionKey(key);
+}
+
+/**
+ * A candidate question belongs in a candidate category, and nothing else does.
+ *
+ * Categories are how the two admin surfaces stay apart (0025): the Questions
+ * page loads client categories, the form builder loads candidate ones. A
+ * question filed on the wrong side would be invisible on both.
+ *
+ * Only the candidate boundary is policed — 'internal' questions have always
+ * lived alongside client ones and continue to.
+ */
+function assertCategoryMatchesAudience(
+  category: { key: string; audience: QuestionAudience },
+  audience: QuestionAudience,
+): void {
+  const categoryIsCandidate = category.audience === 'candidate';
+  const questionIsCandidate = audience === 'candidate';
+  if (categoryIsCandidate === questionIsCandidate) return;
+  throw new ApiError(
+    'VALIDATION_FAILED',
+    questionIsCandidate
+      ? `'${category.key}' is not a candidate category, so a candidate question cannot live in it.`
+      : `'${category.key}' is a candidate category and only holds candidate questions.`,
+    { fields: { categoryId: 'Wrong category for this audience.' } },
+  );
+}
+
+/** Email is candidate identity: a form cannot even activate without it. */
+const IDENTITY_QUESTION_KEY = 'email';
 
 const SELECT_TYPES = new Set(['single_select', 'multi_select']);
 
@@ -220,6 +269,7 @@ function mapCategory(record: CategoryRecord): QuestionCategory {
     label: record.label,
     description: record.description,
     sortOrder: record.sortOrder,
+    audience: record.audience,
     isActive: record.isActive,
     questionCount: record.questionCount,
     createdAt: toIso(record.createdAt),
@@ -260,7 +310,10 @@ export interface QuestionsService {
     optionId: string,
     actor: Actor,
   ): Promise<QuestionDetail>;
-  listCategories(filter: { isActive?: boolean }): Promise<QuestionCategory[]>;
+  listCategories(filter: {
+    isActive?: boolean;
+    audience?: QuestionAudience;
+  }): Promise<QuestionCategory[]>;
   createCategory(
     body: CreateQuestionCategoryBody,
     actor: Actor,
@@ -359,11 +412,16 @@ export function createQuestionsService(
     if (assembled === undefined) {
       throw new ApiError('NOT_FOUND', 'Question not found.');
     }
-    const dependents = await listDependents(db, id);
+    // Both reads are independent of each other, so pay for one round trip.
+    const [dependents, usedByForms] = await Promise.all([
+      listDependents(db, id),
+      listFormsUsingQuestion(db, id),
+    ]);
     return {
       ...assembled,
       lastAnsweredAt: assembled.lastAnsweredAt ?? null,
       dependents,
+      usedByForms,
     };
   }
 
@@ -383,6 +441,7 @@ export function createQuestionsService(
         ...(query.roleCategoryId !== undefined
           ? { roleCategoryId: query.roleCategoryId }
           : {}),
+        ...(query.audience !== undefined ? { audience: query.audience } : {}),
       });
       return assemble(records, {
         includeLastAnswered: query.includeAnswerCounts === true,
@@ -398,6 +457,7 @@ export function createQuestionsService(
       if (category === null) {
         throw new ApiError('NOT_FOUND', 'Question category not found.');
       }
+      assertCategoryMatchesAudience(category, body.audience);
       const validation = parseValidationBag(body.validation);
       if (
         body.options !== undefined &&
@@ -500,7 +560,7 @@ export function createQuestionsService(
 
       // Guard rail: `key` is immutable after creation (03 §1.5, AC-Q-06/07).
       if (body.key !== undefined && body.key !== current.key) {
-        if (isMappedQuestionKey(current.key)) {
+        if (isProtectedQuestionKey(current.key)) {
           throw new ApiError(
             'MAPPED_QUESTION_PROTECTED',
             `'${current.key}' is a mapped question; its key cannot be changed.`,
@@ -512,6 +572,31 @@ export function createQuestionsService(
           'A question key is immutable after creation.',
           { fields: { key: 'Key is immutable after creation.' } },
         );
+      }
+
+      /*
+       * Guard rail: a question cannot walk away from the candidate audience
+       * while a form still uses it.
+       *
+       * The public renderer intersects a form's blocks against the
+       * candidate-audience question set, so flipping this to 'client' makes
+       * the question vanish from every published form mid-flight — and
+       * silently, because the block row survives. It also blocks that form
+       * from ever being activated again.
+       */
+      if (
+        body.audience !== undefined &&
+        body.audience !== current.audience &&
+        current.audience === 'candidate'
+      ) {
+        const usedBy = await listFormsUsingQuestion(db, id);
+        if (usedBy.length > 0) {
+          throw new ApiError(
+            'MAPPED_QUESTION_PROTECTED',
+            `'${current.key}' is used by ${String(usedBy.length)} candidate form(s) and cannot change audience. Remove it from ${usedBy.map((form) => form.label).join(', ')} first.`,
+            { key: current.key, forms: usedBy },
+          );
+        }
       }
 
       // Guard rail: question_type frozen once answered (03 §1.5, AC-Q-05).
@@ -532,11 +617,16 @@ export function createQuestionsService(
           ? undefined
           : parseValidationBag(body.validation);
 
-      if (body.categoryId !== undefined) {
-        const category = await findCategoryById(db, body.categoryId);
+      if (body.categoryId !== undefined || body.audience !== undefined) {
+        // Check the pair the row will END UP with, not just the half that
+        // changed: moving a candidate question into a client category and
+        // flipping its audience in one call must still agree at the end.
+        const targetCategoryId = body.categoryId ?? current.categoryId;
+        const category = await findCategoryById(db, targetCategoryId);
         if (category === null) {
           throw new ApiError('NOT_FOUND', 'Question category not found.');
         }
+        assertCategoryMatchesAudience(category, body.audience ?? current.audience);
       }
 
       let conditionalPatch:
@@ -651,8 +741,31 @@ export function createQuestionsService(
       const current = await requireQuestion(id);
       const warnings: QuestionDeactivateWarning[] = [];
 
+      if (!isActive && current.key === IDENTITY_QUESTION_KEY) {
+        // Not merely a warning. Email is how a submission is matched to a
+        // candidate; a live form would go on asking for it while the question
+        // could no longer be answered, and no form could be activated again
+        // (candidate-forms.service.ts requires it).
+        throw new ApiError(
+          'MAPPED_QUESTION_PROTECTED',
+          "'email' identifies a candidate and cannot be deactivated. Every candidate form must ask for it.",
+          { key: current.key },
+        );
+      }
+
       if (!isActive) {
         const dependents = await listDependents(db, id);
+        if (isProtectedQuestionKey(current.key)) {
+          // Allowed — it simply stops populating its column — but the admin
+          // should know the profile field behind it goes quiet.
+          warnings.push({
+            code: 'MAPPED_QUESTION',
+            message:
+              `'${current.key}' fills a field on the candidate profile. Deactivating it stops that field being captured on new applications.`,
+            dependent: null,
+          });
+        }
+
         for (const dependent of dependents.filter((entry) => entry.isActive)) {
           warnings.push({
             code: 'CONDITIONAL_DEPENDENT',
@@ -685,7 +798,7 @@ export function createQuestionsService(
     async archiveQuestion(id, actor) {
       const current = await requireQuestion(id);
       // Guard rail: mapped questions cannot be deleted (03 §3.4, AC-Q-07).
-      if (isMappedQuestionKey(current.key)) {
+      if (isProtectedQuestionKey(current.key)) {
         throw new ApiError(
           'MAPPED_QUESTION_PROTECTED',
           `'${current.key}' is a mapped question and cannot be deleted. Deactivate it instead.`,
@@ -918,6 +1031,8 @@ export function createQuestionsService(
           label: body.label,
           description: body.description ?? null,
           sortOrder: body.sortOrder ?? siblings.length + 1,
+          // Defaults to the intake side; the form builder passes 'candidate'.
+          audience: body.audience ?? 'client',
         });
         await emitEvent(tx, {
           entityType: 'question_category',

@@ -11,6 +11,10 @@ export default defineConfig({
     },
   },
   server: {
+    // Bind IPv4 loopback explicitly. Vite's default resolves "localhost" to
+    // ::1 ONLY on this Node version, so a browser that resolves localhost to
+    // 127.0.0.1 gets connection-refused while curl (which picks ::1) succeeds.
+    host: "127.0.0.1",
     port: 5173,
   },
   test: {

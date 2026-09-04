@@ -26,6 +26,7 @@ export interface CategoryRecord {
   label: string;
   description: string | null;
   sortOrder: number;
+  audience: QuestionAudience;
   isActive: boolean;
   questionCount: number;
   createdAt: Date;
@@ -38,6 +39,7 @@ interface CategoryRow {
   label: string;
   description: string | null;
   sort_order: number;
+  audience: QuestionAudience;
   is_active: boolean;
   question_count: string | number;
   created_at: Date;
@@ -51,6 +53,7 @@ function mapCategory(row: CategoryRow): CategoryRecord {
     label: row.label,
     description: row.description,
     sortOrder: row.sort_order,
+    audience: row.audience,
     isActive: row.is_active,
     questionCount: Number(row.question_count),
     createdAt: row.created_at,
@@ -182,14 +185,21 @@ const QUESTION_SELECT = (sql: Queryable) => sql`
 
 export async function listCategories(
   sql: Queryable,
-  filter: { isActive?: boolean } = {},
+  filter: { isActive?: boolean; audience?: QuestionAudience } = {},
 ): Promise<CategoryRecord[]> {
   const rows = await sql<CategoryRow[]>`
     select c.*,
            (select count(*) from questions q
-             where q.category_id = c.id and q.archived_at is null) as question_count
+             where q.category_id = c.id
+               and q.archived_at is null
+               and q.audience = c.audience) as question_count
     from question_categories c
     where ${filter.isActive === undefined ? sql`true` : sql`c.is_active = ${filter.isActive}`}
+      and ${
+        filter.audience === undefined
+          ? sql`true`
+          : sql`c.audience = ${filter.audience}::question_audience`
+      }
     order by c.sort_order, c.created_at, c.id
   `;
   return rows.map(mapCategory);
@@ -202,7 +212,9 @@ export async function findCategoryById(
   const rows = await sql<CategoryRow[]>`
     select c.*,
            (select count(*) from questions q
-             where q.category_id = c.id and q.archived_at is null) as question_count
+             where q.category_id = c.id
+               and q.archived_at is null
+               and q.audience = c.audience) as question_count
     from question_categories c
     where c.id = ${id}
   `;
@@ -222,11 +234,13 @@ export async function insertCategory(
     label: string;
     description: string | null;
     sortOrder: number;
+    audience: QuestionAudience;
   },
 ): Promise<string> {
   const rows = await sql<{ id: string }[]>`
-    insert into question_categories (key, label, description, sort_order)
-    values (${input.key}, ${input.label}, ${input.description}, ${input.sortOrder})
+    insert into question_categories (key, label, description, sort_order, audience)
+    values (${input.key}, ${input.label}, ${input.description}, ${input.sortOrder},
+            ${input.audience}::question_audience)
     returning id
   `;
   const row = rows[0];
@@ -284,6 +298,7 @@ export async function listQuestions(
     categoryId?: string;
     isActive?: boolean;
     roleCategoryId?: string;
+    audience?: QuestionAudience;
   } = {},
 ): Promise<QuestionRecord[]> {
   const rows = await sql<QuestionRow[]>`
@@ -291,6 +306,11 @@ export async function listQuestions(
     where q.archived_at is null
       and ${filter.categoryId === undefined ? sql`true` : sql`q.category_id = ${filter.categoryId}`}
       and ${filter.isActive === undefined ? sql`true` : sql`q.is_active = ${filter.isActive}`}
+      and ${
+        filter.audience === undefined
+          ? sql`true`
+          : sql`q.audience = ${filter.audience}::question_audience`
+      }
       and ${
         filter.roleCategoryId === undefined
           ? sql`true`

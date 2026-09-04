@@ -15,6 +15,7 @@
  * event, and one queued notification_log row per active admin (dispatch is P7).
  */
 import {
+  FullTimeTransitionSchema,
   AccentStrengthSchema,
   EngagementTypeSchema,
   LanguageLevelSchema,
@@ -515,6 +516,19 @@ export function buildSnapshot(
     label: question.label,
     questionType: question.questionType,
     categoryKey: question.categoryKey,
+    /*
+     * The section heading as the person saw it.
+     *
+     * categoryKey alone is not enough to redisplay an answer honestly: the
+     * candidate keys read 'candidate_work_setup' where the form says "Your
+     * working setup", so a reader falling back to the key sees a heading no
+     * candidate was ever shown. The key stays because it is the stable
+     * identifier; the label is what the screen said.
+     *
+     * Additive — rows written before this carry no categoryLabel, and readers
+     * fall back to humanising the key.
+     */
+    categoryLabel: question.categoryLabel,
     capturedAt,
   };
   if (question.helpText !== null) snapshot['helpText'] = question.helpText;
@@ -554,6 +568,8 @@ async function projectMappedAnswers(
   const byKey = new Map(prepared.map((entry) => [entry.question.key, entry]));
   const text = (key: string): string | null => byKey.get(key)?.valueText ?? null;
   const num = (key: string): number | null => byKey.get(key)?.valueNumber ?? null;
+  const bool = (key: string): boolean | null =>
+    byKey.get(key)?.valueBoolean ?? null;
 
   // engine / department: derived from the role-category lineage; an explicit
   // answer whose value resolves to a real taxonomy key overrides.
@@ -653,6 +669,20 @@ async function projectMappedAnswers(
       maxAccentStrength: accentParse.success ? accentParse.data : null,
       intakeContactName: text('contact_name'),
       intakeContactEmail: text('contact_email'),
+      // T16 — the client's own words, projected onto first-class columns so
+      // the sourcing gate can read job_description without parsing answers.
+      // T14 — a part-time start that grows to full-time. The transition value
+      // is validated against FullTimeTransitionSchema so a reworded option
+      // cannot quietly write an unknown string to the column.
+      startsPartTime: bool('starts_part_time'),
+      fullTimeTransitionAfter: (() => {
+        const parsed = FullTimeTransitionSchema.safeParse(
+          text('full_time_transition_after'),
+        );
+        return parsed.success ? parsed.data : null;
+      })(),
+      jobDescription: text('job_description'),
+      roleDescription: text('role_description'),
     },
   };
 }

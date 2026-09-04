@@ -4,7 +4,7 @@
  * grouping comes from the snapshot's categoryKey. No live-question endpoint
  * is ever called.
  */
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   installApiMock,
@@ -101,7 +101,10 @@ describe("answers from snapshots", () => {
       screen.getByText("Professional (snapshot label)"),
     ).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("Yes")).toBeInTheDocument();
+    // Scoped to the answers card: "Yes" is also an <option> in the editable
+    // fields form (part-time start), so a document-wide query is ambiguous.
+    const requirements = screen.getByRole("region", { name: "Requirements" });
+    expect(within(requirements).getByText("Yes")).toBeInTheDocument();
 
     // Category grouping comes from the snapshot's categoryKey, humanized.
     expect(screen.getByText("Requirements")).toBeInTheDocument();

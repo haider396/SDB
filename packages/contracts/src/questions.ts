@@ -96,8 +96,22 @@ export const QuestionDependentSchema = z.object({
 export type QuestionDependent = z.infer<typeof QuestionDependentSchema>;
 
 /** `GET /questions/:id` — question plus dependents and usage stats. */
+/** A candidate form that has this question on one of its versions. */
+export const QuestionFormUsageSchema = z.object({
+  formId: z.string().uuid(),
+  label: z.string(),
+  status: z.string(),
+});
+export type QuestionFormUsage = z.infer<typeof QuestionFormUsageSchema>;
+
 export const QuestionDetailSchema = QuestionSchema.extend({
   dependents: z.array(QuestionDependentSchema),
+  /**
+   * Which candidate forms use this question. Editing a question changes it for
+   * all of them at once, so the builder shows this before letting an admin
+   * rename wording or retire a question.
+   */
+  usedByForms: z.array(QuestionFormUsageSchema),
   lastAnsweredAt: z.string().datetime({ offset: true }).nullable(),
 });
 export type QuestionDetail = z.infer<typeof QuestionDetailSchema>;
@@ -157,9 +171,17 @@ export type ReorderQuestionsBody = z.infer<typeof ReorderQuestionsBodySchema>;
  * dependents (AC-Q-09, 03 §2.3).
  */
 export const QuestionDeactivateWarningSchema = z.object({
-  code: z.literal('CONDITIONAL_DEPENDENT'),
+  /**
+   * CONDITIONAL_DEPENDENT — another question is shown based on this one and
+   * will stop appearing.
+   * MAPPED_QUESTION — this question fills a column on the candidate profile,
+   * which stops being captured. Allowed, unlike deactivating 'email', which is
+   * refused outright.
+   */
+  code: z.enum(['CONDITIONAL_DEPENDENT', 'MAPPED_QUESTION']),
   message: z.string(),
-  dependent: QuestionDependentSchema,
+  /** Null for warnings that are about the question itself, not another one. */
+  dependent: QuestionDependentSchema.nullable(),
 });
 export type QuestionDeactivateWarning = z.infer<
   typeof QuestionDeactivateWarningSchema
@@ -175,6 +197,12 @@ export const QuestionCategorySchema = z.object({
   label: z.string(),
   description: z.string().nullable(),
   sortOrder: z.number().int(),
+  /**
+   * Which admin surface manages this category: 'candidate' categories belong
+   * to the form builder, everything else to the Questions page. It does not
+   * constrain the audience of the questions inside (0025).
+   */
+  audience: QuestionAudienceSchema,
   isActive: z.boolean(),
   questionCount: z.number().int().nonnegative(),
   createdAt: z.string().datetime({ offset: true }),
@@ -187,6 +215,8 @@ export const CreateQuestionCategoryBodySchema = z.object({
   label: z.string().min(1).max(500),
   description: z.string().max(2000).nullable().optional(),
   sortOrder: z.number().int().optional(),
+  /** Defaults to 'client' — the form builder passes 'candidate'. */
+  audience: QuestionAudienceSchema.optional(),
 });
 export type CreateQuestionCategoryBody = z.infer<
   typeof CreateQuestionCategoryBodySchema
@@ -223,6 +253,12 @@ const QueryBooleanSchema = z
 
 export const ListQuestionsQuerySchema = z.object({
   categoryId: z.string().uuid().optional(),
+  /**
+   * Filter by audience. Previously every consumer fetched the lot and filtered
+   * in the browser, which meant the Questions page's search could surface
+   * questions its own list does not show.
+   */
+  audience: QuestionAudienceSchema.optional(),
   isActive: QueryBooleanSchema.optional(),
   roleCategoryId: z.string().uuid().optional(),
   includeAnswerCounts: QueryBooleanSchema.optional(),
@@ -231,6 +267,8 @@ export type ListQuestionsQuery = z.infer<typeof ListQuestionsQuerySchema>;
 
 export const ListQuestionCategoriesQuerySchema = z.object({
   isActive: QueryBooleanSchema.optional(),
+  /** Omit for every category; the two admin surfaces each pass their own. */
+  audience: QuestionAudienceSchema.optional(),
 });
 export type ListQuestionCategoriesQuery = z.infer<
   typeof ListQuestionCategoriesQuerySchema

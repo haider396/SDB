@@ -97,6 +97,7 @@ export const SUBMISSION_CHANNEL_LABELS: Record<SubmissionChannel, string> = {
   manual: "Manual",
   webhook: "Webhook",
   csv_import: "CSV import",
+  self_registration: "Self-registered",
 };
 
 export const FILE_TYPE_LABELS: Record<CandidateFileType, string> = {

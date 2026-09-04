@@ -19,6 +19,12 @@ export interface ClientRequisitionSummaryRecord {
   status: RequisitionStatus;
   submittedAt: string;
   updatedAt: string;
+  /** The placement once someone is hired, else null (T31). */
+  placement: {
+    startDate: string;
+    guaranteeEndDate: string | null;
+    status: string;
+  } | null;
 }
 
 /** The caller's own requisitions, newest first. */
@@ -35,12 +41,29 @@ export async function listClientRequisitionSummaries(
       status: RequisitionStatus;
       submitted_at: Date;
       updated_at: Date;
+      placement_start_date: string | null;
+      placement_guarantee_end_date: string | null;
+      placement_status: string | null;
     }[]
   >`
-    select id, public_id, reference, advertised_title, status, submitted_at, updated_at
-    from requisitions
-    where client_id = ${clientId}
-    order by created_at desc, id desc
+    select r.id, r.public_id, r.reference, r.advertised_title, r.status,
+           r.submitted_at, r.updated_at,
+           p.start_date::text          as placement_start_date,
+           p.guarantee_end_date::text  as placement_guarantee_end_date,
+           p.status::text              as placement_status
+    from requisitions r
+    -- At most one placement per requisition in practice; LATERAL keeps it to
+    -- one row even if that ever stops being true, and avoids fanning out the
+    -- requisition list.
+    left join lateral (
+      select start_date, guarantee_end_date, status
+      from placements
+      where requisition_id = r.id
+      order by created_at desc
+      limit 1
+    ) p on true
+    where r.client_id = ${clientId}
+    order by r.created_at desc, r.id desc
   `;
   return rows.map((row) => ({
     id: row.id,
@@ -50,6 +73,14 @@ export async function listClientRequisitionSummaries(
     status: row.status,
     submittedAt: row.submitted_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+    placement:
+      row.placement_start_date === null || row.placement_status === null
+        ? null
+        : {
+            startDate: row.placement_start_date,
+            guaranteeEndDate: row.placement_guarantee_end_date,
+            status: row.placement_status,
+          },
   }));
 }
 

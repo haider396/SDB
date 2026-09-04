@@ -242,7 +242,7 @@ export async function insertQuestion(
     questionType: string;
     key?: string;
     label?: string;
-    audience?: 'client' | 'internal';
+    audience?: 'client' | 'internal' | 'candidate';
     isRequired?: boolean;
     isActive?: boolean;
     sortOrder?: number;

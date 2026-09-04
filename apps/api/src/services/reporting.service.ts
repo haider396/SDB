@@ -30,6 +30,7 @@ import type { Db } from '../lib/db.js';
 import { ApiError } from '../lib/errors.js';
 import {
   countActivePlacements,
+  countPlacementsByGuaranteeWindow,
   countOpenRequisitions,
   getAverageDaysToPresent,
   getCandidatesByStage,
@@ -80,18 +81,25 @@ export function createReportingService(
   return {
     async getAdminStats(actor) {
       assertAdminSurface(actor);
-      const [openRequisitions, candidatesByStage, averageDaysToPresent, activePlacements] =
-        await Promise.all([
-          countOpenRequisitions(db),
-          getCandidatesByStage(db),
-          getAverageDaysToPresent(db),
-          countActivePlacements(db),
-        ]);
+      const [
+        openRequisitions,
+        candidatesByStage,
+        averageDaysToPresent,
+        activePlacements,
+        placementsByGuaranteeWindow,
+      ] = await Promise.all([
+        countOpenRequisitions(db),
+        getCandidatesByStage(db),
+        getAverageDaysToPresent(db),
+        countActivePlacements(db),
+        countPlacementsByGuaranteeWindow(db),
+      ]);
       return {
         openRequisitions,
         candidatesByStage,
         averageDaysToPresent,
         activePlacements,
+        placementsByGuaranteeWindow,
       };
     },
 

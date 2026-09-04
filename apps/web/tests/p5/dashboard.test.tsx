@@ -58,6 +58,7 @@ describe("client dashboard", () => {
             submittedAt: NOW,
             updatedAt: NOW,
             stageCounts: {},
+            placement: null,
           },
         ],
         pendingActions: {
@@ -117,6 +118,7 @@ describe("client dashboard", () => {
             submittedAt: NOW,
             updatedAt: NOW,
             stageCounts: {},
+            placement: null,
           },
         ],
       }),
@@ -164,6 +166,7 @@ describe("client dashboard", () => {
             submittedAt: NOW,
             updatedAt: NOW,
             stageCounts: {},
+            placement: null,
           },
         ],
         recentEvents: [
@@ -220,6 +223,7 @@ describe("client dashboard", () => {
             submittedAt: NOW,
             updatedAt: NOW,
             stageCounts: {},
+            placement: null,
           },
         ],
       }),
@@ -253,6 +257,7 @@ describe("client dashboard", () => {
             submittedAt: NOW,
             updatedAt: NOW,
             stageCounts: { placed: 1 },
+            placement: null,
           },
           {
             id: openId,
@@ -263,6 +268,7 @@ describe("client dashboard", () => {
             submittedAt: NOW,
             updatedAt: NOW,
             stageCounts: { presented: 1 },
+            placement: null,
           },
         ],
         pendingActions: {

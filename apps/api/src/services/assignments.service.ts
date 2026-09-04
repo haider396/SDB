@@ -43,6 +43,7 @@ import {
   type RejectionActor,
   type UpdateAssignmentBody,
   type UserRoleKey,
+  defaultGuaranteeEndDate,
 } from '@sdb/contracts';
 import { withTransaction, type Db, type Tx } from '../lib/db.js';
 import { ApiError } from '../lib/errors.js';
@@ -258,7 +259,7 @@ export function createAssignmentsService(
         ? await findRequisitionById(sql, requisitionId)
         : await findRequisitionById(sql, requisitionId, clientId);
     if (record === null) {
-      throw new ApiError('NOT_FOUND', 'Requisition not found.');
+      throw new ApiError('NOT_FOUND', 'Placement not found.');
     }
     return record;
   }
@@ -907,7 +908,11 @@ export function createAssignmentsService(
           rateCurrency: body.rateCurrency ?? null,
           hoursPerWeek: body.hoursPerWeek ?? null,
           serviceTier: body.serviceTier ?? null,
-          guaranteeEndDate: body.guaranteeEndDate ?? null,
+          // Default to the 90-day guarantee (T31) rather than null. Left
+          // null, a placement has no window for the milestone view or the
+          // auto-close job to work from — the admin can still override it.
+          guaranteeEndDate:
+            body.guaranteeEndDate ?? defaultGuaranteeEndDate(body.startDate),
         });
         await emitEvent(tx, {
           entityType: 'assignment',

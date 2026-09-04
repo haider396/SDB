@@ -317,11 +317,14 @@ export async function questionRoutes(
       },
     },
     async (request) => {
-      const data = await questionsService.listCategories(
-        request.query.isActive === undefined
+      const data = await questionsService.listCategories({
+        ...(request.query.isActive === undefined
           ? {}
-          : { isActive: request.query.isActive },
-      );
+          : { isActive: request.query.isActive }),
+        ...(request.query.audience === undefined
+          ? {}
+          : { audience: request.query.audience }),
+      });
       return { data, meta: { count: data.length, nextCursor: null } };
     },
   );

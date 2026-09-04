@@ -341,7 +341,7 @@ export function CandidatesListPage() {
       <PageHeader
         breadcrumbs={[{ label: "Admin", to: "/admin" }, { label: "Candidates" }]}
         title="Candidates"
-        subtitle="The talent pool across all requisitions"
+        subtitle="The talent pool across all placements"
         actions={
           <Button asChild>
             <Link to="/admin/candidates/new">

@@ -39,6 +39,8 @@ export interface RequisitionRecord {
   seniorityLevel: SeniorityLevel | null;
   engagementType: EngagementType | null;
   hoursPerWeek: number | null;
+  startsPartTime: boolean | null;
+  fullTimeTransitionAfter: string | null;
   overlapStart: string | null;
   overlapEnd: string | null;
   overlapTimezone: string | null;
@@ -46,6 +48,8 @@ export interface RequisitionRecord {
   urgency: string | null;
   regionPreference: string | null;
   briefMarkdown: string | null;
+  jobDescription: string | null;
+  roleDescription: string | null;
   principalUserId: string | null;
   principalApprovedAt: string | null;
   principalChangeRequest: string | null;
@@ -80,6 +84,8 @@ interface RequisitionRow {
   seniority_level: SeniorityLevel | null;
   engagement_type: EngagementType | null;
   hours_per_week: number | null;
+  starts_part_time: boolean | null;
+  full_time_transition_after: string | null;
   overlap_start: string | null;
   overlap_end: string | null;
   overlap_timezone: string | null;
@@ -87,6 +93,8 @@ interface RequisitionRow {
   urgency: string | null;
   region_preference: string | null;
   brief_markdown: string | null;
+  job_description: string | null;
+  role_description: string | null;
   principal_user_id: string | null;
   principal_approved_at: Date | null;
   principal_change_request: string | null;
@@ -126,6 +134,8 @@ function mapRequisition(row: RequisitionRow): RequisitionRecord {
     seniorityLevel: row.seniority_level,
     engagementType: row.engagement_type,
     hoursPerWeek: row.hours_per_week,
+    startsPartTime: row.starts_part_time,
+    fullTimeTransitionAfter: row.full_time_transition_after,
     overlapStart: row.overlap_start,
     overlapEnd: row.overlap_end,
     overlapTimezone: row.overlap_timezone,
@@ -133,6 +143,8 @@ function mapRequisition(row: RequisitionRow): RequisitionRecord {
     urgency: row.urgency,
     regionPreference: row.region_preference,
     briefMarkdown: row.brief_markdown,
+    jobDescription: row.job_description,
+    roleDescription: row.role_description,
     principalUserId: row.principal_user_id,
     principalApprovedAt: iso(row.principal_approved_at),
     principalChangeRequest: row.principal_change_request,
@@ -160,7 +172,9 @@ const REQUISITION_COLUMNS = `
   r.overlap_start::text as overlap_start, r.overlap_end::text as overlap_end,
   r.overlap_timezone,
   r.target_start_date::text as target_start_date, r.urgency, r.region_preference,
-  r.brief_markdown, r.principal_user_id, r.principal_approved_at,
+  r.brief_markdown, r.job_description, r.role_description,
+  r.starts_part_time, r.full_time_transition_after,
+  r.principal_user_id, r.principal_approved_at,
   r.principal_change_request, r.intake_contact_name, r.intake_contact_email,
   r.submitted_at, r.sourcing_started_at, r.closed_at, r.created_at, r.updated_at,
   r.budget_min::text as budget_min, r.budget_max::text as budget_max,
@@ -439,6 +453,8 @@ export async function replaceAnswerOptions(
 export interface RequisitionPatch {
   advertisedTitle?: string | null;
   briefMarkdown?: string | null;
+  jobDescription?: string | null;
+  roleDescription?: string | null;
   headcount?: number;
   budgetMin?: number | null;
   budgetMax?: number | null;
@@ -449,6 +465,8 @@ export interface RequisitionPatch {
   seniorityLevel?: SeniorityLevel | null;
   engagementType?: EngagementType | null;
   hoursPerWeek?: number | null;
+  startsPartTime?: boolean | null;
+  fullTimeTransitionAfter?: string | null;
   overlapStart?: string | null;
   overlapEnd?: string | null;
   overlapTimezone?: string | null;
@@ -466,6 +484,8 @@ export async function updateRequisition(
   const assignments: Record<string, unknown> = {};
   if (patch.advertisedTitle !== undefined) assignments['advertised_title'] = patch.advertisedTitle;
   if (patch.briefMarkdown !== undefined) assignments['brief_markdown'] = patch.briefMarkdown;
+  if (patch.jobDescription !== undefined) assignments['job_description'] = patch.jobDescription;
+  if (patch.roleDescription !== undefined) assignments['role_description'] = patch.roleDescription;
   if (patch.headcount !== undefined) assignments['headcount'] = patch.headcount;
   if (patch.budgetMin !== undefined) assignments['budget_min'] = patch.budgetMin;
   if (patch.budgetMax !== undefined) assignments['budget_max'] = patch.budgetMax;
@@ -478,6 +498,8 @@ export async function updateRequisition(
   if (patch.seniorityLevel !== undefined) assignments['seniority_level'] = patch.seniorityLevel;
   if (patch.engagementType !== undefined) assignments['engagement_type'] = patch.engagementType;
   if (patch.hoursPerWeek !== undefined) assignments['hours_per_week'] = patch.hoursPerWeek;
+  if (patch.startsPartTime !== undefined) assignments['starts_part_time'] = patch.startsPartTime;
+  if (patch.fullTimeTransitionAfter !== undefined) assignments['full_time_transition_after'] = patch.fullTimeTransitionAfter;
   if (patch.overlapStart !== undefined) assignments['overlap_start'] = patch.overlapStart;
   if (patch.overlapEnd !== undefined) assignments['overlap_end'] = patch.overlapEnd;
   if (patch.overlapTimezone !== undefined) {

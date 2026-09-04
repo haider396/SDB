@@ -28,6 +28,8 @@ const baseRequisition = {
   seniorityLevel: null,
   engagementType: null,
   hoursPerWeek: null,
+  startsPartTime: null,
+  fullTimeTransitionAfter: null,
   overlapStart: null,
   overlapEnd: null,
   overlapTimezone: null,

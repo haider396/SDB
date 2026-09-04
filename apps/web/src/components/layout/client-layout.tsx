@@ -45,7 +45,7 @@ export function ClientLayout() {
       badgeCount: principalCount + reviewCount,
     },
     {
-      label: "My requisitions",
+      label: "My placements",
       to: "/client/requisitions",
       icon: ClipboardList,
       badgeCount: reviewCount,

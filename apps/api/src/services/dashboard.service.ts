@@ -14,6 +14,7 @@
  * - recent events are requisition events only, de-duplicated app+trigger
  *   pairs (06 §2.3), capped at 20
  */
+import { ClientPlacementSchema } from '@sdb/contracts';
 import type { ClientDashboard, UserRoleKey } from '@sdb/contracts';
 import type { Db } from '../lib/db.js';
 import { ApiError } from '../lib/errors.js';
@@ -77,6 +78,13 @@ export function createDashboardService(
           submittedAt: summary.submittedAt,
           updatedAt: summary.updatedAt,
           stageCounts: stageCounts.get(summary.id) ?? {},
+          // Parsed rather than passed through: placement_status comes back as
+          // plain text from the enum cast, and the contract's union is what
+          // guarantees the client only ever sees a known status.
+          placement:
+            summary.placement === null
+              ? null
+              : ClientPlacementSchema.parse(summary.placement),
         })),
         pendingActions: {
           principalApprovals: approvals,

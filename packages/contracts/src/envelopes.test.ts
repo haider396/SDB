@@ -104,7 +104,8 @@ describe('ApiErrorSchema', () => {
   });
 
   it('maps every documented code to its HTTP status', () => {
-    expect(Object.keys(ERROR_CODES)).toHaveLength(23);
+    expect(Object.keys(ERROR_CODES)).toHaveLength(24);
+    expect(ERROR_CODES.DUPLICATE_SUBMISSION).toBe(409);
     expect(ERROR_CODES.WRONG_TENANT).toBe(403);
     expect(ERROR_CODES.INVALID_VALIDATION_RULE).toBe(422);
     expect(ERROR_CODES.FILE_TOO_LARGE).toBe(413);

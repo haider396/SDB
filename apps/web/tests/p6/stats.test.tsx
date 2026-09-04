@@ -37,7 +37,7 @@ describe("stats page", () => {
     );
     renderDashboardPage("/admin/stats");
 
-    expect(await screen.findByText("Open requisitions")).toBeInTheDocument();
+    expect(await screen.findByText("Open placements")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("Active placements")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();

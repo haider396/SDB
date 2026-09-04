@@ -5,6 +5,7 @@
 @import "@fontsource/inter/700.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "./tokens.css";
+@import "./form-canvas.css";
 
 @tailwind base;
 @tailwind components;

@@ -37,6 +37,7 @@ export function makeCategory(
     label: overrides.key,
     description: null,
     sortOrder: 1,
+    audience: "client",
     isActive: true,
     questionCount: 0,
     createdAt: NOW,
@@ -73,7 +74,7 @@ export function makeQuestion(
 }
 
 export function toDetail(question: Question): QuestionDetail {
-  return { ...question, dependents: [], lastAnsweredAt: null };
+  return { ...question, dependents: [], usedByForms: [], lastAnsweredAt: null };
 }
 
 export const ROLE_CATEGORY_ID = "00000000-0000-4000-8000-00000000ca01";
@@ -232,19 +233,30 @@ export function installApiMock(
         return jsonResponse({ data: taxonomyPayload });
       }
       if (method === "GET" && path === "/question-categories") {
-        return collection(state.categories);
+        // Honour ?audience= like the real API (0025), so a test can prove the
+        // page asks for one side of the fence rather than filtering after.
+        const audience = url.searchParams.get("audience");
+        return collection(
+          audience === null
+            ? state.categories
+            : state.categories.filter(
+                (category) => category.audience === audience,
+              ),
+        );
       }
       if (method === "GET" && path === "/questions/preview") {
         return jsonResponse({ data: buildPreview(state) });
       }
       if (method === "GET" && path === "/questions") {
         const categoryId = url.searchParams.get("categoryId");
-        const data =
-          categoryId === null
-            ? state.questions
-            : state.questions.filter(
-                (question) => question.categoryId === categoryId,
-              );
+        const audience = url.searchParams.get("audience");
+        const data = state.questions
+          .filter(
+            (question) => categoryId === null || question.categoryId === categoryId,
+          )
+          .filter(
+            (question) => audience === null || question.audience === audience,
+          );
         return collection(data.filter((q) => q.archivedAt === null));
       }
       if (method === "POST" && path === "/questions") {

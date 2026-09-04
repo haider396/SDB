@@ -63,8 +63,13 @@ export function SegmentedControl({
           <span
             className={cn(
               "flex h-8 min-w-9 items-center justify-center rounded-sm px-3 text-sm font-medium text-neutral-600 transition-colors duration-fast",
-              "hover:text-neutral-900",
-              "peer-checked:bg-surface-raised peer-checked:text-brand-navy-ink peer-checked:shadow-xs",
+              "hover:bg-surface-raised hover:text-neutral-900",
+              // Selected state was white-on-light-grey — barely a shade apart,
+              // so "Hourly" and "Monthly" read as equally chosen. A filled
+              // brand pill with inverse text is unmistakable, and pairs the
+              // colour with a weight change so it does not rely on colour
+              // alone (05 §4.6).
+              "peer-checked:bg-brand-blue peer-checked:font-semibold peer-checked:text-brand-on-dark peer-checked:shadow-sm",
               "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-blue",
             )}
           >

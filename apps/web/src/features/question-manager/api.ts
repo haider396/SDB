@@ -28,6 +28,7 @@ import {
   type IntakeFormResponse,
   type PublicTaxonomy,
   type Question,
+  type QuestionAudience,
   type QuestionCategory,
   type QuestionDeactivateWarning,
   type QuestionDetail,
@@ -44,8 +45,12 @@ import {
 
 export const questionKeys = {
   categories: ["question-categories"] as const,
+  categoriesFor: (audience: QuestionAudience | "all") =>
+    ["question-categories", audience] as const,
   questionsRoot: ["questions"] as const,
   allQuestions: ["questions", "all"] as const,
+  allQuestionsFor: (audience: QuestionAudience | "all") =>
+    ["questions", "all", audience] as const,
   questions: (categoryId: string) => ["questions", categoryId] as const,
   detail: (id: string) => ["question-detail", id] as const,
   preview: (roleCategoryId: string | null) =>
@@ -69,24 +74,44 @@ function invalidatePreview(
 // Queries
 // ---------------------------------------------------------------------------
 
-export function useCategories() {
+/**
+ * Categories for one admin surface.
+ *
+ * Since 0025 a category declares which screen manages it: the Questions page
+ * asks for "client", the form builder for "candidate". Filtering here rather
+ * than in the page keeps `questionCount`, reordering and search consistent —
+ * all three break if a page renders a subset of what it fetched.
+ */
+export function useCategories(audience?: QuestionAudience) {
   return useQuery<QuestionCategory[]>({
-    queryKey: questionKeys.categories,
+    queryKey: questionKeys.categoriesFor(audience ?? "all"),
     queryFn: async () => {
       const { data } = await apiFetchCollection<QuestionCategory>(
-        "/question-categories",
+        audience === undefined
+          ? "/question-categories"
+          : `/question-categories?audience=${audience}`,
       );
       return data;
     },
   });
 }
 
-/** Every question across categories — controller choices for conditionals. */
-export function useAllQuestions() {
+/**
+ * Every question across categories — controller choices for conditionals, the
+ * cross-category search, and the form builder's field picker.
+ *
+ * Pass an audience to scope it. Do NOT make the unscoped call filter by
+ * default: the two surfaces want different halves, and a page that shows less
+ * than it fetched is how the search ends up offering a question its own list
+ * refuses to display.
+ */
+export function useAllQuestions(audience?: QuestionAudience) {
   return useQuery<Question[]>({
-    queryKey: questionKeys.allQuestions,
+    queryKey: questionKeys.allQuestionsFor(audience ?? "all"),
     queryFn: async () => {
-      const { data } = await apiFetchCollection<Question>("/questions");
+      const { data } = await apiFetchCollection<Question>(
+        audience === undefined ? "/questions" : `/questions?audience=${audience}`,
+      );
       return data;
     },
   });

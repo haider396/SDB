@@ -13,6 +13,8 @@
 import { useId, type KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { RequisitionStatus } from "@sdb/contracts";
+import { GuaranteeProgress } from "@/components/patterns/guarantee-progress";
+import { Card, CardContent } from "@/components/ui/card";
 import { ErrorState } from "@/components/patterns/error-state";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -21,9 +23,10 @@ import { formatDate } from "@/lib/format";
 import { PipelineTab } from "@/features/pipeline";
 import { useRequisition, useRequisitionEvents } from "./api";
 import { AnswersCard } from "./components/answers-card";
-import { BriefCard } from "./components/brief-card";
+import { DescriptionsCard } from "./components/descriptions-card";
 import { EventLogCard } from "@/components/patterns/event-log-card";
 import { FieldsCard } from "./components/fields-card";
+import { NextStepCard } from "./components/next-step-card";
 import { PrincipalApprovalCard } from "./components/principal-approval-card";
 import { StageTracker } from "./components/stage-tracker";
 
@@ -97,7 +100,7 @@ export function RequisitionDetailPage() {
 
   const breadcrumbs = [
     { label: "Admin", to: "/admin" },
-    { label: "Requisitions", to: "/admin/requisitions" },
+    { label: "Placements", to: "/admin/requisitions" },
   ];
 
   if (query.isPending) {
@@ -105,7 +108,7 @@ export function RequisitionDetailPage() {
       <div>
         <PageHeader
           breadcrumbs={[...breadcrumbs, { label: "Loading…" }]}
-          title="Requisition"
+          title="Placement"
         />
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_20rem]">
           <div className="space-y-6">
@@ -122,8 +125,8 @@ export function RequisitionDetailPage() {
     return (
       <div>
         <PageHeader
-          breadcrumbs={[...breadcrumbs, { label: "Requisition" }]}
-          title="Requisition"
+          breadcrumbs={[...breadcrumbs, { label: "Placement" }]}
+          title="Placement"
         />
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       </div>
@@ -171,7 +174,7 @@ export function RequisitionDetailPage() {
 
       <div
         role="tablist"
-        aria-label="Requisition sections"
+        aria-label="Placement sections"
         onKeyDown={onTabKeyDown}
         className="mb-6 flex gap-1 border-b border-border-default"
       >
@@ -207,13 +210,30 @@ export function RequisitionDetailPage() {
           {/* ----- Main column ----- */}
           <div className="min-w-0 space-y-6">
             <AnswersCard answers={requisition.answers} />
-            <BriefCard requisition={requisition} />
+            <DescriptionsCard requisition={requisition} />
+            {/* Directly under the descriptions (T21): "the button to push it to get
+                the approval needs to be next to the brief" — and the same
+                placement serves every other forward move (T4). */}
+            <NextStepCard requisition={requisition} events={eventsQuery.data} />
             <FieldsCard requisition={requisition} />
           </div>
 
           {/* ----- Sticky right rail (05 §4.1) ----- */}
           <div className="space-y-6 self-start xl:sticky xl:top-6">
             <StageTracker requisition={requisition} events={eventsQuery.data} />
+
+            {/* Post-hire guarantee (T31) — the SAME component the client sees.
+                The stats page answers "how many placements are in each
+                window"; this answers "how is THIS hire doing", which is the
+                question you have open when you are looking at one position. */}
+            {requisition.placement !== null ? (
+              <Card>
+                <CardContent className="p-4">
+                  <GuaranteeProgress placement={requisition.placement} />
+                </CardContent>
+              </Card>
+            ) : null}
+
             <PrincipalApprovalCard requisition={requisition} />
             <EventLogCard
               events={eventsQuery.data}
@@ -221,7 +241,7 @@ export function RequisitionDetailPage() {
               isError={eventsQuery.isError}
               error={eventsQuery.error}
               onRetry={() => void eventsQuery.refetch()}
-              emptyDescription="Every state change on this requisition is recorded here."
+              emptyDescription="Every state change on this placement is recorded here."
             />
           </div>
         </div>

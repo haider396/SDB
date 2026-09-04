@@ -27,6 +27,50 @@ export default tseslint.config(
     },
   },
   {
+    /**
+     * Public routes are EAGER by deliberate design (router.tsx) so that
+     * dnd-kit, TanStack Table and Recharts never reach the entry chunk. A
+     * free-canvas builder is the single most likely thing to break that, so
+     * the boundary is mechanical rather than a matter of discipline.
+     *
+     * render/ may be imported by public pages; builder/ may import render/;
+     * render/ may never import builder/.
+     */
+    files: [
+      "src/features/form-builder/render/**",
+      "src/routes/public/**",
+      "src/features/intake-form/**",
+      "src/features/candidate-registration/**",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@dnd-kit/*"],
+              message:
+                "dnd-kit must never reach the public entry chunk (router.tsx code-splitting note).",
+            },
+            {
+              group: ["@tanstack/react-table"],
+              message: "TanStack Table must never reach the public entry chunk.",
+            },
+            {
+              group: ["recharts"],
+              message: "Recharts must never reach the public entry chunk.",
+            },
+            {
+              group: ["**/form-builder/builder/**"],
+              message:
+                "render/ must not import builder/. The dependency is one-way.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // AC-UI-01: hex colour literals banned in all source except src/styles/
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/styles/**"],

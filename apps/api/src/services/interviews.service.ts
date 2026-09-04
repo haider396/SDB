@@ -178,7 +178,7 @@ export function createInterviewsService(
 
       const requisition = await findRequisitionById(db, assignment.requisitionId);
       if (requisition === null) {
-        throw new ApiError('NOT_FOUND', 'Requisition not found.');
+        throw new ApiError('NOT_FOUND', 'Placement not found.');
       }
       const creator = await findUserById(db, actor.userId);
 

@@ -14,6 +14,8 @@ import { z } from "zod";
 import {
   ConditionalOperatorSchema,
   QuestionAudienceSchema,
+  type QuestionAudience,
+  type QuestionDetail,
   QuestionKeySchema,
   QuestionTypeSchema,
   ValidationRulesSchema,
@@ -45,11 +47,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Plus } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
 import { useDirtyGuard } from "@/lib/use-dirty-guard";
 import {
   roleCategoryChoices,
   useAllQuestions,
+  useCreateCategory,
   useCreateQuestion,
   useTaxonomy,
   useUpdateQuestion,
@@ -125,7 +129,10 @@ const editorResolver: Resolver<EditorValues> = async (rawValues) => {
   return { values: {}, errors };
 };
 
-function initialValues(state: EditorState): EditorValues {
+function initialValues(
+  state: EditorState,
+  audience: QuestionAudience | undefined,
+): EditorValues {
   if (state.mode === "create") {
     return {
       categoryId: state.categoryId,
@@ -134,7 +141,9 @@ function initialValues(state: EditorState): EditorValues {
       helpText: "",
       placeholder: "",
       questionType: "short_text",
-      audience: "client",
+      // Pinned when the caller owns the audience; otherwise the field is shown
+      // and this is only its starting value.
+      audience: audience ?? "client",
       isRequired: false,
       validation: {},
       roleCategoryIds: [],
@@ -163,15 +172,38 @@ export function QuestionEditor({
   state,
   categories,
   onClose,
+  audience,
+  onCreated,
 }: {
   state: EditorState;
   categories: QuestionCategory[];
   onClose: () => void;
+  /**
+   * Called with the new question after a successful create.
+   *
+   * The form builder uses it to drop the question straight onto the canvas —
+   * creating a field and then hunting for it in a picker is not one action.
+   */
+  onCreated?: (question: QuestionDetail) => void;
+  /**
+   * Pin the audience instead of offering it.
+   *
+   * The form builder passes "candidate" — it owns the candidate registration
+   * form, and a question created there is a candidate question by definition.
+   * The Questions page leaves this unset and offers Client / Internal, since a
+   * candidate question created there would vanish from its own list.
+   */
+  audience?: QuestionAudience;
 }) {
   const createQuestion = useCreateQuestion();
   const updateQuestion = useUpdateQuestion();
   const taxonomyQuery = useTaxonomy();
-  const allQuestionsQuery = useAllQuestions();
+  // Controller choices for conditionals come from the same side of the fence.
+  const allQuestionsQuery = useAllQuestions(audience);
+
+  const createCategory = useCreateCategory();
+  const [newCategoryLabel, setNewCategoryLabel] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   const [keyTouched, setKeyTouched] = useState(state.mode === "edit");
   const [rootError, setRootError] = useState<{
@@ -183,7 +215,7 @@ export function QuestionEditor({
   const form = useForm<EditorValues>({
     mode: "onBlur",
     resolver: editorResolver,
-    defaultValues: initialValues(state),
+    defaultValues: initialValues(state, audience),
   });
   const { errors, isDirty } = form.formState;
   const questionType = form.watch("questionType");
@@ -275,6 +307,39 @@ export function QuestionEditor({
     });
   };
 
+  /**
+   * Create a category and select it, without leaving the half-filled question.
+   *
+   * The audience is inherited from this editor: a category made while building
+   * a candidate form is a candidate category, which is what keeps it out of the
+   * Questions page and in the builder's own picker (0025). The server rejects a
+   * question whose category sits on the other side of that fence, so getting
+   * this wrong would fail at save rather than silently misfile the question.
+   *
+   * setValue rather than waiting for the refetch: the new id is valid the
+   * moment the POST returns, and the option appears when the invalidated
+   * categories query lands a beat later.
+   */
+  const addCategory = async () => {
+    const label = (newCategoryLabel ?? "").trim();
+    if (label === "") return;
+    setCategoryError(null);
+    try {
+      const created = await createCategory.mutateAsync({
+        label,
+        ...(audience === undefined ? {} : { audience }),
+      });
+      form.setValue("categoryId", created.id, { shouldDirty: true });
+      setNewCategoryLabel(null);
+    } catch (cause) {
+      setCategoryError(
+        cause instanceof ApiError
+          ? cause.message
+          : "Could not create the category.",
+      );
+    }
+  };
+
   const onSubmit = async (values: EditorValues) => {
     setRootError(null);
     setConditionalError(undefined);
@@ -300,7 +365,7 @@ export function QuestionEditor({
           helpText: values.helpText === "" ? null : values.helpText,
           placeholder: values.placeholder === "" ? null : values.placeholder,
           questionType: values.questionType,
-          audience: values.audience,
+          audience: audience ?? values.audience,
           isRequired: values.isRequired,
           validation,
           roleCategoryIds: values.roleCategoryIds,
@@ -309,14 +374,15 @@ export function QuestionEditor({
             ? { options: completeOptions }
             : {}),
         };
-        await createQuestion.mutateAsync(body);
+        const created = await createQuestion.mutateAsync(body);
+        onCreated?.(created);
       } else {
         const body: UpdateQuestionBody = {
           categoryId: values.categoryId,
           label: values.label,
           helpText: values.helpText === "" ? null : values.helpText,
           placeholder: values.placeholder === "" ? null : values.placeholder,
-          audience: values.audience,
+          audience: audience ?? values.audience,
           isRequired: values.isRequired,
           validation,
           roleCategoryIds: values.roleCategoryIds,
@@ -389,7 +455,27 @@ export function QuestionEditor({
             ) : null}
 
             <div className="space-y-1.5">
-              <Label htmlFor="question-category">Category</Label>
+              {/* The action sits on the label row, not under the field: a bare
+                  link wedged beneath the select read as leftover markup next to
+                  properly styled controls. */}
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="question-category">Category</Label>
+                {newCategoryLabel === null ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="-my-1 h-auto px-2 py-1 text-2xs font-medium"
+                    onClick={() => {
+                      setNewCategoryLabel("");
+                      setCategoryError(null);
+                    }}
+                  >
+                    <Plus className="mr-1 h-3 w-3" aria-hidden="true" />
+                    New category
+                  </Button>
+                ) : null}
+              </div>
               <NativeSelect
                 id="question-category"
                 {...form.register("categoryId")}
@@ -400,6 +486,68 @@ export function QuestionEditor({
                   </option>
                 ))}
               </NativeSelect>
+
+              {/*
+                Categories group answers on the candidate's record, so a form
+                asking about something the existing sections do not cover needs
+                a heading of its own. Without this it is a dead end: candidate
+                categories are managed nowhere else.
+              */}
+              {newCategoryLabel !== null ? (
+                <div className="space-y-2 rounded-md border border-border-default bg-surface-subtle p-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="question-editor-new-category">New category</Label>
+                    <Input
+                      id="question-editor-new-category"
+                      value={newCategoryLabel}
+                      placeholder="e.g. Your portfolio"
+                      aria-invalid={categoryError !== null || undefined}
+                      aria-describedby="question-editor-new-category-help"
+                      onKeyDown={(event) => {
+                        // Enter must not submit the whole question form.
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void addCategory();
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          setNewCategoryLabel(null);
+                        }
+                      }}
+                      onChange={(event) => setNewCategoryLabel(event.target.value)}
+                    />
+                    <p id="question-editor-new-category-help" className="text-2xs text-neutral-600">
+                      Groups these answers under their own heading on the
+                      candidate&rsquo;s record.
+                    </p>
+                  </div>
+                  {categoryError !== null ? (
+                    <p role="alert" className="text-xs text-danger-text">
+                      {categoryError}
+                    </p>
+                  ) : null}
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setNewCategoryLabel(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        newCategoryLabel.trim() === "" || createCategory.isPending
+                      }
+                      onClick={() => void addCategory()}
+                    >
+                      {createCategory.isPending ? "Adding…" : "Add category"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">
@@ -501,16 +649,24 @@ export function QuestionEditor({
                 ) : null}
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="question-audience">Audience</Label>
-                <NativeSelect
-                  id="question-audience"
-                  {...form.register("audience")}
-                >
-                  <option value="client">Client — shown on intake forms</option>
-                  <option value="internal">Internal — admin only</option>
-                </NativeSelect>
-              </div>
+              {audience === undefined ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="question-audience">Audience</Label>
+                  <NativeSelect
+                    id="question-audience"
+                    {...form.register("audience")}
+                  >
+                    <option value="client">
+                      Client — shown on intake forms
+                    </option>
+                    <option value="internal">Internal — admin only</option>
+                  </NativeSelect>
+                  <p className="text-2xs text-neutral-600">
+                    Candidate questions are built in Forms, alongside the form
+                    that asks them.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <label className="flex items-center gap-2 text-sm font-medium text-neutral-800">

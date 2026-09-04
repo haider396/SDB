@@ -19,9 +19,17 @@ extendZodWithOpenApi(z);
 import {
   AcceptInvitationBodySchema,
   ApiErrorSchema,
+  CandidateRegistrationSchema,
   ConfirmPaymentBodySchema,
   CreateClientBodySchema,
+  CandidateFormSubmissionSchema,
+  CreateCandidateFormBodySchema,
+  CreateFormBlockBodySchema,
   CreateQuestionBodySchema,
+  ListCandidateFormsQuerySchema,
+  SaveFormDocumentBodySchema,
+  UpdateCandidateFormBodySchema,
+  UpdateFormBlockBodySchema,
   CreateQuestionCategoryBodySchema,
   CreateQuestionOptionBodySchema,
   GrantAccessBodySchema,
@@ -73,6 +81,16 @@ import {
   TaxonomyEnvelopeSchema,
 } from '../schemas/intake.js';
 import {
+  CandidateRegistrationEnvelopeSchema,
+  CandidateRegistrationFormEnvelopeSchema,
+  RegistrationConfirmEnvelopeSchema,
+  RegistrationSessionEnvelopeSchema,
+  RegistrationUploadUrlBodySchema,
+  RegistrationUploadUrlEnvelopeSchema,
+  SessionFileParamsSchema,
+  SessionParamsSchema,
+} from '../schemas/candidate-registration.js';
+import {
   CategoryCollectionSchema,
   CategoryEnvelopeSchema,
   QuestionCollectionSchema,
@@ -80,6 +98,16 @@ import {
   QuestionEnvelopeSchema,
   ReorderResponseSchema,
 } from '../schemas/questions.js';
+import {
+  ActivateFormEnvelopeSchema,
+  CandidateFormCollectionSchema,
+  CandidateFormEnvelopeSchema,
+  DeletedEnvelopeSchema,
+  FormBlockEnvelopeSchema,
+  FormStatusEnvelopeSchema,
+  FormVersionEnvelopeSchema,
+  PublicFormEnvelopeSchema,
+} from '../schemas/candidate-forms.js';
 import {
   CandidateConsentBodySchema,
   CreateCandidateAssessmentBodySchema,
@@ -347,6 +375,79 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
     responses: {
       201: ok('Submission accepted', IntakeSubmissionEnvelopeSchema),
       400: errorResponse('Malformed request'),
+      422: errorResponse(
+        'UNKNOWN_QUESTION | REQUIRED_ANSWER_MISSING | VALUE_TYPE_MISMATCH | VALIDATION_FAILED | INVALID_OPTION | CONDITION_NOT_MET',
+      ),
+      429: errorResponse('Rate limited'),
+    },
+  });
+
+  // --- candidate registration (public, T38) --------------------------------
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/candidate-registration-form',
+    summary: 'Public candidate registration form definition (T38)',
+    tags: ['candidate-registration'],
+    responses: {
+      200: ok('Form definition', CandidateRegistrationFormEnvelopeSchema),
+      429: errorResponse('Rate limited'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-registrations/session',
+    summary: 'Start a registration session (anchors mid-form uploads)',
+    tags: ['candidate-registration'],
+    responses: {
+      201: ok('Session started', RegistrationSessionEnvelopeSchema),
+      429: errorResponse('Rate limited'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-registrations/{sessionId}/upload-url',
+    summary: 'Signed upload URL for a registration document',
+    tags: ['candidate-registration'],
+    request: {
+      params: SessionParamsSchema,
+      ...jsonBody(RegistrationUploadUrlBodySchema),
+    },
+    responses: {
+      201: ok('Signed upload URL', RegistrationUploadUrlEnvelopeSchema),
+      404: errorResponse('Session not found'),
+      413: errorResponse('FILE_TOO_LARGE (NFR-4)'),
+      415: errorResponse('UNSUPPORTED_MEDIA_TYPE (NFR-5)'),
+      422: errorResponse('Session expired or already submitted'),
+      429: errorResponse('Rate limited'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-registrations/{sessionId}/files/{fileId}/confirm',
+    summary: 'Confirm a registration upload completed',
+    tags: ['candidate-registration'],
+    request: { params: SessionFileParamsSchema },
+    responses: {
+      200: ok('Upload confirmed', RegistrationConfirmEnvelopeSchema),
+      404: errorResponse('Session or upload not found'),
+      429: errorResponse('Rate limited'),
+    },
+  });
+
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-registrations',
+    summary:
+      'Public candidate self-registration — creates an unvetted candidate (T38)',
+    tags: ['candidate-registration'],
+    request: jsonBody(CandidateRegistrationSchema),
+    responses: {
+      201: ok('Registration accepted', CandidateRegistrationEnvelopeSchema),
+      400: errorResponse('Malformed request'),
+      404: errorResponse('Session not found'),
       422: errorResponse(
         'UNKNOWN_QUESTION | REQUIRED_ANSWER_MISSING | VALUE_TYPE_MISMATCH | VALIDATION_FAILED | INVALID_OPTION | CONDITION_NOT_MET',
       ),
@@ -907,6 +1008,227 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
     responses: {
       200: ok('Deactivated', CategoryEnvelopeSchema),
       401: errorResponse('Unauthenticated'),
+    },
+  });
+
+  // --- candidate form builder (0020) ----------------------------------------
+  // question.manage for writes, question.view for reads — a form builder is
+  // question configuration with a layout layer, so it reuses those keys.
+  const formIdParams = { params: z.object({ id: z.string().uuid() }) };
+  const formVersionParams = {
+    params: z.object({ id: z.string().uuid(), versionId: z.string().uuid() }),
+  };
+  const formBlockParams = {
+    params: z.object({
+      id: z.string().uuid(),
+      versionId: z.string().uuid(),
+      blockId: z.string().uuid(),
+    }),
+  };
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/candidate-forms',
+    summary: 'List candidate forms',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: { query: ListCandidateFormsQuerySchema },
+    responses: {
+      200: ok('Forms', CandidateFormCollectionSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing question.view'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-forms',
+    summary: 'Create a form; a draft version 1 is created with it',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: jsonBody(CreateCandidateFormBodySchema),
+    responses: {
+      201: ok('Created', CandidateFormEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Missing question.manage'),
+      422: errorResponse('VALIDATION_FAILED'),
+    },
+  });
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/candidate-forms/{id}',
+    summary: 'Form detail with its draft and published versions',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: formIdParams,
+    responses: {
+      200: ok('Form', CandidateFormEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/candidate-forms/{id}',
+    summary: 'Update a form. key and slug are immutable after creation',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: { ...formIdParams, ...jsonBody(UpdateCandidateFormBodySchema) },
+    responses: {
+      200: ok('Updated', CandidateFormEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      422: errorResponse('VALIDATION_FAILED'),
+    },
+  });
+  registry.registerPath({
+    method: 'delete',
+    path: '/api/v1/candidate-forms/{id}',
+    summary: 'Archive a form (soft). Must be deactivated first',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: formIdParams,
+    responses: {
+      200: ok('Archived', DeletedEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      409: errorResponse('INVALID_TRANSITION — still active, or the default form'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-forms/{id}/activate',
+    summary: 'Publish the draft and open the public link',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: formIdParams,
+    responses: {
+      200: ok('Activated, with the public path', ActivateFormEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      409: errorResponse('INVALID_TRANSITION — no draft to publish'),
+      422: errorResponse(
+        'VALIDATION_FAILED — no questions, no email question, no role category, an unusable question, or an orphaned conditional',
+      ),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-forms/{id}/deactivate',
+    summary: 'Close the public link; the slug stops resolving',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: formIdParams,
+    responses: {
+      200: ok('Deactivated', FormStatusEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      409: errorResponse('INVALID_TRANSITION — not active'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-forms/{id}/versions',
+    summary: 'Start a draft, copying the published blocks and theme',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: formIdParams,
+    responses: {
+      201: ok('Draft', FormVersionEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'put',
+    path: '/api/v1/candidate-forms/{id}/versions/{versionId}',
+    summary: 'Save the whole document (pages, theme, blocks)',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: { ...formVersionParams, ...jsonBody(SaveFormDocumentBodySchema) },
+    responses: {
+      200: ok('Saved', FormVersionEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+      409: errorResponse('INVALID_TRANSITION — version already published'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-forms/{id}/versions/{versionId}/blocks',
+    summary: 'Add one block to a draft',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: { ...formVersionParams, ...jsonBody(CreateFormBlockBodySchema) },
+    responses: {
+      201: ok('Created', FormBlockEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/candidate-forms/{id}/versions/{versionId}/blocks/{blockId}',
+    summary: 'Move, resize or restyle one block — the drag/resize endpoint',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: { ...formBlockParams, ...jsonBody(UpdateFormBlockBodySchema) },
+    responses: {
+      200: ok('Updated', FormBlockEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'delete',
+    path: '/api/v1/candidate-forms/{id}/versions/{versionId}/blocks/{blockId}',
+    summary: 'Remove one block from a draft',
+    tags: ['candidate-forms'],
+    security: secured,
+    request: formBlockParams,
+    responses: {
+      200: ok('Deleted', DeletedEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      404: errorResponse('Not found'),
+    },
+  });
+
+  // --- public candidate forms -----------------------------------------------
+  // Unauthenticated, rate-limited with everything else public. A draft,
+  // deactivated, archived or unknown slug all 404 identically: a closed form
+  // must not leak that it was ever open.
+  const formSlugParams = {
+    params: z.object({ slug: z.string().min(3).max(64) }),
+  };
+
+  registry.registerPath({
+    method: 'get',
+    path: '/api/v1/candidate-forms/public/{slug}',
+    summary: 'Public payload for a live form link',
+    tags: ['candidate-forms'],
+    request: formSlugParams,
+    responses: {
+      200: ok('Form definition', PublicFormEnvelopeSchema),
+      404: errorResponse('Unknown, draft, deactivated or archived'),
+      429: errorResponse('Rate limited'),
+    },
+  });
+  registry.registerPath({
+    method: 'post',
+    path: '/api/v1/candidate-forms/public/{slug}/submissions',
+    summary: 'Submit a public form; creates or attaches to a candidate by email',
+    tags: ['candidate-forms'],
+    request: { ...formSlugParams, ...jsonBody(CandidateFormSubmissionSchema) },
+    responses: {
+      201: ok(
+        'Received',
+        z.object({ data: z.object({ received: z.literal(true) }) }),
+      ),
+      404: errorResponse('Form or session not found'),
+      409: errorResponse('DUPLICATE_SUBMISSION — already applied using this form'),
+      422: errorResponse(
+        'The documented six-step pipeline, plus per-form step guards and the email requirement',
+      ),
+      429: errorResponse('Rate limited'),
     },
   });
 

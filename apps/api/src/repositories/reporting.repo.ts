@@ -70,6 +70,51 @@ export async function countActivePlacements(sql: Queryable): Promise<number> {
   return Number(rows[0]?.n ?? '0');
 }
 
+export interface GuaranteeWindowCounts {
+  d30: number;
+  d60: number;
+  d90: number;
+  elapsed: number;
+}
+
+/**
+ * Active placements bucketed by post-hire guarantee window (T31).
+ *
+ * Bucketed in SQL from `start_date` rather than in the service, so a large
+ * pool does not have to be loaded into memory to be counted. The day
+ * boundaries mirror `placementMilestone` in @sdb/contracts exactly:
+ * day 0–29 → d30, 30–59 → d60, 60–89 → d90, 90+ → elapsed.
+ *
+ * `elapsed` should normally be near zero — the nightly close job moves those
+ * to `completed`. A number that keeps growing means the job is not running.
+ */
+export async function countPlacementsByGuaranteeWindow(
+  sql: Queryable,
+): Promise<GuaranteeWindowCounts> {
+  const rows = await sql<
+    { d30: string; d60: string; d90: string; elapsed: string }[]
+  >`
+    with elapsed_days as (
+      select (current_date - start_date) as days
+      from placements
+      where status = 'active'
+    )
+    select
+      count(*) filter (where days < 30)::text                as d30,
+      count(*) filter (where days >= 30 and days < 60)::text as d60,
+      count(*) filter (where days >= 60 and days < 90)::text as d90,
+      count(*) filter (where days >= 90)::text               as elapsed
+    from elapsed_days
+  `;
+  const row = rows[0];
+  return {
+    d30: Number(row?.d30 ?? '0'),
+    d60: Number(row?.d60 ?? '0'),
+    d90: Number(row?.d90 ?? '0'),
+    elapsed: Number(row?.elapsed ?? '0'),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Rejection-reasons report (04 §12, AC-PL-15)
 // ---------------------------------------------------------------------------

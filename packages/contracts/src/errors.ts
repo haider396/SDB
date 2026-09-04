@@ -14,6 +14,16 @@ export const ERROR_CODES = {
   QUESTION_TYPE_LOCKED: 409,
   MAPPED_QUESTION_PROTECTED: 409,
   DUPLICATE_ASSIGNMENT: 409,
+  /**
+   * A candidate has already submitted THIS form. One submission per form per
+   * candidate (uq_submission_per_form_per_candidate); submitting a DIFFERENT
+   * form is fine and attaches to the same candidate.
+   *
+   * Deliberately its own code rather than VALIDATION_FAILED: the web maps 422
+   * details.fields onto individual inputs, so "you have already applied" would
+   * render anchored to no field at all.
+   */
+  DUPLICATE_SUBMISSION: 409,
   FILE_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   PAYMENT_NOT_CONFIRMED: 422,

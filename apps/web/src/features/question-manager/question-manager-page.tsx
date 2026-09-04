@@ -24,8 +24,18 @@ import { QuestionPane } from "./components/question-pane";
 const MAX_SEARCH_RESULTS = 12;
 
 export function QuestionManagerPage() {
-  const categoriesQuery = useCategories();
-  const allQuestionsQuery = useAllQuestions();
+  /*
+   * Client-side questions only.
+   *
+   * Candidate questions are created and edited in the form builder, which owns
+   * the candidate registration form end to end. Scoping the FETCH rather than
+   * the render is deliberate: the category question counts, the reorder call
+   * (which posts a whole category's id list) and the cross-category search all
+   * read what was fetched, so a page showing less than it loaded gets all three
+   * subtly wrong.
+   */
+  const categoriesQuery = useCategories("client");
+  const allQuestionsQuery = useAllQuestions("client");
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(true);

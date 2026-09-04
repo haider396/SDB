@@ -15,6 +15,7 @@
  *   malformed fields are dropped, not rejected.
  */
 import { z } from 'zod';
+import { StoredAnswerSchema } from './intake.js';
 import {
   AccentStrengthSchema,
   AutonomyLevelSchema,
@@ -551,7 +552,40 @@ export const DOWNLOAD_URL_TTL_SECONDS = 300;
 // Detail (GET /candidates/:id — full record with all child collections)
 // ---------------------------------------------------------------------------
 
+/**
+ * A candidate's answers, grouped by the submission that produced them.
+ *
+ * candidate_answers was write-only until the form builder: nothing read it, so
+ * every answer to a question outside CANDIDATE_MAPPED_QUESTION_KEYS was stored
+ * and shown nowhere. This is the read model.
+ *
+ * Labels and option text come from `questionSnapshot`, never from the live
+ * question — an admin editing a form must not retroactively change what a
+ * candidate is recorded as having been asked (03 §1.4). That matters MORE now
+ * that forms are editable.
+ */
+export const CandidateAnswerSchema = StoredAnswerSchema;
+export type CandidateAnswer = z.infer<typeof CandidateAnswerSchema>;
+
+export const CandidateSubmissionSchema = z.object({
+  id: z.string().uuid(),
+  formId: z.string().uuid(),
+  formKey: z.string(),
+  formLabel: z.string(),
+  formSlug: z.string(),
+  versionNumber: z.number().int(),
+  roleCategory: z
+    .object({ id: z.string().uuid(), key: z.string(), label: z.string() })
+    .nullable(),
+  source: z.enum(['public_form', 'backfill', 'admin']),
+  submittedAt: z.string().datetime({ offset: true }),
+  answers: z.array(CandidateAnswerSchema),
+});
+export type CandidateSubmission = z.infer<typeof CandidateSubmissionSchema>;
+
 export const CandidateDetailSchema = CandidateSchema.extend({
+  /** Newest first. Every answer belongs to a submission after 0021's backfill. */
+  submissions: z.array(CandidateSubmissionSchema),
   /**
    * The camelCase keys from the data-completeness required set that are
    * currently missing (UX 2.5). Non-empty exactly when `dataCompleteness`

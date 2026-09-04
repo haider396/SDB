@@ -56,6 +56,7 @@ Error:
 | 409 | `QUESTION_TYPE_LOCKED` | Type change attempted on an answered question |
 | 409 | `MAPPED_QUESTION_PROTECTED` | Delete or key change on a mapped question |
 | 409 | `DUPLICATE_ASSIGNMENT` | Candidate already assigned to this requisition |
+| 409 | `DUPLICATE_SUBMISSION` | This candidate has already submitted **this** form. A *different* form is fine and attaches to the same candidate. Its own code rather than `VALIDATION_FAILED` because it belongs to no single field |
 | 422 | `PAYMENT_NOT_CONFIRMED` | Access grant attempted before payment confirmation |
 | 422 | `CONSENT_MISSING` | Present attempted without candidate profile-sharing consent |
 | 422 | `REQUIRED_ANSWER_MISSING` | See `03-INTAKE-FORM-ENGINE.md` §3.3 |
@@ -107,23 +108,42 @@ All require `question.manage` except the read endpoints, which require `question
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/questions` | Query: `categoryId?`, `isActive?`, `roleCategoryId?`, `includeAnswerCounts=true`. Returns all questions including `internal` audience |
+| GET | `/questions` | Query: `categoryId?`, `isActive?`, `roleCategoryId?`, `audience?`, `includeAnswerCounts=true`. Returns every audience unless `audience` narrows it |
 | POST | `/questions` | Body: `{ categoryId, key?, label, helpText?, placeholder?, questionType, audience, isRequired, sortOrder?, validation?, options?, roleCategoryIds?, conditional? }` |
-| GET | `/questions/:id` | Includes options, scopes, dependents, `answerCount`, `lastAnsweredAt` |
+| GET | `/questions/:id` | Includes options, scopes, dependents, `answerCount`, `lastAnsweredAt`, and `usedByForms` — the candidate forms that ask it, so an editor can warn before a change reaches all of them |
 | PATCH | `/questions/:id` | Enforces §1.5 of `03`. `questionType` change with answers → `409` |
 | POST | `/questions/:id/activate` | Sets `is_active = true` |
-| POST | `/questions/:id/deactivate` | Sets `is_active = false`. Returns `200` with `warnings[]` listing conditional dependents |
+| POST | `/questions/:id/deactivate` | Sets `is_active = false`. Returns `200` with `warnings[]`: `CONDITIONAL_DEPENDENT` for questions that can no longer appear, `MAPPED_QUESTION` when a candidate profile field stops being captured. Deactivating `email` is refused — see below |
 | POST | `/questions/:id/duplicate` | Creates an inactive copy with a new key |
 | PATCH | `/questions/reorder` | Body: `{ categoryId, orderedQuestionIds: [uuid] }` |
 | POST | `/questions/:id/options` | Add an option |
 | PATCH | `/questions/:id/options/:optionId` | Label and sort order only; `value` change blocked once referenced |
 | POST | `/questions/:id/options/:optionId/deactivate` | Soft-disable |
-| GET | `/question-categories` | Query: `isActive?` |
-| POST | `/question-categories` | Body: `{ key?, label, description?, sortOrder? }` |
+| GET | `/question-categories` | Query: `isActive?`, `audience?`. `questionCount` counts questions of the category's own audience |
+| POST | `/question-categories` | Body: `{ key?, label, description?, sortOrder?, audience? }` — `audience` defaults to `client` |
 | PATCH | `/question-categories/:id` | |
 | POST | `/question-categories/:id/activate` \| `/deactivate` | Cascades visibility, not per-question state |
 | PATCH | `/question-categories/reorder` | Body: `{ orderedCategoryIds: [uuid] }` |
-| GET | `/questions/preview` | Query: `roleCategoryId?`. Returns the exact public payload for preview |
+| GET | `/questions/preview` | Query: `roleCategoryId?`. Returns the exact public payload for preview (client audience, pinned server-side) |
+
+### 4.1 Guard rails on questions
+
+| Rule | Response |
+|---|---|
+| Archiving a **mapped** question — client (`company_name`, …) or candidate (`email`, `first_name`, `country`, …) | `409 MAPPED_QUESTION_PROTECTED`. Deactivate instead |
+| Changing the `key` of a mapped question | `409 MAPPED_QUESTION_PROTECTED` |
+| Changing any `key` after creation | `422 VALIDATION_FAILED` — keys are immutable, they are the reporting join |
+| Deactivating `email` | `409 MAPPED_QUESTION_PROTECTED`. Email is candidate identity: without it a submission cannot be matched to a candidate, and no form can be activated (§8.3) |
+| Moving a question off `audience: 'candidate'` while a form uses it | `409 MAPPED_QUESTION_PROTECTED`, naming the forms. The public renderer intersects on audience, so the question would vanish from published forms silently |
+| `questionType` change once answered | `409 QUESTION_TYPE_LOCKED` (DB trigger backstop) |
+| A candidate question in a non-candidate category, or the reverse | `422 VALIDATION_FAILED` with `details.fields.categoryId` |
+
+**Where candidate questions are managed.** Since `0025`, `question_categories.audience`
+records which admin surface owns a category. Candidate categories belong to the **form builder**
+(§8.3), which creates, edits and retires the questions inside them; the Questions admin page loads
+client and internal categories only, and its audience picker no longer offers Candidate. The column
+does not constrain the audience of the questions inside — internal questions still live in client
+categories.
 
 ---
 
@@ -186,9 +206,9 @@ Engines cannot be created or deleted — the five are fixed. Only `label`, `is_s
 | Method | Path | Permission | Notes |
 |---|---|---|---|
 | GET | `/candidates` | `candidate.view` | Admin only. Query: `search`, `roleCategoryId`, `engineId`, `country`, `englishSpokenLevel`, `maxAccentStrength`, `poolStatus`, `vettingStatus`, `availableFrom`, `rateMax`, `rateUnit`, `toolIds`, `dataCompleteness`. Full-text `search` hits `cv_search` and the name trigram index |
-| POST | `/candidates` | `candidate.create` | Full body per `02` §8.1. Only `firstName` and `lastName` required |
+| POST | `/candidates` | `candidate.create` | Full body per `02` §8.1. Only `firstName` and `lastName` required. `422 VALIDATION_FAILED` with `details.fields.email` if the address belongs to another live candidate |
 | GET | `/candidates/:id` | `candidate.view` | Full internal record with all child collections |
-| PATCH | `/candidates/:id` | `candidate.update` | |
+| PATCH | `/candidates/:id` | `candidate.update` | Same email rule as `POST /candidates` |
 | POST | `/candidates/:id/archive` | `candidate.update` | Sets `archived_at` |
 | POST | `/candidates/:id/consent` | `candidate.update` | Body: `{ hasConsentToShareProfile, consentSource }`. Sets `consent_captured_at` |
 | GET/POST/PATCH/DELETE | `/candidates/:id/languages` | `candidate.update` | |
@@ -256,6 +276,109 @@ Behaviour:
 8. Returns `200 { "candidateReference": "CAN-000123", "result": "created"|"updated", "dataCompleteness": "complete"|"incomplete", "droppedFields": [] }`
 
 Rationale for leniency: third-party payloads are inconsistent, and a strict validator means candidates silently fail to arrive and nobody notices for weeks.
+
+### 8.3 Candidate form builder
+
+Admins build candidate-facing forms visually, activate one, and share its public
+link. A form is a layout over the existing question library — a block references
+a question by id and never copies its content, so renaming a question in
+`/questions` reaches every form that has not deliberately overridden it.
+
+Permissions reuse `question.manage` / `question.view`: a form builder is
+question configuration, not a new subject.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/candidate-forms` | `question.view` | List with status, public path and submission counts |
+| POST | `/candidate-forms` | `question.manage` | Body: `{ label, roleCategoryId?, templateFormId? }`. `templateFormId` copies another form's blocks and theme into a new draft; the source is never modified. `slug` is DB-owned and cannot be supplied |
+| GET | `/candidate-forms/:id` | `question.view` | Draft and published versions, with blocks |
+| PATCH | `/candidate-forms/:id` | `question.manage` | Label, description, role category, `hasTypingTest`, `hasDocumentsStep`. Consent is never configurable |
+| DELETE | `/candidate-forms/:id` | `question.manage` | Refused while the form is active — deactivate first. Submissions already made are kept on their candidates |
+| POST | `/candidate-forms/:id/activate` | `question.manage` | Publishes the draft and returns the public URL. See the activation gate below |
+| POST | `/candidate-forms/:id/deactivate` | `question.manage` | The public link starts returning `404`, indistinguishable from an unknown slug |
+| POST | `/candidate-forms/:id/versions` | `question.manage` | Starts a new draft, copying the published version |
+| PUT | `/candidate-forms/:id/versions/:versionId` | `question.manage` | Whole-document save: pages, theme and every block |
+| POST | `/candidate-forms/:id/versions/:versionId/blocks` | `question.manage` | Add one block |
+| PATCH | `/candidate-forms/:id/versions/:versionId/blocks/:blockId` | `question.manage` | Single-block update — the drag/resize endpoint. One row, so two admins arranging one form do not clobber each other |
+| DELETE | `/candidate-forms/:id/versions/:versionId/blocks/:blockId` | `question.manage` | |
+
+Only a **draft** version accepts writes. A published version is immutable;
+editing means starting a new draft.
+
+#### Activation gate
+
+`POST /:id/activate` returns `422 VALIDATION_FAILED` with `details.fields`
+unless all of the following hold. These are build-time checks, so a form cannot
+go live in a state that would fail at submit time:
+
+- at least one question block
+- the active `email` question is present — this is what ties a submission to a
+  candidate record
+- a role category, unless the form is the default
+- every referenced question is active, unarchived and `audience = 'candidate'`
+- every conditional question's controller is also on the form, or the dependent
+  would be permanently invisible
+
+#### Building questions here
+
+Candidate questions are created and edited **in the builder**, not on the Questions page (§4.1).
+The palette's **New question…** opens the same editor that page uses, with the audience pinned to
+`candidate` and only candidate categories offered; on save the question is created and its block
+placed on the canvas in one step. The inspector's **The question itself** panel edits the shared
+question — deliberately walled off from the per-form overrides directly above it, because the two
+have opposite persistence: overrides are local and undo with the document, library edits save
+immediately and reach every form listed in `usedByForms`.
+
+Creating a question is a server action; placing its block is a local one. Undo therefore removes
+the block and leaves the question in the library, which the success toast says outright.
+
+#### Editing a live form
+
+A published version is read-only. **New draft** copies it into an editable draft while the
+published version keeps serving, and **Publish changes** promotes that draft — `activate` does not
+require the form to be inactive, so updating the live registration form never takes `/register`
+down.
+
+#### Per-form overrides
+
+A block may override four things for its form only, without touching the
+question library: `isRequiredOverride`, `labelOverride`, `placeholderOverride`,
+`helpTextOverride`, and `optionValueOverrides` (a subset of the question's own
+choices). `null` means "use the library value"; an empty string is a real
+override, such as a deliberately blank help line.
+
+Overrides are applied to the resolved question **before** validation, and
+therefore before `question_snapshot` is built — so the snapshot records the
+wording the candidate actually saw (`03` §1.4), not the library's. `questionType`
+is deliberately not overridable: it decides which value column an answer is
+stored in.
+
+#### Public endpoints
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/candidate-forms/public/:slug` | **Public** | Blocks, theme, pages, plus `categories` in the `/intake-form` shape. `404` for unknown, draft, inactive **and** archived alike — a closed form must not leak that it ever existed |
+| POST | `/candidate-forms/public/:slug/submissions` | **Public** | Body as `/candidate-registrations` plus `formVersionId`. `409 DUPLICATE_SUBMISSION` on a repeat of the same form |
+
+Both are covered by the 60/min/IP limiter. The renderer computes the
+candidate-audience question set independently and **intersects** the form's
+blocks against it, with the audience pinned in code — so an internal question
+can neither render nor be answered even if a block row named one (AC-IF-02).
+
+`GET /candidate-registration-form` and `POST /candidate-registrations` keep
+identical paths and schemas; they now resolve the default form.
+
+#### Candidate identity
+
+Identity is the email address. One live candidate per address
+(`idx_candidates_email_live`, unique since `0024`), so a person applying to two
+roles is **one** candidate with two submissions, and
+`select distinct role_category_id from candidate_form_submissions` answers
+"which roles has this candidate applied for?" without a join table.
+
+A later submission overwrites mapped profile columns — newest wins — but only
+for the questions that form actually asked. Archived candidates are outside the
+index, so archiving frees an address for a fresh application.
 
 ---
 

@@ -8,6 +8,7 @@
  * payload — not null (AC-RQ-06). The API builds the object conditionally.
  */
 import { z } from 'zod';
+import { ClientPlacementSchema } from './placement-milestones.js';
 import {
   EngagementTypeSchema,
   RateUnitSchema,
@@ -16,11 +17,32 @@ import {
   ServiceTierSchema,
   UserRoleKeySchema,
 } from './enums.js';
-import { IntakeAnswerSchema, JsonValueSchema } from './intake.js';
+import { IntakeAnswerSchema, StoredAnswerSchema } from './intake.js';
 import { PublicIdSchema } from './public-ids.js';
 
 /** `time` columns (overlap_start/_end) — 'HH:MM' or 'HH:MM:SS'. */
 const timeOfDay = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/);
+
+/**
+ * How soon a part-time start becomes full-time (T14).
+ *
+ * Stored as text on `requisitions`, matching `urgency`, rather than adding a
+ * fourth Postgres enum: only the intake form writes it, and the option
+ * wording is content Rebecca owns in the Question Manager. This schema is
+ * what actually constrains the value.
+ *
+ * `stays_part_time` is what lets the growth question be answered in the
+ * negative without a second yes/no — one question instead of two.
+ */
+export const FullTimeTransitionSchema = z.enum([
+  '2_weeks',
+  '1_month',
+  '2_months',
+  '3_months',
+  'longer',
+  'stays_part_time',
+]);
+export type FullTimeTransition = z.infer<typeof FullTimeTransitionSchema>;
 
 // ---------------------------------------------------------------------------
 // Commercial fields (gated by requisition.view_commercials — AC-RQ-06)
@@ -72,6 +94,9 @@ export const RequisitionSchema = z
     seniorityLevel: SeniorityLevelSchema.nullable(),
     engagementType: EngagementTypeSchema.nullable(),
     hoursPerWeek: z.number().int().nullable(),
+    /** T14 — see FullTimeTransitionSchema for why this is not an enum column. */
+    startsPartTime: z.boolean().nullable(),
+    fullTimeTransitionAfter: FullTimeTransitionSchema.nullable(),
     /** Required working-hours overlap window (02 §7), e.g. 09:00–14:00. */
     overlapStart: timeOfDay.nullable(),
     overlapEnd: timeOfDay.nullable(),
@@ -96,24 +121,12 @@ const TaxonomyLabelSchema = z.object({
 });
 
 /** One stored answer with its immutable snapshot (03 §1.4). */
-export const RequisitionAnswerSchema = z.object({
-  id: z.string().uuid(),
-  questionId: z.string().uuid(),
-  questionKey: z.string(),
-  /** Label/type as at answer time, lifted from the snapshot for rendering. */
-  label: z.string(),
-  questionType: z.string(),
-  valueText: z.string().nullable(),
-  valueNumber: z.number().nullable(),
-  valueBoolean: z.boolean().nullable(),
-  valueDate: z.string().nullable(),
-  valueJson: JsonValueSchema.nullable(),
-  selectedOptions: z.array(z.object({ value: z.string(), label: z.string() })),
-  questionSnapshot: z.record(z.unknown()),
-  answeredBy: z.string().uuid().nullable(),
-  createdAt: z.string().datetime({ offset: true }),
-  updatedAt: z.string().datetime({ offset: true }),
-});
+/**
+ * Requisition answers are StoredAnswerSchema. The name is kept so every
+ * existing import and every OpenAPI ref stays valid; the definition moved to
+ * intake.js so the candidate side can share it rather than copy it.
+ */
+export const RequisitionAnswerSchema = StoredAnswerSchema;
 export type RequisitionAnswer = z.infer<typeof RequisitionAnswerSchema>;
 
 /**
@@ -122,6 +135,14 @@ export type RequisitionAnswer = z.infer<typeof RequisitionAnswerSchema>;
  */
 export const RequisitionDetailSchema = RequisitionSchema.extend({
   regionPreference: z.string().nullable(),
+  /**
+   * T16. Authored by the client at intake (or by SDB when left blank).
+   * `jobDescription` gates the move to sourcing.
+   */
+  jobDescription: z.string().nullable(),
+  roleDescription: z.string().nullable(),
+  /** @deprecated 0018 — superseded by jobDescription. Still returned so
+   *  historical content is not hidden, but no longer edited in either portal. */
   briefMarkdown: z.string().nullable(),
   principalChangeRequest: z.string().nullable(),
   intakeContactName: z.string().nullable(),
@@ -134,6 +155,11 @@ export const RequisitionDetailSchema = RequisitionSchema.extend({
   answers: z.array(RequisitionAnswerSchema),
   /** Assignment counts by stage; client callers see client-visible stages only. */
   countsByStage: z.record(z.number().int().nonnegative()),
+  /**
+   * The placement once someone is hired, else null (T31). Dates and status
+   * only — no commercial fields, so this is safe for a client caller.
+   */
+  placement: ClientPlacementSchema.nullable(),
 });
 export type RequisitionDetail = z.infer<typeof RequisitionDetailSchema>;
 
@@ -163,6 +189,8 @@ export const UpdateRequisitionBodySchema = z
   .object({
     advertisedTitle: z.string().max(500).nullable().optional(),
     briefMarkdown: z.string().max(100_000).nullable().optional(),
+    jobDescription: z.string().max(100_000).nullable().optional(),
+    roleDescription: z.string().max(100_000).nullable().optional(),
     headcount: z.number().int().min(1).optional(),
     budgetMin: z.number().nonnegative().nullable().optional(),
     budgetMax: z.number().nonnegative().nullable().optional(),
@@ -173,6 +201,8 @@ export const UpdateRequisitionBodySchema = z
     seniorityLevel: SeniorityLevelSchema.nullable().optional(),
     engagementType: EngagementTypeSchema.nullable().optional(),
     hoursPerWeek: z.number().int().min(1).max(168).nullable().optional(),
+    startsPartTime: z.boolean().nullable().optional(),
+    fullTimeTransitionAfter: FullTimeTransitionSchema.nullable().optional(),
     overlapStart: timeOfDay.nullable().optional(),
     overlapEnd: timeOfDay.nullable().optional(),
     overlapTimezone: z.string().max(100).nullable().optional(),

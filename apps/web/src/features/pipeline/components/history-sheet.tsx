@@ -38,7 +38,7 @@ export function HistorySheet({ row, onClose }: HistorySheetProps) {
           <SheetTitle>Assignment history</SheetTitle>
           <SheetDescription>
             {row !== null
-              ? `Every recorded event for ${row.candidate.displayName} on this requisition`
+              ? `Every recorded event for ${row.candidate.displayName} on this placement`
               : "Every recorded event for this assignment"}
           </SheetDescription>
         </SheetHeader>

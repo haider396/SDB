@@ -94,7 +94,7 @@ export function StageChart({ data }: { data: StageChartRow[] }) {
         </BarChart>
       </ResponsiveContainer>
       <p className="mt-1 text-right text-xs tabular-nums text-neutral-500">
-        {total} candidate{total === 1 ? "" : "s"} across active requisitions
+        {total} candidate{total === 1 ? "" : "s"} across active placements
       </p>
     </div>
   );

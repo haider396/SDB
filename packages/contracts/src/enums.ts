@@ -80,7 +80,7 @@ export const QuestionTypeSchema = z.enum([
 ]);
 export type QuestionType = z.infer<typeof QuestionTypeSchema>;
 
-export const QuestionAudienceSchema = z.enum(['client', 'internal']);
+export const QuestionAudienceSchema = z.enum(['client', 'internal', 'candidate']);
 export type QuestionAudience = z.infer<typeof QuestionAudienceSchema>;
 
 export const ProficiencyLevelSchema = z.enum([
@@ -181,6 +181,7 @@ export const SubmissionChannelSchema = z.enum([
   'manual',
   'webhook',
   'csv_import',
+  'self_registration',
 ]);
 export type SubmissionChannel = z.infer<typeof SubmissionChannelSchema>;
 

@@ -182,6 +182,9 @@ export function makeDetail(
     ...candidate,
     photoUrl: null,
     missingFields: [],
+    // Form-builder submissions (0020/0021). Empty by default so existing
+    // fixtures keep describing a candidate with no public-form history.
+    submissions: [],
     languages: [],
     tools: [],
     skills: [],

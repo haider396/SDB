@@ -27,6 +27,7 @@ describe('ClientDashboardSchema', () => {
           submittedAt: now,
           updatedAt: now,
           stageCounts: { presented: 2, client_reviewing: 1 },
+          placement: null,
         },
       ],
       pendingActions: {
@@ -83,6 +84,7 @@ describe('ClientDashboardSchema', () => {
           submittedAt: now,
           updatedAt: now,
           stageCounts: { sourced: 3 },
+          placement: null,
         },
       ],
       pendingActions: { principalApprovals: [], candidatesAwaitingReview: [] },
@@ -185,6 +187,7 @@ describe('AdminStatsSchema', () => {
       candidatesByStage: { sourced: 2, presented: 1 },
       averageDaysToPresent: null,
       activePlacements: 1,
+      placementsByGuaranteeWindow: { d30: 1, d60: 0, d90: 0, elapsed: 0 },
     });
     expect(parsed.candidatesByStage.sourced).toBe(2);
   });
@@ -196,6 +199,7 @@ describe('AdminStatsSchema', () => {
         candidatesByStage: {},
         averageDaysToPresent: -1,
         activePlacements: 0,
+        placementsByGuaranteeWindow: { d30: 0, d60: 0, d90: 0, elapsed: 0 },
       }).success,
     ).toBe(false);
     expect(

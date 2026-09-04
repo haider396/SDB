@@ -51,7 +51,7 @@ export function ArchiveQuestionDialog({
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === "MAPPED_QUESTION_PROTECTED") {
         setError(
-          "This is a mapped question — its answers fill first-class requisition fields, so it cannot be archived. Deactivate it instead.",
+          "This is a mapped question — its answers fill first-class placement fields, so it cannot be archived. Deactivate it instead.",
         );
       } else {
         setError(

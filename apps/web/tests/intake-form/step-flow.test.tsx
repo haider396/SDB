@@ -224,8 +224,7 @@ describe("intake step flow (UX 3.5)", () => {
     await screen.findByRole("heading", { name: "Extras" });
   });
 
-  it("confirmation screen: copy-reference button and the review expectation", async () => {
-    // userEvent.setup installs a working clipboard stub in jsdom.
+  it("confirmation screen: the review expectation, and no requisition reference", async () => {
     const user = userEvent.setup();
     renderIntakePage();
     await chooseRole(user);
@@ -242,12 +241,11 @@ describe("intake step flow (UX 3.5)", () => {
       screen.getByText(/reviews new requests within 2 business days/i),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Copy reference" }));
+    // The REQ reference is deliberately not surfaced to the client (T2) —
+    // neither the value nor the copy control it used to sit beside.
+    expect(screen.queryByText("REQ-000456")).not.toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: "Copied" }),
-    ).toBeInTheDocument();
-    await expect(window.navigator.clipboard.readText()).resolves.toBe(
-      "REQ-000456",
-    );
+      screen.queryByRole("button", { name: "Copy reference" }),
+    ).not.toBeInTheDocument();
   });
 });

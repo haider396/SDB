@@ -356,6 +356,8 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   currentRateUnit: 'current_rate_unit',
   engagementTypes: 'engagement_types',
   hoursAvailablePerWeek: 'hours_available_per_week',
+  typingWpmAverage: 'typing_wpm_average',
+  typingTestAttempts: 'typing_test_attempts',
   overlapStart: 'overlap_start',
   overlapEnd: 'overlap_end',
   overlapTimezone: 'overlap_timezone',
@@ -629,6 +631,49 @@ export async function updateCandidate(
     returning id
   `;
   return rows.length > 0;
+}
+
+/**
+ * Candidate identity lookup. Email is the identity (Haider, 4 Sep): the same
+ * person applying to a second role must attach to the SAME candidate record.
+ *
+ * `email` is citext, so this is case-insensitive with no lower() and no
+ * functional index — served by idx_candidates_email_live (0020).
+ *
+ * Archived candidates are EXCLUDED: archiving means "this person is gone", and
+ * silently resurrecting them from a public form would be worse than a duplicate.
+ */
+export async function findLiveCandidateByEmail(
+  sql: Queryable,
+  email: string,
+): Promise<{ id: string; reference: string } | null> {
+  const rows = await sql<{ id: string; reference: string }[]>`
+    select id, reference from candidates
+     where email = ${email} and archived_at is null
+     limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+/**
+ * Serialise concurrent submissions for one email address.
+ *
+ * Two people submitting the same address at the same instant would both see
+ * "no candidate" and both insert. The lock is held for the rest of the
+ * transaction and released on commit or rollback, so the second waits and then
+ * finds the first's row. This — not the unique index — is what actually holds
+ * under concurrency; the index (0022) is the backstop that turns a logic bug
+ * into an error instead of a duplicate.
+ */
+export async function lockCandidateEmail(
+  sql: Queryable,
+  email: string,
+): Promise<void> {
+  await sql`
+    select pg_advisory_xact_lock(
+      hashtextextended('sdb:candidate_email:' || lower(${email}), 0)
+    )
+  `;
 }
 
 export async function archiveCandidate(
@@ -1446,4 +1491,154 @@ export async function insertAssessment(
   const row = rows[0];
   if (row === undefined) throw new Error('assessment insert returned no row');
   return row.id;
+}
+
+// ---------------------------------------------------------------------------
+// Form submissions and their answers
+//
+// candidate_answers was write-only until now: nothing in the application read
+// it, so every answer to a question outside CANDIDATE_MAPPED_QUESTION_KEYS was
+// stored and displayed nowhere. These two functions are the read path.
+// ---------------------------------------------------------------------------
+
+export interface CandidateSubmissionRecord {
+  id: string;
+  formId: string;
+  formKey: string;
+  formLabel: string;
+  formSlug: string;
+  versionNumber: number;
+  roleCategoryId: string | null;
+  roleCategoryKey: string | null;
+  roleCategoryLabel: string | null;
+  source: string;
+  submittedAt: Date;
+}
+
+export async function getSubmissionsForCandidate(
+  sql: Queryable,
+  candidateId: string,
+): Promise<CandidateSubmissionRecord[]> {
+  const rows = await sql<
+    {
+      id: string;
+      form_id: string;
+      form_key: string;
+      form_label: string;
+      form_slug: string;
+      version_number: number;
+      role_category_id: string | null;
+      role_category_key: string | null;
+      role_category_label: string | null;
+      source: string;
+      submitted_at: Date;
+    }[]
+  >`
+    select s.id, s.form_id, f.key as form_key, f.label as form_label,
+           f.slug as form_slug, v.version_number,
+           s.role_category_id, rc.key as role_category_key,
+           rc.label as role_category_label,
+           s.source, s.submitted_at
+      from candidate_form_submissions s
+      join candidate_forms f on f.id = s.form_id
+      join candidate_form_versions v on v.id = s.form_version_id
+      left join role_categories rc on rc.id = s.role_category_id
+     where s.candidate_id = ${candidateId}
+     order by s.submitted_at desc, s.id
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    formId: row.form_id,
+    formKey: row.form_key,
+    formLabel: row.form_label,
+    formSlug: row.form_slug,
+    versionNumber: row.version_number,
+    roleCategoryId: row.role_category_id,
+    roleCategoryKey: row.role_category_key,
+    roleCategoryLabel: row.role_category_label,
+    source: row.source,
+    submittedAt: row.submitted_at,
+  }));
+}
+
+export interface CandidateAnswerRecord {
+  id: string;
+  submissionId: string | null;
+  questionId: string;
+  questionKey: string;
+  valueText: string | null;
+  valueNumber: number | null;
+  valueBoolean: boolean | null;
+  valueDate: string | null;
+  valueJson: unknown;
+  questionSnapshot: Record<string, unknown>;
+  answeredBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  selectedOptions: { value: string; label: string }[];
+}
+
+/** Modelled on getAnswersForRequisition, plus submission_id for grouping. */
+export async function getAnswersForCandidate(
+  sql: Queryable,
+  candidateId: string,
+): Promise<CandidateAnswerRecord[]> {
+  const rows = await sql<
+    {
+      id: string;
+      submission_id: string | null;
+      question_id: string;
+      question_key: string;
+      value_text: string | null;
+      value_number: string | null;
+      value_boolean: boolean | null;
+      value_date: string | null;
+      value_json: unknown;
+      question_snapshot: Record<string, unknown>;
+      answered_by: string | null;
+      created_at: Date;
+      updated_at: Date;
+    }[]
+  >`
+    select a.id, a.submission_id, a.question_id, a.question_key,
+           a.value_text, a.value_number::text as value_number, a.value_boolean,
+           a.value_date::text as value_date, a.value_json,
+           a.question_snapshot, a.answered_by, a.created_at, a.updated_at
+      from candidate_answers a
+     where a.candidate_id = ${candidateId}
+     order by a.created_at asc, a.id asc
+  `;
+  const answerIds = rows.map((row) => row.id);
+  const optionRows =
+    answerIds.length === 0
+      ? []
+      : await sql<{ answer_id: string; value: string; label: string }[]>`
+          select ao.answer_id, o.value, o.label
+            from candidate_answer_options ao
+            join question_options o on o.id = ao.option_id
+           where ao.answer_id in ${sql(answerIds)}
+           order by o.sort_order, o.id
+        `;
+  const optionsByAnswer = new Map<string, { value: string; label: string }[]>();
+  for (const option of optionRows) {
+    const list = optionsByAnswer.get(option.answer_id) ?? [];
+    list.push({ value: option.value, label: option.label });
+    optionsByAnswer.set(option.answer_id, list);
+  }
+  return rows.map((row) => ({
+    id: row.id,
+    submissionId: row.submission_id,
+    questionId: row.question_id,
+    questionKey: row.question_key,
+    valueText: row.value_text,
+    valueNumber: row.value_number === null ? null : Number(row.value_number),
+    valueBoolean: row.value_boolean,
+    valueDate: row.value_date,
+    valueJson: row.value_json,
+    questionSnapshot: row.question_snapshot,
+    answeredBy: row.answered_by,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+    selectedOptions: optionsByAnswer.get(row.id) ?? [],
+  }));
 }

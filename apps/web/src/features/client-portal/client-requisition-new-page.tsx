@@ -46,7 +46,7 @@ export function ClientRequisitionNewPage() {
     <PageHeader
       breadcrumbs={[
         { label: "Dashboard", to: "/client" },
-        { label: "My requisitions", to: "/client/requisitions" },
+        { label: "My placements", to: "/client/requisitions" },
         { label: "Request a hire" },
       ]}
       title="Request another hire"
@@ -95,9 +95,7 @@ export function ClientRequisitionNewPage() {
           mode="portal"
           prefill={prefill}
           onSubmitted={(result) => {
-            toast.success(
-              `Request ${result.requisitionReference} submitted.`,
-            );
+            toast.success("Request submitted.");
             // TODO(api follow-up): InPortalRequisitionResponse carries no
             // publicId yet, so this redirect still lands on the UUID URL
             // (which the API resolves fine). Switch to result.publicId once

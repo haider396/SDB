@@ -20,6 +20,7 @@ import {
   RejectionActorSchema,
   RequisitionStatusSchema,
 } from './enums.js';
+import { ClientPlacementSchema } from './placement-milestones.js';
 import { ClientVisibleStageSchema } from './assignments.js';
 import { PublicIdSchema } from './public-ids.js';
 import { EntityEventSchema } from './requisitions.js';
@@ -47,6 +48,12 @@ export const ClientDashboardRequisitionSchema = z.object({
    * stages can never appear.
    */
   stageCounts: z.record(ClientVisibleStageSchema, count),
+  /**
+   * The placement, once someone is hired — null before that (T31). Carries
+   * only dates and status; the milestone itself is derived client-side with
+   * `placementMilestone` so both portals compute it identically.
+   */
+  placement: ClientPlacementSchema.nullable(),
 });
 export type ClientDashboardRequisition = z.infer<
   typeof ClientDashboardRequisitionSchema
@@ -211,6 +218,20 @@ export const AdminStatsSchema = z.object({
   averageDaysToPresent: z.number().nonnegative().nullable(),
   /** Placements with status = 'active'. */
   activePlacements: count,
+  /**
+   * Active placements by post-hire guarantee window (T31). Rebecca, 37:53:
+   * "we can see of the candidates that we've placed, how many are in a
+   * 30, 60, 90 day period, so that we know."
+   *
+   * Buckets are exclusive: a placement on day 45 is counted once, in `d60`.
+   * `elapsed` are past the guarantee but not yet closed by the nightly job.
+   */
+  placementsByGuaranteeWindow: z.object({
+    d30: count,
+    d60: count,
+    d90: count,
+    elapsed: count,
+  }),
 });
 export type AdminStats = z.infer<typeof AdminStatsSchema>;
 

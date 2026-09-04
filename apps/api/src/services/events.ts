@@ -17,6 +17,9 @@ export type EventEntityType =
   | 'candidate'
   | 'question'
   | 'question_category'
+  // Candidate Form Builder (0020): a form is an auditable entity — created,
+  // activated, deactivated, archived.
+  | 'candidate_form'
   | 'user'
   // Taxonomy management (04 §5) — per-entity types, one per managed table.
   | 'engine'

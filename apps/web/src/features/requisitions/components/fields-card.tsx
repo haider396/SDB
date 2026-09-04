@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { RequisitionDetail, UpdateRequisitionBody } from "@sdb/contracts";
 import {
   EngagementTypeSchema,
+  FullTimeTransitionSchema,
   RateUnitSchema,
   SeniorityLevelSchema,
 } from "@sdb/contracts";
@@ -37,6 +38,9 @@ const FormSchema = z
     seniorityLevel: z.union([SeniorityLevelSchema, z.literal("")]),
     engagementType: z.union([EngagementTypeSchema, z.literal("")]),
     hoursPerWeek: z.string(),
+    // T14. Empty string = unanswered; the submit maps it back to null.
+    startsPartTime: z.union([z.literal("yes"), z.literal("no"), z.literal("")]),
+    fullTimeTransitionAfter: z.union([FullTimeTransitionSchema, z.literal("")]),
     overlapStart: z.string(),
     overlapEnd: z.string(),
     overlapTimezone: z.string(),
@@ -88,6 +92,13 @@ function defaults(requisition: RequisitionDetail): FormValues {
     engagementType: requisition.engagementType ?? "",
     hoursPerWeek:
       requisition.hoursPerWeek === null ? "" : String(requisition.hoursPerWeek),
+    startsPartTime:
+      requisition.startsPartTime === null
+        ? ""
+        : requisition.startsPartTime
+          ? "yes"
+          : "no",
+    fullTimeTransitionAfter: requisition.fullTimeTransitionAfter ?? "",
     // Stored as 'HH:MM:SS'; <input type="time"> wants 'HH:MM'.
     overlapStart: requisition.overlapStart?.slice(0, 5) ?? "",
     overlapEnd: requisition.overlapEnd?.slice(0, 5) ?? "",
@@ -136,6 +147,12 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
       engagementType:
         values.engagementType === "" ? null : values.engagementType,
       hoursPerWeek: toNumberOrNull(values.hoursPerWeek),
+      startsPartTime:
+        values.startsPartTime === "" ? null : values.startsPartTime === "yes",
+      fullTimeTransitionAfter:
+        values.fullTimeTransitionAfter === ""
+          ? null
+          : values.fullTimeTransitionAfter,
       overlapStart: values.overlapStart === "" ? null : values.overlapStart,
       overlapEnd: values.overlapEnd === "" ? null : values.overlapEnd,
       overlapTimezone:
@@ -173,7 +190,7 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
         message:
           cause instanceof ApiError
             ? cause.message
-            : "Could not save the requisition.",
+            : "Could not save the placement.",
       });
     }
   });
@@ -252,6 +269,37 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
                 max={168}
                 {...form.register("hoursPerWeek")}
               />
+            </div>
+            {/* T14 — the part-time arrangement. Sits with hours because that
+                is what it modifies. Rebecca, 51:11: "I always want to start
+                part-time, but I always want them to grow into full-time, and I
+                was never able to properly communicate that on their intake
+                form." */}
+            <div className="space-y-1.5">
+              <Label htmlFor="req-starts-part-time">Starts part-time</Label>
+              <NativeSelect
+                id="req-starts-part-time"
+                {...form.register("startsPartTime")}
+              >
+                <option value="">Not specified</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </NativeSelect>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="req-ft-transition">Full-time after</Label>
+              <NativeSelect
+                id="req-ft-transition"
+                {...form.register("fullTimeTransitionAfter")}
+              >
+                <option value="">Not specified</option>
+                <option value="2_weeks">About 2 weeks</option>
+                <option value="1_month">About a month</option>
+                <option value="2_months">About 2 months</option>
+                <option value="3_months">About 3 months</option>
+                <option value="longer">Longer — to discuss</option>
+                <option value="stays_part_time">Stays part-time</option>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="req-start-date">Target start date</Label>

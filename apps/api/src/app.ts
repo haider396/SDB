@@ -53,6 +53,9 @@ import { eventRoutes } from './routes/events.js';
 import { fileRoutes } from './routes/files.js';
 import { healthRoutes } from './routes/health.js';
 import { intakeRoutes } from './routes/intake.js';
+import { candidateFormRoutes } from './routes/candidate-forms.js';
+import { candidateFormPublicRoutes } from './routes/candidate-forms-public.js';
+import { candidateRegistrationRoutes } from './routes/candidate-registration.js';
 import { interviewRoutes } from './routes/interviews.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { placementRoutes } from './routes/placements.js';
@@ -72,6 +75,11 @@ import { createCandidatesService } from './services/candidates.service.js';
 import { createClientsService } from './services/clients.service.js';
 import { createDashboardService } from './services/dashboard.service.js';
 import { createIntakeFormService } from './services/intake-form.service.js';
+import { createCandidateRegistrationFormService } from './services/candidate-registration-form.service.js';
+import { createCandidateFormPublicService } from './services/candidate-form-public.service.js';
+import { createCandidateFormSubmissionService } from './services/candidate-form-submission.service.js';
+import { createCandidateFormsService } from './services/candidate-forms.service.js';
+import { createCandidateRegistrationService } from './services/candidate-registration.service.js';
 import { createIntakeSubmissionService } from './services/intake-submission.service.js';
 import { createInterviewsService } from './services/interviews.service.js';
 import { createNotificationDispatchService } from './services/notification-dispatch.service.js';
@@ -237,9 +245,45 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     db,
     ...(options.now !== undefined ? { now: options.now } : {}),
   });
+  // The candidate library is served by its own cache (T38). A question write
+  // can touch either audience, so both are invalidated together — otherwise a
+  // candidate-question edit would sit invisible behind a stale cache for the
+  // TTL, which is exactly the "no deploy, no cache purge" promise in 01 §3 J9.
+  const candidateRegistrationFormService = createCandidateRegistrationFormService({
+    db,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+  });
   const questionsService = createQuestionsService({
     db,
-    invalidateFormCache: () => intakeFormService.clearCache(),
+    invalidateFormCache: () => {
+      intakeFormService.clearCache();
+      candidateRegistrationFormService.clearCache();
+      // A deactivated question drops out of the public intersection, so the
+      // per-slug cache has to go too or a live form serves it for the TTL.
+      candidateFormPublicService.clearCache();
+    },
+  });
+  const candidateFormPublicService = createCandidateFormPublicService({
+    db,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+  });
+  const candidateFormsService = createCandidateFormsService({
+    db,
+    // A form edit changes what a live public link serves, so it must clear
+    // the same caches a question edit does — including the per-slug cache.
+    invalidateFormCache: () => {
+      intakeFormService.clearCache();
+      candidateRegistrationFormService.clearCache();
+      candidateFormPublicService.clearCache();
+    },
+  });
+  const candidateFormSubmissionService = createCandidateFormSubmissionService({
+    db,
+    publicFormService: candidateFormPublicService,
+    logger,
+    ...(options.now !== undefined
+      ? { now: () => new Date(options.now!()) }
+      : {}),
   });
   const intakeSubmissionService = createIntakeSubmissionService({
     db,
@@ -247,7 +291,19 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     logger,
     ...(options.now !== undefined ? { now: options.now } : {}),
   });
-  app.decorate('clearIntakeFormCache', () => intakeFormService.clearCache());
+  const candidateRegistrationService = createCandidateRegistrationService({
+    db,
+    formService: candidateRegistrationFormService,
+    storage,
+    logger,
+    ...(options.now !== undefined
+      ? { now: () => new Date(options.now!()) }
+      : {}),
+  });
+  app.decorate('clearIntakeFormCache', () => {
+    intakeFormService.clearCache();
+    candidateRegistrationFormService.clearCache();
+  });
 
   // Engine/department/role-category writes change the public taxonomy cascade,
   // so they invalidate the same cache the intake form service serves from.
@@ -286,7 +342,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // refresh-attention-queue-cache cron job (06 §5).
   app.decorate('attentionQueue', attentionQueueService);
   const placementsService = createPlacementsService({ db });
-  const candidatesService = createCandidatesService({ db, storage });
+  const candidatesService = createCandidatesService({ db, storage, logger });
   const candidateFilesService = createCandidateFilesService({ db, storage });
   const candidateWebhookService = createCandidateWebhookService({
     db,
@@ -357,10 +413,26 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     intakeFormService,
     intakeSubmissionService,
   });
+  await app.register(candidateRegistrationRoutes, {
+    prefix: '/api/v1',
+    candidateRegistrationFormService,
+    candidateRegistrationService,
+    publicFormService: candidateFormPublicService,
+    submissionService: candidateFormSubmissionService,
+  });
   await app.register(questionRoutes, {
     prefix: '/api/v1',
     questionsService,
     intakeFormService,
+  });
+  await app.register(candidateFormRoutes, {
+    prefix: '/api/v1',
+    candidateFormsService,
+  });
+  await app.register(candidateFormPublicRoutes, {
+    prefix: '/api/v1',
+    publicFormService: candidateFormPublicService,
+    submissionService: candidateFormSubmissionService,
   });
   await app.register(requisitionRoutes, {
     prefix: '/api/v1',

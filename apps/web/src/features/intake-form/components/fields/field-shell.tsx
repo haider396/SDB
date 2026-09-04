@@ -37,7 +37,7 @@ export function describedBy(
 
 function RequiredMark({ isRequired }: { isRequired: boolean }) {
   if (!isRequired) {
-    return <span className="ml-1 font-normal text-neutral-400">(optional)</span>;
+    return <span className="ml-1 font-normal text-neutral-600">(optional)</span>;
   }
   return (
     <span aria-hidden="true" className="ml-0.5 text-danger-text">
@@ -63,7 +63,7 @@ export function InputShell({
         <RequiredMark isRequired={question.isRequired} />
       </Label>
       {question.helpText !== null ? (
-        <p id={helpId(question.key)} className="text-xs text-neutral-500">
+        <p id={helpId(question.key)} className="text-xs text-neutral-600">
           {question.helpText}
         </p>
       ) : null}
@@ -101,7 +101,7 @@ export function GroupShell({
         <RequiredMark isRequired={question.isRequired} />
       </legend>
       {question.helpText !== null ? (
-        <p id={helpId(question.key)} className="text-xs text-neutral-500">
+        <p id={helpId(question.key)} className="text-xs text-neutral-600">
           {question.helpText}
         </p>
       ) : null}

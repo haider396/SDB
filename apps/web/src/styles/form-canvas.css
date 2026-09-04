@@ -1,0 +1,201 @@
+/**
+ * Candidate form canvas + per-form field styling.
+ *
+ * This file sits beside tokens.css inside src/styles/, which is the only
+ * directory the AC-UI-01 ESLint rule exempts. It is also the only other file
+ * permitted to reference token VALUES — everything a form stores is a token
+ * NAME, resolved here through var().
+ *
+ * ── How per-form styling works ──────────────────────────────────────────────
+ * The renderer sets CSS custom properties on a wrapper (see
+ * render/styled-field.tsx). Those cascade to the controls below. An unset
+ * property falls through to the --sdb-field-default-* chain, which resolves to
+ * the standard <Input> look — so a form with no styling renders exactly like
+ * the rest of the app.
+ *
+ * The field rules below are scoped by DESCENDANCY of .sdb-form-scope — see the
+ * comment on that block for why, and for the specificity that makes it win
+ * over Tailwind utilities.
+ */
+
+:root {
+  /* Defaults live here as token references, never as literals in TS. */
+  --sdb-field-default-text: var(--neutral-900);
+  --sdb-field-default-bg: var(--surface-raised);
+  --sdb-field-default-border: var(--border-default);
+  --sdb-field-default-radius: var(--radius-md);
+  --sdb-field-default-shadow: var(--shadow-xs);
+  --sdb-field-default-placeholder: var(--neutral-400);
+  --sdb-field-default-label: var(--neutral-800);
+}
+
+/* ── Canvas ────────────────────────────────────────────────────────────────
+   A container query, not a media query: the builder's device preview shrinks
+   this element, so the preview IS the real mobile rendering rather than a
+   simulation of one. */
+.sdb-form-scope {
+  container: sdb-form / inline-size;
+  background: var(--sdb-form-bg, var(--surface-page));
+  padding: var(--sdb-form-pad-t, 24px) var(--sdb-form-pad-r, 24px)
+    var(--sdb-form-pad-b, 24px) var(--sdb-form-pad-l, 24px);
+}
+
+.sdb-canvas {
+  display: grid;
+  /* Narrow default: one column, ordered by the reflow. */
+  grid-template-columns: 1fr;
+  grid-auto-rows: min-content;
+  gap: 12px;
+  max-width: var(--sdb-form-max-width, 880px);
+  margin-inline: auto;
+}
+
+.sdb-canvas-node {
+  order: var(--node-order, 0);
+  grid-column: 1 / -1;
+  z-index: var(--node-z, 0);
+  min-width: 0; /* let long content shrink instead of overflowing */
+}
+
+/* Wide: honour the authored 24-column placement, overlap included.
+   34rem (544px), not 48rem: the form lives inside a card, so the CONTAINER is
+   a few hundred pixels narrower than the viewport. At 48rem a side-by-side
+   layout never activated on a normal desktop — the card's inner width is
+   around 680px. A phone at 390px still has ~350px here and stays stacked. */
+@container sdb-form (min-width: 34rem) {
+  .sdb-canvas {
+    grid-template-columns: repeat(24, 1fr);
+    grid-auto-rows: 8px;
+    gap: 0;
+  }
+  .sdb-canvas-node {
+    order: 0;
+    grid-column: var(--node-col) / span var(--node-span);
+    grid-row: var(--node-row) / span var(--node-rows);
+    padding: 0 6px;
+  }
+}
+
+/* ── Fields ─────────────────────────────────────────────────────────────────
+   Targeted by DESCENDANCY, not by a class. QuestionField renders the shared
+   <Input>/<Textarea>/<NativeSelect>, which carry no form-builder class of their
+   own — an earlier version of this file keyed off `.sdb-field` and therefore
+   styled nothing at all.
+
+   Checkboxes and radios are excluded: padding and border geometry meant for a
+   text field makes a tick box look broken.
+
+   ⚠ SPECIFICITY, NOT tailwind-merge. <Input> hard-codes
+   `border-border-default rounded-md px-3 py-1 shadow-xs`. tailwind-merge only
+   dedupes utilities it recognises and cannot see a raw CSS rule. This works
+   because `.sdb-form-scope input` is (0,1,1) and beats a single utility class
+   at (0,1,0). Do NOT reduce this to a bare element selector. */
+.sdb-form-scope input:not([type="checkbox"]):not([type="radio"]),
+.sdb-form-scope textarea,
+.sdb-form-scope select {
+  color: var(--sdb-field-text, var(--sdb-field-default-text));
+  background: var(--sdb-field-bg, var(--sdb-field-default-bg));
+  border-width: var(--sdb-field-border-width, 1px);
+  border-style: var(--sdb-field-border-style, solid);
+  border-color: var(--sdb-field-border-color, var(--sdb-field-default-border));
+  border-radius: var(--sdb-field-radius, var(--sdb-field-default-radius));
+  padding: var(--sdb-field-pad-t, 0.25rem) var(--sdb-field-pad-r, 0.75rem)
+    var(--sdb-field-pad-b, 0.25rem) var(--sdb-field-pad-l, 0.75rem);
+  box-shadow: var(--sdb-field-shadow, var(--sdb-field-default-shadow));
+}
+
+.sdb-form-scope input::placeholder,
+.sdb-form-scope textarea::placeholder {
+  color: var(--sdb-field-placeholder, var(--sdb-field-default-placeholder));
+}
+
+.sdb-form-scope label,
+.sdb-form-scope legend {
+  color: var(--sdb-field-label, var(--sdb-field-default-label));
+}
+
+/* ── Content blocks ─────────────────────────────────────────────────────── */
+.sdb-block-heading {
+  color: var(--sdb-block-text, var(--brand-navy-ink));
+  font-weight: 600;
+  line-height: var(--leading-tight);
+}
+
+.sdb-block-paragraph {
+  color: var(--sdb-block-text, var(--neutral-700));
+  line-height: var(--leading-relaxed);
+}
+
+.sdb-block-divider {
+  border: 0;
+  border-top-width: var(--sdb-field-border-width, 1px);
+  border-top-style: var(--sdb-field-border-style, solid);
+  border-top-color: var(--sdb-field-border-color, var(--neutral-200));
+  margin: 8px 0;
+}
+
+/* ── Builder-only chrome ────────────────────────────────────────────────── */
+
+/**
+ * The authoring viewport.
+ *
+ * The centre pane sits between a 15rem palette and a 20rem inspector, so it is
+ * only ~500px wide — below the 34rem container threshold. Without a floor here
+ * the canvas renders in NARROW mode and a two-column layout appears stacked,
+ * which makes the builder unable to show the thing it exists to build.
+ *
+ * So the canvas authors at a real desktop width and the pane scrolls
+ * horizontally when the window cannot fit it. The phone preview overrides this
+ * to 390px, which is the only time narrow mode is what the admin asked for.
+ */
+.sdb-builder-viewport {
+  overflow-x: auto;
+}
+
+.sdb-builder-canvas {
+  min-width: 52rem; /* 832px — comfortably past the 34rem container threshold */
+}
+
+.sdb-builder-canvas--mobile {
+  min-width: 0;
+}
+
+.sdb-builder-canvas {
+  position: relative;
+  min-height: 24rem;
+  background-image: linear-gradient(
+      to right,
+      var(--neutral-100) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to bottom, var(--neutral-100) 1px, transparent 1px);
+  background-size: calc(100% / 24) 8px;
+}
+
+.sdb-node-selected {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.sdb-node-focus:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+/* Resize handles are pointer affordances only — the keyboard equivalent is
+   the Position panel and arrow-key nudging (AC-UI-04). */
+.sdb-resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--brand-blue);
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sdb-canvas-node {
+    transition: none !important;
+  }
+}

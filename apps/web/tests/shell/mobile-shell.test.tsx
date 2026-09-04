@@ -139,7 +139,7 @@ describe("mobile navigation drawer (UX 1.5)", () => {
 
     const drawer = await screen.findByRole("dialog", { name: "Navigation" });
     expect(
-      within(drawer).getByRole("link", { name: /my requisitions/i }),
+      within(drawer).getByRole("link", { name: /my placements/i }),
     ).toBeInTheDocument();
     // Contact block (UX 3.7) with the mailto link.
     expect(within(drawer).getByText("Questions?")).toBeInTheDocument();
@@ -169,7 +169,7 @@ describe("mobile navigation drawer (UX 1.5)", () => {
     await user.click(screen.getByRole("button", { name: "Open navigation" }));
     const drawer = await screen.findByRole("dialog", { name: "Navigation" });
     await user.click(
-      within(drawer).getByRole("link", { name: /my requisitions/i }),
+      within(drawer).getByRole("link", { name: /my placements/i }),
     );
 
     await screen.findByText("Requisitions page body");

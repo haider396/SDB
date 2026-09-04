@@ -30,21 +30,21 @@ export function ClientRequisitionsCard({ clientId }: { clientId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Requisitions</CardTitle>
+        <CardTitle>Placements</CardTitle>
       </CardHeader>
       <CardContent>
         {query.isPending ? (
           <LoadingSkeleton
             variant="list"
             rows={3}
-            label="Loading requisitions…"
+            label="Loading placements…"
           />
         ) : query.isError ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : requisitions.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
-            title="No requisitions"
+            title="No placements"
             description="Roles this client asks to fill appear here once an intake form is submitted for them."
           />
         ) : (

@@ -32,6 +32,7 @@ import {
   VettingSection,
 } from "./components/sections";
 import { ConsentCard } from "./components/consent-card";
+import { FormSubmissionsCard } from "./components/form-submissions-card";
 import {
   CertificationsCard,
   EducationCard,
@@ -78,6 +79,7 @@ const SECTIONS: readonly { id: string; label: string }[] = [
   { id: "references", label: "References" },
   { id: "notes", label: "Notes" },
   { id: "source", label: "Source & provenance" },
+  { id: "form-answers", label: "Form answers" },
   { id: "consent", label: "Consent & retention" },
 ];
 
@@ -343,6 +345,11 @@ export function CandidateDetailPage() {
             </SectionAnchor>
             <SectionAnchor sectionId="source">
               <SourceSection candidate={candidate} />
+            </SectionAnchor>
+            {/* Read-only, so it deliberately does NOT register with the
+                dirty registry and never appears in the Save-all bar. */}
+            <SectionAnchor sectionId="form-answers">
+              <FormSubmissionsCard submissions={candidate.submissions} />
             </SectionAnchor>
             <SectionAnchor sectionId="consent">
               <ConsentCard candidate={candidate} />

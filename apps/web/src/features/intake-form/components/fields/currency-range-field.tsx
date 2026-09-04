@@ -47,14 +47,31 @@ export function CurrencyRangeField({
 }: FieldProps) {
   const units = allowedUnitsFor(question.validation);
   const currency = question.validation.currency ?? DEFAULT_CURRENCY;
-  const draft = draftFrom(value, currency);
+  const stored = draftFrom(value, currency);
+  /**
+   * Preselect a unit so the toggle is never ambiguous on first render
+   * (Haider, 28 Aug). "monthly" wins when it is allowed — it is how SDB quotes
+   * most budgets, and it is the first word of the question's own label.
+   *
+   * This is display-only: the RHF value stays undefined until the client
+   * actually types an amount (see `update` below), so an untouched optional
+   * range is still "blank" for validation and never submits a phantom unit.
+   */
+  const defaultUnit = units.includes("monthly") ? "monthly" : units[0];
+  const draft: DraftCurrencyRange = {
+    ...stored,
+    unit: stored.unit ?? defaultUnit,
+  };
   const groupDescribedBy = describedBy(question, error !== undefined);
 
   const update = (patch: Partial<DraftCurrencyRange>) => {
     const next = { ...draft, ...patch, currency };
-    // Keep the RHF value undefined until anything is entered, so an optional
-    // untouched range stays "blank" for validation and submission.
-    if (next.min === undefined && next.max === undefined && next.unit === undefined) {
+    // Blank when there is no AMOUNT — the unit alone is now always populated
+    // by the preselected default, so testing it here would make an optional
+    // range look answered the moment the field rendered, and would leave a
+    // phantom { unit } behind if the client typed an amount then cleared it.
+    // A unit with no amount carries no meaning anyway.
+    if (next.min === undefined && next.max === undefined) {
       onChange(undefined);
     } else {
       onChange(next);

@@ -21,6 +21,14 @@ export const MAPPED_QUESTION_KEYS = [
   'company_name',
   'contact_name',
   'contact_email',
+  // T16: the client authors these at intake; job_description additionally
+  // gates the move to sourcing, which is why it must stay undeletable.
+  // T14: a part-time start that grows to full-time — the arrangement the
+  // system could not previously express (see 0019).
+  'starts_part_time',
+  'full_time_transition_after',
+  'job_description',
+  'role_description',
 ] as const;
 
 export type MappedQuestionKey = (typeof MAPPED_QUESTION_KEYS)[number];

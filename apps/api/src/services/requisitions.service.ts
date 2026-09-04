@@ -53,6 +53,7 @@ import {
   type EventRecord,
   type RequisitionRecord,
 } from '../repositories/requisitions.repo.js';
+import { findClientPlacementForRequisition } from '../repositories/placements.repo.js';
 import { findUserById } from '../repositories/users.repo.js';
 import { emitEvent } from './events.js';
 import {
@@ -165,7 +166,7 @@ export function createRequisitionsService(
     record: RequisitionRecord,
     actor: RequisitionActor,
   ): Promise<RequisitionDetail> {
-    const [taxonomy, answers, countsByStage] = await Promise.all([
+    const [taxonomy, answers, countsByStage, placement] = await Promise.all([
       getTaxonomyLabels(deps.db, {
         engineId: record.engineId,
         departmentId: record.departmentId,
@@ -177,6 +178,9 @@ export function createRequisitionsService(
       actor.ownClientId === null
         ? getStageCounts(deps.db, record.id)
         : getClientVisibleStageCounts(deps.db, actor.ownClientId, record.id),
+      // Post-hire guarantee window (T31). Dates and status only — safe for a
+      // client caller, and the same shape the dashboard returns.
+      findClientPlacementForRequisition(deps.db, record.id),
     ]);
     const payload = {
       ...toRequisitionPayload(record, actor.canViewCommercials),
@@ -208,6 +212,7 @@ export function createRequisitionsService(
         };
       }),
       countsByStage,
+      placement,
     };
     return payload as unknown as RequisitionDetail;
   }
@@ -262,6 +267,23 @@ export function createRequisitionsService(
         'INVALID_TRANSITION',
         `Cannot move a requisition from '${from}' to '${toStatus}'.`,
         { from, to: toStatus },
+      );
+    }
+
+    // T16 gate. Rebecca, 35:40: "we cannot look for the position until we have
+    // the job description." Enforced here rather than in the UI so it holds
+    // for every caller — the admin page, the client portal, and the API.
+    //
+    // Only the move INTO sourcing is blocked: a position legitimately sits
+    // without a description while it is still submitted or awaiting approval.
+    if (
+      toStatus === 'sourcing' &&
+      (record.jobDescription === null || record.jobDescription.trim() === '')
+    ) {
+      throw new ApiError(
+        'VALIDATION_FAILED',
+        'Add a job description before sourcing starts — it is what candidates are shown.',
+        { fields: { jobDescription: 'A job description is required before sourcing.' } },
       );
     }
 

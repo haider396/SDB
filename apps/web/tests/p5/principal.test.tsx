@@ -35,7 +35,9 @@ function pendingApprovalState(principalUserId: string | null) {
   const requisition = makeRequisition({
     status: "pending_principal_approval",
     principalUserId,
-    briefMarkdown: "We need a senior EA.\n\nUS-hours overlap required.",
+    // T16: the client now reads the JOB DESCRIPTION — the admin-authored
+    // brief was retired in 0018, and the approval gates on this instead.
+    jobDescription: "We need a senior EA.\n\nUS-hours overlap required.",
   });
   return {
     mock: makeState({ me, requisitionDetail: requisition }),
@@ -67,7 +69,7 @@ describe("principal approval panel", () => {
   it("shows a 'brief is being finalised' card instead of the approve CTA when the brief is empty (UX 3.4)", async () => {
     const { mock, me, requisition } = pendingApprovalState(null);
     requisition.principalUserId = me.user.id;
-    requisition.briefMarkdown = null;
+    requisition.jobDescription = null;
     installClientPortalApiMock(mock);
     renderClientPortal(`/client/requisitions/${requisition.id}`);
 

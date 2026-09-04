@@ -9,10 +9,13 @@ import {
   DEFAULT_SCALE_MIN,
 } from "../../schema-builder";
 import { describedBy, fieldId, GroupShell, InputShell } from "./field-shell";
+import { SearchableSelect } from "./searchable-select";
 import { SegmentedControl } from "./segmented";
 import type { FieldProps } from "./types";
 
 const RADIO_GROUP_MAX_OPTIONS = 5;
+/** At or above this many options, a native select becomes a scroll-hunt. */
+const SEARCHABLE_SELECT_MIN_OPTIONS = 12;
 
 function RadioOptions({
   question,
@@ -59,6 +62,28 @@ export function SingleSelectField(props: FieldProps) {
       <GroupShell question={question} error={error}>
         <RadioOptions {...props} />
       </GroupShell>
+    );
+  }
+
+  // Long lists (countries, timezones) get a type-to-filter combobox — a
+  // native select means scrolling ~200 rows to find one entry, which is real
+  // friction on a public form. 05 §5's mapping already prescribes search for
+  // long multi_select lists; this applies the same reasoning to single_select.
+  if (question.options.length >= SEARCHABLE_SELECT_MIN_OPTIONS) {
+    return (
+      <InputShell question={question} error={error}>
+        <SearchableSelect
+          inputId={fieldId(question.key)}
+          options={question.options}
+          value={typeof value === "string" ? value : ""}
+          onChange={(next) => onChange(next === "" ? undefined : next)}
+          onBlur={onBlur}
+          label={question.label}
+          placeholder={question.placeholder ?? "Search…"}
+          describedBy={describedBy(question, error !== undefined)}
+          invalid={error !== undefined}
+        />
+      </InputShell>
     );
   }
 

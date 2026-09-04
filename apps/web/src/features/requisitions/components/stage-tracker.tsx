@@ -16,7 +16,6 @@ import {
 import { TypedConfirmDialog } from "@/components/patterns/typed-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { ApiError } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useTransitionRequisition } from "../api";
@@ -66,9 +65,6 @@ export function StageTracker({
     (target): target is "on_hold" | "closed_unfilled" =>
       target === "on_hold" || target === "closed_unfilled",
   );
-  const forwardTargets = targets.filter(
-    (target) => target !== "on_hold" && target !== "closed_unfilled",
-  );
 
   const currentHappyIndex = HAPPY_PATH.indexOf(current);
   const isDetour = currentHappyIndex === -1;
@@ -110,7 +106,7 @@ export function StageTracker({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* ----- Happy-path tracker ----- */}
-        <ol className="space-y-1" aria-label="Requisition stages">
+        <ol className="space-y-1" aria-label="Placement stages">
           {HAPPY_PATH.map((stage, index) => {
             const isDone = currentHappyIndex > index;
             const isCurrent = currentHappyIndex === index;
@@ -170,38 +166,33 @@ export function StageTracker({
           <p className="text-xs text-neutral-500">
             This is a terminal status — no further transitions.
           </p>
-        ) : targets.length > 0 ? (
+        ) : detourTargets.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Move to
+            {/* The FORWARD move now lives in the main column (NextStepCard,
+                T4/T21) — it is the primary action and belongs in the reading
+                path, not the rail. What stays here is deliberately quiet: the
+                pause/close detours nobody should reach for by accident.
+                The old "Move to" caption is gone; a small uppercase label over
+                a stack of buttons is what made Rebecca read this as a
+                dropdown. */}
+            <p className="text-xs text-neutral-500">
+              If this placement is not moving forward:
             </p>
             <div className="flex flex-col gap-2">
-              {forwardTargets.map((target) => (
-                <Button
-                  key={target}
-                  variant="secondary"
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => void runTransition(target)}
-                  disabled={transition.isPending}
-                >
-                  <ArrowRight aria-hidden="true" />
-                  {pendingTarget === target
-                    ? "Moving…"
-                    : REQUISITION_STATUS_META[target].label}
-                </Button>
-              ))}
-              {forwardTargets.length > 0 && detourTargets.length > 0 ? (
-                <Separator className="my-1" />
-              ) : null}
               {detourTargets.map((target) => (
                 <Button
                   key={target}
-                  variant={
-                    target === "closed_unfilled" ? "destructive" : "secondary"
-                  }
+                  // Both are quiet now. A filled destructive button in the
+                  // rail competed with the real next step for attention; the
+                  // typed-name confirm below is the actual safety net for
+                  // closing unfilled, not the button's colour.
+                  variant={target === "closed_unfilled" ? "ghost" : "secondary"}
                   size="sm"
-                  className="justify-start"
+                  className={cn(
+                    "justify-start",
+                    target === "closed_unfilled" &&
+                      "text-danger-text hover:bg-danger-subtle",
+                  )}
                   onClick={() => {
                     // Closing unfilled is terminal — typed-name confirm
                     // (AC-UI-10) instead of a bare one-click transition.
@@ -234,7 +225,7 @@ export function StageTracker({
         open={isCloseConfirmOpen}
         onClose={() => setIsCloseConfirmOpen(false)}
         title={`Close ${requisition.reference} unfilled?`}
-        description="This is a terminal status — the requisition cannot be reopened and no further candidates can be presented on it."
+        description="This is a terminal status — the placement cannot be reopened and no further candidates can be presented on it."
         confirmName={requisition.reference}
         confirmLabel="Close unfilled"
         pendingLabel="Closing…"

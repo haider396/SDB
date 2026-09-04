@@ -137,8 +137,8 @@ export function AddCandidatesSheet({
             if (error.code === "DUPLICATE_ASSIGNMENT") {
               setInlineError(
                 names === ""
-                  ? "Some of these candidates are already assigned to this requisition."
-                  : `Already assigned to this requisition: ${names}. Nobody was added.`,
+                  ? "Some of these candidates are already assigned to this placement."
+                  : `Already assigned to this placement: ${names}. Nobody was added.`,
               );
               return;
             }
@@ -211,7 +211,7 @@ export function AddCandidatesSheet({
               <EmptyState
                 icon={UserPlus}
                 title="No candidates to add"
-                description="Every matching candidate is already on this requisition, or nothing matches the search."
+                description="Every matching candidate is already on this placement, or nothing matches the search."
               />
             ) : (
               <ul aria-label="Available candidates" className="space-y-1">

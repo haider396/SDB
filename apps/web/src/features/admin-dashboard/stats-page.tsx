@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/patterns/error-state";
 import { LoadingSkeleton } from "@/components/patterns/loading-skeleton";
 import { PageHeader } from "@/components/patterns/page-header";
 import { useAdminStats } from "./api";
+import { GuaranteeWindows } from "./components/guarantee-windows";
 import { stageChartData } from "./components/stage-chart-data";
 
 /** Recharts is heavy and stats-only (05 §1) — split it out of the shell. */
@@ -43,7 +44,7 @@ export function StatsPage() {
     <PageHeader
       breadcrumbs={[{ label: "Admin", to: "/admin" }, { label: "Stats" }]}
       title="Stats"
-      subtitle="Pipeline health across all active requisitions"
+      subtitle="Pipeline health across all active placements"
     />
   );
 
@@ -74,7 +75,7 @@ export function StatsPage() {
       {header}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile
-          label="Open requisitions"
+          label="Open placements"
           value={String(stats.openRequisitions)}
           hint="Not yet placed or closed"
         />
@@ -97,6 +98,11 @@ export function StatsPage() {
           }
         />
       </div>
+
+      {/* Post-hire guarantee windows (T31). Rebecca, 37:53: "we can see of the
+          candidates that we've placed, how many are in a 30, 60, 90 day
+          period, so that we know." */}
+      <GuaranteeWindows windows={stats.placementsByGuaranteeWindow} />
 
       <section
         aria-label="Candidates by stage"
@@ -125,7 +131,7 @@ export function StatsPage() {
             <EmptyState
               icon={BarChart3}
               title="No candidates in any pipeline"
-              description="Assign candidates to a requisition and their stages will chart here."
+              description="Assign candidates to a placement and their stages will chart here."
             />
           )}
         </div>

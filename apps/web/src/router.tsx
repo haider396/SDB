@@ -24,6 +24,8 @@ import { NotFoundPage } from "@/routes/not-found-page";
 import { AcceptInvitationPage } from "@/routes/public/accept-invitation-page";
 import { ForgotPasswordPage } from "@/routes/public/forgot-password-page";
 import { IntakePage } from "@/routes/public/intake-page";
+import { RegisterPage } from "@/routes/public/register-page";
+import { PublicFormPage } from "@/routes/public/public-form-page";
 import { LoginPage } from "@/routes/public/login-page";
 import { ResetPasswordPage } from "@/routes/public/reset-password-page";
 
@@ -80,6 +82,14 @@ const QuestionManagerPage = lazy(() =>
     default: m.QuestionManagerPage,
   })),
 );
+const FormsListPage = lazy(async () => ({
+  default: (await import("@/features/form-builder/builder/forms-list-page"))
+    .FormsListPage,
+}));
+const FormBuilderPage = lazy(async () => ({
+  default: (await import("@/features/form-builder/builder/form-builder-page"))
+    .FormBuilderPage,
+}));
 const NotificationsPage = lazy(() =>
   import("@/features/notifications").then((m) => ({
     default: m.NotificationsPage,
@@ -145,6 +155,8 @@ export const router = createBrowserRouter([
 
   // ----- Public tree (entry chunk) -----
   { path: "/intake", element: <IntakePage /> },
+  { path: "/register", element: <RegisterPage /> },
+  { path: "/f/:slug", element: <PublicFormPage /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
@@ -248,6 +260,24 @@ export const router = createBrowserRouter([
         element: (
           <RequirePermission permission="question.view">
             <QuestionManagerPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        // A form builder is question configuration with a layout layer, so it
+        // reuses question.view / question.manage rather than inventing a key.
+        path: "forms",
+        element: (
+          <RequirePermission permission="question.view">
+            <FormsListPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "forms/:id",
+        element: (
+          <RequirePermission permission="question.manage">
+            <FormBuilderPage />
           </RequirePermission>
         ),
       },

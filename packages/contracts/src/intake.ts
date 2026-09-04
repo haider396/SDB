@@ -161,3 +161,36 @@ export const InPortalRequisitionResponseSchema = z.object({
 export type InPortalRequisitionResponse = z.infer<
   typeof InPortalRequisitionResponseSchema
 >;
+
+/**
+ * A stored answer, as read back for display.
+ *
+ * Shared deliberately: requisition answers and candidate answers are the same
+ * row shape (0006 and 0017 define identical tables), and both are rendered by
+ * the same value logic. Defining it twice guarantees drift the first time a
+ * value shape is added.
+ *
+ * `label` and `questionType` are lifted from `questionSnapshot` by the API for
+ * convenience, but the SNAPSHOT is authoritative for display (03 §1.4) — a
+ * later edit to the questionnaire must never change what a candidate is shown
+ * to have answered.
+ */
+export const StoredAnswerSchema = z.object({
+  id: z.string().uuid(),
+  questionId: z.string().uuid(),
+  questionKey: z.string(),
+  /** Label/type as at answer time, lifted from the snapshot for rendering. */
+  label: z.string(),
+  questionType: z.string(),
+  valueText: z.string().nullable(),
+  valueNumber: z.number().nullable(),
+  valueBoolean: z.boolean().nullable(),
+  valueDate: z.string().nullable(),
+  valueJson: JsonValueSchema.nullable(),
+  selectedOptions: z.array(z.object({ value: z.string(), label: z.string() })),
+  questionSnapshot: z.record(z.unknown()),
+  answeredBy: z.string().uuid().nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+export type StoredAnswer = z.infer<typeof StoredAnswerSchema>;

@@ -40,9 +40,6 @@ function RequisitionCard({
             >
               {requisition.advertisedTitle ?? "Untitled role"}
             </Link>
-            <p className="font-mono text-xs text-neutral-500">
-              {requisition.reference}
-            </p>
           </div>
           <ClientStatusBadgePill status={requisition.status} />
         </div>
@@ -57,7 +54,7 @@ function RequisitionCard({
           />
         ) : null}
         <p className="text-xs tabular-nums text-neutral-500">
-          Submitted {days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}
+          Opened {days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}
         </p>
       </CardContent>
     </Card>
@@ -78,8 +75,8 @@ export function ClientRequisitionsPage() {
 
   const header = (
     <PageHeader
-      breadcrumbs={[{ label: "Dashboard", to: "/client" }, { label: "My requisitions" }]}
-      title="My requisitions"
+      breadcrumbs={[{ label: "Dashboard", to: "/client" }, { label: "My placements" }]}
+      title="My placements"
       subtitle="Track every role you have open with us"
       actions={
         <Button asChild>
@@ -96,7 +93,7 @@ export function ClientRequisitionsPage() {
     return (
       <>
         {header}
-        <LoadingSkeleton variant="card" rows={3} label="Loading your requisitions…" />
+        <LoadingSkeleton variant="card" rows={3} label="Loading your placements…" />
       </>
     );
   }
@@ -119,7 +116,7 @@ export function ClientRequisitionsPage() {
       {requisitions.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title="No requisitions yet"
+          title="No placements yet"
           description="Request a hire and it will appear here with live progress, the brief, and candidates to review."
           action={
             <Button asChild>

@@ -81,6 +81,7 @@ export function makeStats(overrides?: Partial<AdminStats>): AdminStats {
     candidatesByStage: {},
     averageDaysToPresent: null,
     activePlacements: 2,
+    placementsByGuaranteeWindow: { d30: 0, d60: 0, d90: 0, elapsed: 0 },
     ...overrides,
   };
 }

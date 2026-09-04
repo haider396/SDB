@@ -187,3 +187,42 @@ export async function updatePlacement(
   const row = rows[0];
   return row === undefined ? null : mapPlacement(row);
 }
+
+/**
+ * The client-safe slice of a requisition's placement (T31): dates and status
+ * only, no commercial fields. Returns null before anyone is hired.
+ *
+ * At most one placement per requisition in practice; ordered + limited so an
+ * unexpected second row cannot change the shape of the response.
+ */
+export async function findClientPlacementForRequisition(
+  sql: Queryable,
+  requisitionId: string,
+): Promise<{
+  startDate: string;
+  guaranteeEndDate: string | null;
+  status: string;
+} | null> {
+  const rows = await sql<
+    {
+      start_date: string;
+      guarantee_end_date: string | null;
+      status: string;
+    }[]
+  >`
+    select start_date::text          as start_date,
+           guarantee_end_date::text  as guarantee_end_date,
+           status::text              as status
+    from placements
+    where requisition_id = ${requisitionId}
+    order by created_at desc
+    limit 1
+  `;
+  const row = rows[0];
+  if (row === undefined) return null;
+  return {
+    startDate: row.start_date,
+    guaranteeEndDate: row.guarantee_end_date,
+    status: row.status,
+  };
+}

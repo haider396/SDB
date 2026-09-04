@@ -11,7 +11,7 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   candidates_presented: "Candidates presented",
   client_decision_recorded: "Client decision recorded",
   interview_scheduled: "Interview scheduled",
-  requisition_status_changed: "Requisition status changed",
+  requisition_status_changed: "Placement status changed",
 };
 
 export const NOTIFICATION_STATUS_LABELS: Record<NotificationStatus, string> = {

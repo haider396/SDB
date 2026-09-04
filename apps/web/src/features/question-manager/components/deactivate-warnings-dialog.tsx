@@ -45,25 +45,33 @@ export function DeactivateWarningsDialog({
                 “{state.question.label}” was deactivated — with warnings
               </DialogTitle>
               <DialogDescription>
-                These questions are shown conditionally based on its answer.
-                While it is inactive they can never appear on the form:
+                Deactivating it has these consequences:
               </DialogDescription>
             </DialogHeader>
-            <ul className="space-y-2" aria-label="Dependent questions">
-              {state.warnings.map((warning) => (
+            <ul className="space-y-2" aria-label="Consequences">
+              {state.warnings.map((warning, index) => (
                 <li
-                  key={warning.dependent.id}
+                  key={warning.dependent?.id ?? `${warning.code}-${String(index)}`}
                   className="flex items-center gap-2 rounded-md bg-surface-subtle px-3 py-2 text-sm text-neutral-800"
                 >
-                  <span className="min-w-0 flex-1 truncate">
-                    {warning.dependent.label}
-                  </span>
-                  <span className="font-mono text-xs text-neutral-500">
-                    {warning.dependent.key}
-                  </span>
-                  {!warning.dependent.isActive ? (
-                    <Chip tone="warning">Inactive</Chip>
-                  ) : null}
+                  {warning.dependent === null ? (
+                    // A warning about the question itself — for instance that it
+                    // fills a field on the candidate profile — so there is no
+                    // other question to name.
+                    <span className="min-w-0 flex-1">{warning.message}</span>
+                  ) : (
+                    <>
+                      <span className="min-w-0 flex-1 truncate">
+                        {warning.dependent.label}
+                      </span>
+                      <span className="font-mono text-xs text-neutral-500">
+                        {warning.dependent.key}
+                      </span>
+                      {!warning.dependent.isActive ? (
+                        <Chip tone="warning">Inactive</Chip>
+                      ) : null}
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

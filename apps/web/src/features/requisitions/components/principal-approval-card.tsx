@@ -30,9 +30,11 @@ export function PrincipalApprovalCard({
           (member) => member.userId === requisition.principalUserId,
         );
 
+  // T16: approval is now gated on the JOB DESCRIPTION, not the retired
+  // brief — that is the document the principal is actually approving.
   const briefDrafted =
-    requisition.briefMarkdown !== null &&
-    requisition.briefMarkdown.trim() !== "";
+    requisition.jobDescription !== null &&
+    requisition.jobDescription.trim() !== "";
   const canRequest =
     (requisition.status === "submitted" ||
       requisition.status === "changes_requested") &&

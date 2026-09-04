@@ -32,6 +32,7 @@ import { useMe } from "@/lib/permissions";
 import { useClientDashboard } from "./api";
 import { clientEventSentence } from "./labels";
 import { ClientStatusBadgePill } from "./components/client-stage-tracker";
+import { GuaranteeProgress } from "@/components/patterns/guarantee-progress";
 import { StageCountStrip, totalCandidates } from "./components/stage-count-strip";
 
 function RequisitionSummaryCard({
@@ -51,9 +52,6 @@ function RequisitionSummaryCard({
             >
               {requisition.advertisedTitle ?? "Untitled role"}
             </Link>
-            <p className="font-mono text-xs text-neutral-500">
-              {requisition.reference}
-            </p>
           </div>
           <ClientStatusBadgePill status={requisition.status} />
         </div>
@@ -67,8 +65,13 @@ function RequisitionSummaryCard({
               : undefined
           }
         />
+        {/* Post-hire guarantee (T31) — compact on the card; the position page
+            carries the full 30/60/90 view. */}
+        {requisition.placement !== null ? (
+          <GuaranteeProgress placement={requisition.placement} compact />
+        ) : null}
         <p className="text-xs tabular-nums text-neutral-500">
-          Submitted {days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}
+          Opened {days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}
         </p>
       </CardContent>
     </Card>
@@ -99,7 +102,7 @@ function RecentActivity({
               to={requisitionHref(event.entityId)}
               className="font-medium text-brand-navy-ink hover:text-brand-blue hover:underline"
             >
-              {event.requisitionTitle ?? event.requisitionReference}
+              {event.requisitionTitle ?? "Untitled role"}
             </Link>
             : {clientEventSentence(event)}
             {event.actorName !== null ? (
@@ -214,14 +217,11 @@ export function ClientDashboardPage() {
               {principalApprovals.map((item) => (
                 <li key={item.requisitionId}>
                   <Card className="border-l-2 border-warning">
-                    <CardContent className="grid grid-cols-[auto_6.5rem_1fr_auto] items-center gap-3 p-4">
+                    <CardContent className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4">
                       <ShieldCheck
                         aria-hidden="true"
                         className="h-5 w-5 shrink-0 text-warning-text"
                       />
-                      <span className="font-mono text-xs text-neutral-500">
-                        {item.reference}
-                      </span>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-brand-navy-ink">
                           Brief awaiting your approval
@@ -244,14 +244,11 @@ export function ClientDashboardPage() {
               {candidatesAwaitingReview.map((item) => (
                 <li key={item.assignmentId}>
                   <Card className="border-l-2 border-info">
-                    <CardContent className="grid grid-cols-[auto_6.5rem_1fr_auto] items-center gap-3 p-4">
+                    <CardContent className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4">
                       <UserSearch
                         aria-hidden="true"
                         className="h-5 w-5 shrink-0 text-info"
                       />
-                      <span className="font-mono text-xs text-neutral-500">
-                        {item.requisitionReference}
-                      </span>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-brand-navy-ink">
                           {item.displayName} is ready for your review
@@ -306,7 +303,7 @@ export function ClientDashboardPage() {
           {dashboard.requisitions.length === 0 ? (
             <EmptyState
               icon={CalendarClock}
-              title="No requisitions yet"
+              title="No placements yet"
               description="When you request a hire, it appears here with live progress and candidates to review."
               action={
                 <Button asChild>

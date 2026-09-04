@@ -47,13 +47,31 @@ function setup(status: RequisitionStatus) {
   return { client, requisition, state };
 }
 
-async function moveToButtons(): Promise<string[]> {
-  const heading = await screen.findByText("Move to");
+/**
+ * Since T4/T21 the forward move and the detours live in different places: the
+ * forward action is the primary button in NextStepCard (main column, under the
+ * brief) and only the pause/close detours remain in the rail's tracker.
+ *
+ * These helpers assert the SPLIT is right, and the tests below assert the
+ * adjacency map is still respected — by checking the status actually POSTed,
+ * not the button's wording, which is deliberately friendly copy now.
+ */
+async function detourButtons(): Promise<string[]> {
+  const heading = await screen.findByText(/not moving forward/i);
   const container = heading.closest("div");
-  if (container === null) throw new Error("No transition container");
+  if (container === null) throw new Error("No detour container");
   return within(container)
     .getAllByRole("button")
     .map((button) => button.textContent ?? "");
+}
+
+/** The single primary forward action, or null when the status is terminal. */
+function nextStepButton(): HTMLElement | null {
+  const heading = screen.queryByText("Next step");
+  const card = heading?.closest("div")?.parentElement ?? null;
+  if (card === null) return null;
+  const buttons = within(card).queryAllByRole("button");
+  return buttons[0] ?? null;
 }
 
 describe("stage tracker transitions", () => {
@@ -63,21 +81,56 @@ describe("stage tracker transitions", () => {
       status !== "placed" && status !== "closed_unfilled" && status !== "on_hold",
   );
 
-  it.each(cases)("renders only the allowed targets from %s", async (status) => {
-    const { state } = setup(status);
-    installApiMock(state);
-    // ?tab=overview pins the Overview tab: active-phase statuses now
-    // default to the Pipeline tab (UX 2.3), and the tracker lives here.
-    renderAdmin(
-      `/admin/requisitions/${state.requisitions[0]?.id ?? ""}?tab=overview`,
-    );
+  it.each(cases)(
+    "offers exactly the map's detours in the rail from %s",
+    async (status) => {
+      const { state } = setup(status);
+      installApiMock(state);
+      // ?tab=overview pins the Overview tab: active-phase statuses now
+      // default to the Pipeline tab (UX 2.3), and the tracker lives here.
+      renderAdmin(
+        `/admin/requisitions/${state.requisitions[0]?.id ?? ""}?tab=overview`,
+      );
 
-    const labels = await moveToButtons();
-    const expected = allowedTransitions(status).map(
-      (target) => REQUISITION_STATUS_META[target].label,
-    );
-    expect(labels).toEqual(expected);
-  });
+      const labels = await detourButtons();
+      const expected = allowedTransitions(status)
+        .filter((target) => target === "on_hold" || target === "closed_unfilled")
+        .map((target) => REQUISITION_STATUS_META[target].label);
+      expect(labels).toEqual(expected);
+    },
+  );
+
+  it.each(cases)(
+    "posts the map's forward target from %s when the next step is clicked",
+    async (status) => {
+      const user = userEvent.setup();
+      const { state } = setup(status);
+      const mock = installApiMock(state);
+      renderAdmin(
+        `/admin/requisitions/${state.requisitions[0]?.id ?? ""}?tab=overview`,
+      );
+
+      // The forward target from the local adjacency map — the one status that
+      // is neither a pause nor a close.
+      const forward = allowedTransitions(status).find(
+        (target) => target !== "on_hold" && target !== "closed_unfilled",
+      );
+
+      const button = await waitFor(() => {
+        const found = nextStepButton();
+        if (found === null) throw new Error("Next step button not rendered");
+        return found;
+      });
+      await user.click(button);
+
+      await waitFor(() => {
+        const posted = mock.requests.find((request) =>
+          request.pathname.endsWith("/transition"),
+        );
+        expect(posted?.body).toEqual({ toStatus: forward });
+      });
+    },
+  );
 
   it("offers no transitions from a terminal status (AC-RQ-03)", async () => {
     const { state } = setup("placed");
@@ -87,10 +140,13 @@ describe("stage tracker transitions", () => {
     expect(
       await screen.findByText(/terminal status — no further transitions/i),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Move to")).not.toBeInTheDocument();
+    expect(screen.queryByText(/not moving forward/i)).not.toBeInTheDocument();
+    // No forward action either — a terminal placement offers nothing.
+    expect(nextStepButton()).toBeNull();
   });
 
   it("derives the on_hold resume target from the event log", async () => {
+    const user = userEvent.setup();
     const { state, requisition } = setup("on_hold");
     state.eventsByRequisitionId[requisition.id] = [
       makeEvent({
@@ -100,11 +156,26 @@ describe("stage tracker transitions", () => {
         occurredAt: "2026-08-10T09:00:00+00:00",
       }),
     ];
-    installApiMock(state);
-    renderAdmin(`/admin/requisitions/${requisition.id}`);
+    const mock = installApiMock(state);
+    renderAdmin(`/admin/requisitions/${requisition.id}?tab=overview`);
 
-    const labels = await moveToButtons();
-    expect(labels).toEqual(["Sourcing", "Closed unfilled"]);
+    // Resuming from on_hold is the FORWARD move, so it is the next step; only
+    // "Closed unfilled" remains as a detour.
+    expect(await detourButtons()).toEqual(["Closed unfilled"]);
+
+    const button = await waitFor(() => {
+      const found = nextStepButton();
+      if (found === null) throw new Error("Next step button not rendered");
+      return found;
+    });
+    await user.click(button);
+    await waitFor(() => {
+      const posted = mock.requests.find((request) =>
+        request.pathname.endsWith("/transition"),
+      );
+      // Resumes to the status it was paused from, per the event log.
+      expect(posted?.body).toEqual({ toStatus: "sourcing" });
+    });
   });
 
   it("surfaces a 409 INVALID_TRANSITION with the server's from/to", async () => {
@@ -122,13 +193,14 @@ describe("stage tracker transitions", () => {
     );
     renderAdmin(`/admin/requisitions/${requisition.id}?tab=overview`);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Candidates presented" }),
-    );
+    const button = await waitFor(() => {
+      const found = nextStepButton();
+      if (found === null) throw new Error("Next step button not rendered");
+      return found;
+    });
+    await user.click(button);
     expect(
-      await screen.findByText(
-        /candidates_presented → sourcing is not allowed/i,
-      ),
+      await screen.findByText(/has moved since the page loaded/i),
     ).toBeInTheDocument();
   });
 
@@ -173,9 +245,12 @@ describe("stage tracker transitions", () => {
     const mock = installApiMock(state);
     renderAdmin(`/admin/requisitions/${requisition.id}?tab=overview`);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Candidates presented" }),
-    );
+    const button = await waitFor(() => {
+      const found = nextStepButton();
+      if (found === null) throw new Error("Next step button not rendered");
+      return found;
+    });
+    await user.click(button);
     // Badge + tracker reflect the new status after the refetch.
     expect(
       await screen.findAllByText("Candidates presented"),

@@ -258,9 +258,10 @@ describe("intake form end-to-end (mocked fetch)", () => {
     await fillForm(user);
     await user.click(screen.getByRole("button", { name: "Submit request" }));
 
-    // Confirmation screen: reference + what happens next, no account prompt
+    // Confirmation screen: what happens next, no account prompt, and NO
+    // requisition reference (removed at the client's request — T2).
     await screen.findByText("Request received");
-    expect(screen.getByText("REQ-000123")).toBeInTheDocument();
+    expect(screen.queryByText("REQ-000123")).not.toBeInTheDocument();
     expect(screen.getByText("What happens next")).toBeInTheDocument();
     expect(screen.queryByText(/account/i)).not.toBeInTheDocument();
 
