@@ -498,7 +498,7 @@ export function createRequisitionsService(
             valueBoolean: entry.valueBoolean,
             valueDate: entry.valueDate,
             valueJson: entry.valueJson,
-            questionSnapshot: buildSnapshot(entry.question, capturedAt),
+            questionSnapshot: buildSnapshot(entry.question, capturedAt, entry.valueJson),
             answeredBy: actor.userId,
           });
           await replaceAnswerOptions(tx, answerId, entry.optionIds);

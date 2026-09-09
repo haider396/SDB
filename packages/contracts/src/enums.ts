@@ -77,6 +77,12 @@ export const QuestionTypeSchema = z.enum([
   'date',
   'scale',
   'file_upload',
+  /**
+   * A question whose answer is a LIST OF ROWS with defined columns (migration
+   * 0028). Column definitions live in `questions.validation.repeatingGroup`;
+   * the answer is `value_json = { rows: [...] }`.
+   */
+  'repeating_group',
 ]);
 export type QuestionType = z.infer<typeof QuestionTypeSchema>;
 
@@ -147,6 +153,42 @@ export const AutonomyLevelSchema = z.enum([
   'fully_autonomous',
 ]);
 export type AutonomyLevel = z.infer<typeof AutonomyLevelSchema>;
+
+/**
+ * SDB's own ranking of an open position (T18, migration 0030).
+ *
+ * ⚠ Declared in RANK order, matching the Postgres enum, and ordering code must
+ * use that order — `PRIORITY_RANK` below — never a string sort. Alphabetically
+ * "high" comes before "urgent", so a naive sort puts the second-most-urgent
+ * role above the most urgent one and the ranking actively misleads.
+ *
+ * Distinct from `requisitions.urgency`, which is the CLIENT's stated timeline
+ * answered on the intake form. They are allowed to disagree; see 0030.
+ */
+export const RequisitionPrioritySchema = z.enum([
+  'low',
+  'normal',
+  'high',
+  'urgent',
+]);
+export type RequisitionPriority = z.infer<typeof RequisitionPrioritySchema>;
+
+/** Highest first — the order a human means by "priority". */
+export const PRIORITY_RANK: readonly RequisitionPriority[] = [
+  'urgent',
+  'high',
+  'normal',
+  'low',
+];
+
+/**
+ * `normal` is the default and deliberately renders as NOTHING on a card. If
+ * three quarters of positions carry a chip the chip stops meaning anything,
+ * and the two that say "Urgent" stop standing out. Absence is the signal.
+ */
+export function isNotablePriority(priority: RequisitionPriority): boolean {
+  return priority !== 'normal';
+}
 
 export const SeniorityLevelSchema = z.enum(['junior', 'mid', 'senior', 'lead']);
 export type SeniorityLevel = z.infer<typeof SeniorityLevelSchema>;

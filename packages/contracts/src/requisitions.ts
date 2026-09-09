@@ -12,6 +12,7 @@ import { ClientPlacementSchema } from './placement-milestones.js';
 import {
   EngagementTypeSchema,
   RateUnitSchema,
+  RequisitionPrioritySchema,
   RequisitionStatusSchema,
   SeniorityLevelSchema,
   ServiceTierSchema,
@@ -103,6 +104,13 @@ export const RequisitionSchema = z
     overlapTimezone: z.string().nullable(),
     targetStartDate: z.string().nullable(),
     urgency: z.string().nullable(),
+    /**
+     * SDB's ranking of this position (T18). NOT the same as `urgency` above,
+     * which is the CLIENT's own stated timeline captured as an intake answer —
+     * see migration 0030 for why they cannot be one field. Admin-writable
+     * only; the client can see it.
+     */
+    priority: RequisitionPrioritySchema,
     principalUserId: z.string().uuid().nullable(),
     principalApprovedAt: z.string().datetime({ offset: true }).nullable(),
     submittedAt: z.string().datetime({ offset: true }),
@@ -212,6 +220,12 @@ export const UpdateRequisitionBodySchema = z
       .nullable()
       .optional(),
     urgency: z.string().max(200).nullable().optional(),
+    /**
+     * Admin-only. A client setting SDB's own work ranking would make the field
+     * meaningless, so it is refused on the write path rather than merely
+     * hidden in the UI.
+     */
+    priority: RequisitionPrioritySchema.optional(),
     regionPreference: z.string().max(500).nullable().optional(),
     principalUserId: z.string().uuid().nullable().optional(),
   })

@@ -7,6 +7,7 @@ import type postgres from 'postgres';
 import type {
   EngagementType,
   RateUnit,
+  RequisitionPriority,
   RequisitionStatus,
   SeniorityLevel,
   ServiceTier,
@@ -46,6 +47,8 @@ export interface RequisitionRecord {
   overlapTimezone: string | null;
   targetStartDate: string | null;
   urgency: string | null;
+  /** SDB's ranking (0030). Distinct from `urgency`, the client's own answer. */
+  priority: RequisitionPriority;
   regionPreference: string | null;
   briefMarkdown: string | null;
   jobDescription: string | null;
@@ -91,6 +94,7 @@ interface RequisitionRow {
   overlap_timezone: string | null;
   target_start_date: string | null;
   urgency: string | null;
+  priority: RequisitionPriority;
   region_preference: string | null;
   brief_markdown: string | null;
   job_description: string | null;
@@ -141,6 +145,7 @@ function mapRequisition(row: RequisitionRow): RequisitionRecord {
     overlapTimezone: row.overlap_timezone,
     targetStartDate: row.target_start_date,
     urgency: row.urgency,
+    priority: row.priority,
     regionPreference: row.region_preference,
     briefMarkdown: row.brief_markdown,
     jobDescription: row.job_description,
@@ -171,7 +176,8 @@ const REQUISITION_COLUMNS = `
   r.seniority_level, r.engagement_type, r.hours_per_week,
   r.overlap_start::text as overlap_start, r.overlap_end::text as overlap_end,
   r.overlap_timezone,
-  r.target_start_date::text as target_start_date, r.urgency, r.region_preference,
+  r.target_start_date::text as target_start_date, r.urgency, r.priority,
+  r.region_preference,
   r.brief_markdown, r.job_description, r.role_description,
   r.starts_part_time, r.full_time_transition_after,
   r.principal_user_id, r.principal_approved_at,
@@ -472,6 +478,7 @@ export interface RequisitionPatch {
   overlapTimezone?: string | null;
   targetStartDate?: string | null;
   urgency?: string | null;
+  priority?: RequisitionPriority;
   regionPreference?: string | null;
   principalUserId?: string | null;
 }
@@ -507,6 +514,7 @@ export async function updateRequisition(
   }
   if (patch.targetStartDate !== undefined) assignments['target_start_date'] = patch.targetStartDate;
   if (patch.urgency !== undefined) assignments['urgency'] = patch.urgency;
+  if (patch.priority !== undefined) assignments['priority'] = patch.priority;
   if (patch.regionPreference !== undefined) assignments['region_preference'] = patch.regionPreference;
   if (patch.principalUserId !== undefined) assignments['principal_user_id'] = patch.principalUserId;
   if (Object.keys(assignments).length === 0) return true;
