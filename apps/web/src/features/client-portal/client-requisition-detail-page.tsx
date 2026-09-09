@@ -8,10 +8,12 @@
  *
  * The rail renders FIRST in DOM (UX 3.4) so mobile/tablet see the approval
  * task above the fold; order utilities move it back to the right column at
- * xl. The brief renders through SimpleMarkdown (headings/bullets/bold, no
- * HTML injection surface).
+ * xl. The job description lives in JobDescriptionCard, which renders it
+ * through SimpleMarkdown (headings/bullets/bold, NO HTML injection surface)
+ * and folds it down to a preview — a long one used to push the candidates,
+ * the thing a client came here to do, below the fold.
  */
-import { FileText, Hourglass } from "lucide-react";
+import { Hourglass } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { ErrorState } from "@/components/patterns/error-state";
@@ -20,10 +22,10 @@ import { PageHeader } from "@/components/patterns/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { useMe } from "@/lib/permissions";
-import { SimpleMarkdown } from "@/lib/simple-markdown";
 import { useClientRequisition } from "./api";
 import { CandidatesSection } from "./components/candidates-section";
 import { ClientStageTracker } from "./components/client-stage-tracker";
+import { JobDescriptionCard } from "./components/job-description-card";
 import { GuaranteeProgress } from "@/components/patterns/guarantee-progress";
 import { PrincipalApprovalPanel } from "./components/principal-approval-panel";
 
@@ -106,6 +108,7 @@ export function ClientRequisitionDetailPage() {
         <ErrorState
           error={requisitionQuery.error}
           onRetry={() => void requisitionQuery.refetch()}
+          backTo={{ to: "/client/requisitions", label: "My placements" }}
         />
       </>
     );
@@ -120,8 +123,9 @@ export function ClientRequisitionDetailPage() {
     me.user.id === requisition.principalUserId;
 
   // T16: the client reads the job description they (or SDB) wrote — the
-  // admin-authored brief was retired in 0018.
-  const hasBrief =
+  // admin-authored brief was retired in 0018, so the word "brief" no longer
+  // names anything in this product and is not used in client-facing copy.
+  const hasJobDescription =
     requisition.jobDescription !== null &&
     requisition.jobDescription.trim() !== "";
 
@@ -142,7 +146,7 @@ export function ClientRequisitionDetailPage() {
                on mobile/tablet; xl:order-2 returns it to the right column. */}
         <aside className="space-y-4 xl:sticky xl:top-6 xl:order-2 xl:self-start">
           {isPrincipalApprovalMine ? (
-            hasBrief ? (
+            hasJobDescription ? (
               <PrincipalApprovalPanel requisition={requisition} />
             ) : (
               // Nothing to approve yet — explain instead of a dead-end CTA.
@@ -153,14 +157,14 @@ export function ClientRequisitionDetailPage() {
                     className="h-4 w-4 text-warning-text"
                   />
                   <CardTitle className="text-base">
-                    The brief is being finalised
+                    The job description is being finalised
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-neutral-600">
-                    Our team is still writing the role brief. You will be able
-                    to review and approve it here as soon as it is ready — no
-                    action needed from you yet.
+                    Our team is still writing the job description. You will be
+                    able to review and approve it here as soon as it is ready —
+                    no action needed from you yet.
                   </p>
                 </CardContent>
               </Card>
@@ -182,19 +186,8 @@ export function ClientRequisitionDetailPage() {
 
         {/* ----- Main column ----- */}
         <div className="min-w-0 space-y-8 xl:order-1">
-          {hasBrief ? (
-            <Card>
-              <CardHeader className="flex-row items-center gap-2 space-y-0">
-                <FileText
-                  aria-hidden="true"
-                  className="h-4 w-4 text-neutral-500"
-                />
-                <CardTitle className="text-base">Job description</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SimpleMarkdown source={requisition.jobDescription ?? ""} />
-              </CardContent>
-            </Card>
+          {hasJobDescription ? (
+            <JobDescriptionCard description={requisition.jobDescription ?? ""} />
           ) : null}
 
           <CandidatesSection requisitionId={requisition.id} />

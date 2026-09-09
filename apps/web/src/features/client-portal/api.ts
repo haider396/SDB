@@ -31,6 +31,7 @@ import type {
   Interview,
   RejectBody,
   Requisition,
+  PublicTaxonomy,
   RequisitionDetail,
 } from "@sdb/contracts";
 import { apiFetch, apiFetchCollection } from "@/lib/api-client";
@@ -57,15 +58,82 @@ export function useClientDashboard(): UseQueryResult<ClientDashboard, Error> {
 }
 
 /** The caller's own requisitions — implicitly scoped, no filters sent. */
+/**
+ * `ListRequisitionsQuerySchema` caps `limit` at 100, so a single request can
+ * never return more than that — and this list used to ask for exactly 100 and
+ * keep whatever came back. A client with 101 positions silently saw 100, with
+ * no counter, no "load more" and nothing in the UI to suggest anything was
+ * missing. Silent truncation on a list someone uses to check on their hires is
+ * the worst shape a bug can take: it looks like it worked.
+ *
+ * So follow the cursor to the end. The page holds the whole list in memory on
+ * purpose — grouping and sorting it (T24) then need no server round trip.
+ */
+const REQUISITIONS_PAGE_SIZE = 100;
+/**
+ * A runaway-loop guard, not a business limit. A client with 1,000 open
+ * positions needs a paginated screen, not a longer fetch — if this is ever
+ * reached, that is the finding.
+ */
+const REQUISITIONS_MAX_PAGES = 10;
+
 export function useClientRequisitions(): UseQueryResult<Requisition[], Error> {
   return useQuery<Requisition[], Error>({
     queryKey: clientPortalKeys.requisitions,
     queryFn: async () => {
-      const { data } = await apiFetchCollection<Requisition>("/requisitions", {
-        query: { limit: 100 },
-      });
-      return data;
+      const all: Requisition[] = [];
+      let cursor: string | undefined;
+
+      for (let page = 0; page < REQUISITIONS_MAX_PAGES; page += 1) {
+        const { data, meta } = await apiFetchCollection<Requisition>(
+          "/requisitions",
+          {
+            query:
+              cursor === undefined
+                ? { limit: REQUISITIONS_PAGE_SIZE }
+                : { limit: REQUISITIONS_PAGE_SIZE, cursor },
+          },
+        );
+        all.push(...data);
+        if (meta.nextCursor === null) return all;
+        cursor = meta.nextCursor;
+      }
+
+      return all;
     },
+  });
+}
+
+/**
+ * Department id → label, for grouping the positions list.
+ *
+ * The list payload (`RequisitionSchema`) carries only `departmentId`; the
+ * label lives on the DETAIL schema's `taxonomy`, which the list does not
+ * return. Rather than change a shared endpoint for one screen's heading, read
+ * the labels from `GET /taxonomy/public` — the same source the public intake
+ * form uses. It is unauthenticated, small, and cached, so this costs one
+ * request per session and nothing on navigation.
+ *
+ * If the API later puts the label on the list row, this hook and the lookup
+ * it feeds both disappear.
+ */
+export function useDepartmentLabels(): UseQueryResult<
+  Record<string, string>,
+  Error
+> {
+  return useQuery<Record<string, string>, Error>({
+    queryKey: [...clientPortalKeys.requisitions, "department-labels"],
+    queryFn: async () => {
+      const taxonomy = await apiFetch<PublicTaxonomy>("/taxonomy/public");
+      const labels: Record<string, string> = {};
+      for (const engine of taxonomy.engines) {
+        for (const department of engine.departments) {
+          labels[department.id] = department.label;
+        }
+      }
+      return labels;
+    },
+    staleTime: 5 * 60_000,
   });
 }
 
