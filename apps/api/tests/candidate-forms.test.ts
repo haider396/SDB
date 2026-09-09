@@ -31,6 +31,7 @@ const repo = vi.hoisted(() => ({
   deleteAllBlocks: vi.fn(),
   getReferencedQuestions: vi.fn(),
   listFormsUsingQuestion: vi.fn(),
+  listFormKeys: vi.fn(),
 }));
 vi.mock('../src/repositories/candidate-forms.repo.js', () => repo);
 
@@ -46,6 +47,8 @@ const VERSION_ID = '00000000-0000-4000-8000-000000000802';
 const RC_ID = '00000000-0000-4000-8000-000000000803';
 const Q_EMAIL = '00000000-0000-4000-8000-000000000811';
 const Q_COUNTRY = '00000000-0000-4000-8000-000000000812';
+const Q_FIRST_NAME = '00000000-0000-4000-8000-000000000813';
+const Q_LAST_NAME = '00000000-0000-4000-8000-000000000814';
 
 const actor = { userId: '00000000-0000-4000-8000-000000000101', role: 'admin' as const };
 
@@ -107,6 +110,15 @@ function question(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Email plus both names — the minimum a form needs to create a candidate. */
+function identityQuestions() {
+  return [
+    question(),
+    question({ questionId: Q_FIRST_NAME, key: 'first_name' }),
+    question({ questionId: Q_LAST_NAME, key: 'last_name' }),
+  ];
+}
+
 /** Run activate() and return the `details.fields` an admin would be shown. */
 async function activateFields(): Promise<Record<string, string>> {
   try {
@@ -147,6 +159,22 @@ describe('activation gate', () => {
     expect(fields['blocks']).toBeUndefined();
   });
 
+  it('refuses a form that never asks for a first and last name', async () => {
+    // candidates.first_name and last_name are NOT NULL, so a form that does not
+    // collect them activates fine and then dead-ends EVERY new candidate on the
+    // final step with 'A last name is required' — naming a field they were
+    // never shown, and which they have no way to supply.
+    repo.getReferencedQuestions.mockResolvedValue([question()]);
+    const fields = await activateFields();
+    expect(fields['first_name']).toMatch(/first name/i);
+    expect(fields['last_name']).toMatch(/last name/i);
+  });
+
+  it('accepts a form that asks for email and both names', async () => {
+    repo.getReferencedQuestions.mockResolvedValue(identityQuestions());
+    await expect(service.activate(FORM_ID, actor)).resolves.toBeDefined();
+  });
+
   it('refuses a non-default form with no role category', async () => {
     repo.getForm.mockResolvedValue(form({ roleCategoryId: null }));
     repo.getReferencedQuestions.mockResolvedValue([question()]);
@@ -158,7 +186,7 @@ describe('activation gate', () => {
     repo.getForm.mockResolvedValue(
       form({ isDefault: true, roleCategoryId: null, roleCategoryKey: null, roleCategoryLabel: null }),
     );
-    repo.getReferencedQuestions.mockResolvedValue([question()]);
+    repo.getReferencedQuestions.mockResolvedValue(identityQuestions());
     await expect(service.activate(FORM_ID, actor)).resolves.toMatchObject({
       publicPath: '/register',
     });
@@ -198,7 +226,7 @@ describe('activation gate', () => {
 
   it('accepts a conditional whose controller IS on the form', async () => {
     repo.getReferencedQuestions.mockResolvedValue([
-      question(),
+      ...identityQuestions(),
       question({
         questionId: Q_COUNTRY,
         key: 'dependent',
@@ -212,7 +240,13 @@ describe('activation gate', () => {
     repo.getForm.mockResolvedValue(form({ roleCategoryId: null }));
     repo.getReferencedQuestions.mockResolvedValue([]);
     const fields = await activateFields();
-    expect(Object.keys(fields).sort()).toEqual(['blocks', 'email', 'roleCategoryId']);
+    expect(Object.keys(fields).sort()).toEqual([
+      'blocks',
+      'email',
+      'first_name',
+      'last_name',
+      'roleCategoryId',
+    ]);
   });
 
   it('refuses when there is no draft to publish', async () => {
@@ -223,7 +257,7 @@ describe('activation gate', () => {
   });
 
   it('publishes the draft and returns the shareable link on success', async () => {
-    repo.getReferencedQuestions.mockResolvedValue([question()]);
+    repo.getReferencedQuestions.mockResolvedValue(identityQuestions());
     repo.getForm
       .mockResolvedValueOnce(form())
       .mockResolvedValue(form({ status: 'active', publishedVersionId: VERSION_ID }));
@@ -296,5 +330,165 @@ describe('lifecycle guards', () => {
       service.update(FORM_ID, { roleCategoryId: null }, actor),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     expect(repo.updateForm).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Naming a form.
+ *
+ * `candidate_forms.key` is unique across the WHOLE table and delete is a soft
+ * delete, so a deleted form keeps owning its key forever. The browser used to
+ * derive the key from the label with no knowledge of that, and creating a
+ * second "Test" after deleting the first died on a raw 23505 that reached the
+ * admin as "An internal error occurred".
+ */
+describe('form keys are derived and made unique server-side', () => {
+  beforeEach(() => {
+    repo.insertForm.mockResolvedValue({ id: FORM_ID, slug: 'abc123def456' });
+    repo.insertVersion.mockResolvedValue(draft());
+    repo.getForm.mockResolvedValue(form());
+  });
+
+  async function create(label: string) {
+    await service.create({ label, roleCategoryId: RC_ID }, actor);
+    return (repo.insertForm.mock.calls[0]?.[1] as { key: string }).key;
+  }
+
+  it('derives the key from the label when none is supplied', async () => {
+    repo.listFormKeys.mockResolvedValue([]);
+    expect(await create('Video Editor')).toBe('video_editor');
+  });
+
+  it('steps around a key an ARCHIVED form still owns', async () => {
+    // The exact reported bug: delete "Test", create "Test" again.
+    repo.listFormKeys.mockResolvedValue(['test']);
+    expect(await create('Test')).toBe('test_2');
+  });
+
+  it('keeps counting past several deleted namesakes', async () => {
+    repo.listFormKeys.mockResolvedValue(['test', 'test_2', 'test_3']);
+    expect(await create('Test')).toBe('test_4');
+  });
+
+  it('produces a valid identifier from an awkward name', async () => {
+    repo.listFormKeys.mockResolvedValue([]);
+    // Leading digits, punctuation and runs of separators would all break the
+    // key regex if passed through untouched.
+    expect(await create('  2026 — Video/Editor!!  ')).toBe('form_2026_video_editor');
+  });
+
+  it('falls back rather than emitting an empty key', async () => {
+    repo.listFormKeys.mockResolvedValue([]);
+    expect(await create('!!!')).toBe('form');
+  });
+
+  it('records the key it actually used in the event', async () => {
+    repo.listFormKeys.mockResolvedValue(['test']);
+    await create('Test');
+    const emitted = events.emitEvent.mock.calls
+      .map((call) => call[1] as { eventType: string; metadata?: { key?: string } })
+      .find((entry) => entry.eventType === 'candidate_form_created');
+    expect(emitted?.metadata?.key).toBe('test_2');
+  });
+
+  it('turns a racing duplicate into a message about the name', async () => {
+    // Two admins, same name, same instant: the dedupe above cannot see the
+    // other transaction, so the constraint fires and must read sensibly.
+    repo.listFormKeys.mockResolvedValue([]);
+    repo.insertForm.mockRejectedValue(
+      Object.assign(new Error('duplicate key'), {
+        code: '23505',
+        constraint_name: 'candidate_forms_key_key',
+      }),
+    );
+    await expect(
+      service.create({ label: 'Test', roleCategoryId: RC_ID }, actor),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { fields: { label: 'That name is taken.' } },
+    });
+  });
+});
+
+/**
+ * Starting a form FROM a template.
+ *
+ * The typing test and the documents step are form-level flags, not blocks, so
+ * the block copy carried neither. "Start from → Candidate registration"
+ * therefore produced a form whose canvas looked identical to the template's
+ * and which never asked a candidate for a CV or ran the typing test — invisible
+ * from the builder, because every block really had been copied.
+ */
+describe('create from a template', () => {
+  const TEMPLATE_ID = '00000000-0000-4000-8000-000000000901';
+
+  /** Wire the repo up as if TEMPLATE_ID were a published form with the flags on. */
+  function templateWithFlags(
+    flags: { hasTypingTest: boolean; hasDocumentsStep: boolean },
+  ): void {
+    repo.listFormKeys.mockResolvedValue([]);
+    repo.getBlocks.mockResolvedValue([]);
+    repo.insertForm.mockImplementation((_tx: unknown, input: unknown) =>
+      Promise.resolve({ ...form(), ...(input as object), id: FORM_ID }),
+    );
+    repo.insertVersion.mockResolvedValue(draft());
+    repo.getVersion.mockResolvedValue(draft());
+    repo.getForm.mockImplementation((_db: unknown, id: string) =>
+      Promise.resolve(
+        id === TEMPLATE_ID
+          ? form({ id: TEMPLATE_ID, publishedVersionId: VERSION_ID, ...flags })
+          : form(),
+      ),
+    );
+  }
+
+  it('inherits the typing test and documents steps from the template', async () => {
+    templateWithFlags({ hasTypingTest: true, hasDocumentsStep: true });
+
+    await service.create(
+      { label: 'Copy of registration', roleCategoryId: RC_ID, templateFormId: TEMPLATE_ID },
+      actor,
+    );
+
+    expect(repo.insertForm).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hasTypingTest: true, hasDocumentsStep: true }),
+    );
+  });
+
+  it('lets an explicit false switch a template step off', async () => {
+    // `??` not `||`: false is a real choice, not a missing value.
+    templateWithFlags({ hasTypingTest: true, hasDocumentsStep: true });
+
+    await service.create(
+      {
+        label: 'No typing test',
+        roleCategoryId: RC_ID,
+        templateFormId: TEMPLATE_ID,
+        hasTypingTest: false,
+      },
+      actor,
+    );
+
+    expect(repo.insertForm).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hasTypingTest: false, hasDocumentsStep: true }),
+    );
+  });
+
+  it('leaves both off for a form built from scratch', async () => {
+    repo.listFormKeys.mockResolvedValue([]);
+    repo.getForm.mockResolvedValue(form());
+    repo.insertForm.mockImplementation((_tx: unknown, input: unknown) =>
+      Promise.resolve({ ...form(), ...(input as object), id: FORM_ID }),
+    );
+    repo.insertVersion.mockResolvedValue(draft());
+
+    await service.create({ label: 'From scratch', roleCategoryId: RC_ID }, actor);
+
+    expect(repo.insertForm).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hasTypingTest: false, hasDocumentsStep: false }),
+    );
   });
 });

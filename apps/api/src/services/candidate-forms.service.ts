@@ -58,6 +58,49 @@ export interface CandidateFormsServiceDeps {
 /** The question key that carries candidate identity. */
 const IDENTITY_QUESTION_KEY = 'email';
 
+/**
+ * Keys projecting onto NOT NULL columns on `candidates`, so a form that omits
+ * one cannot produce a candidate row at all. @see the activation gate.
+ */
+const NAME_QUESTION_KEYS = ['first_name', 'last_name'] as const;
+
+/** Postgres unique violation, raised by candidate_forms_key_key. */
+const PG_UNIQUE_VIOLATION = '23505';
+const FORM_KEY_CONSTRAINT = 'candidate_forms_key_key';
+
+/**
+ * A machine key from the form's name.
+ *
+ * Mirrors the question library's rule (questions.service.ts): lowercase,
+ * underscore-separated, starting with a letter so it is a valid identifier.
+ */
+function slugifyFormKey(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '_')
+    .replaceAll(/^_+|_+$/g, '')
+    .replaceAll(/_{2,}/g, '_');
+  const bounded = slug.slice(0, 80).replace(/_+$/, '');
+  if (bounded.length === 0) return 'form';
+  return /^[a-z]/.test(bounded) ? bounded : `form_${bounded}`;
+}
+
+/**
+ * The first free key in the base, base_2, base_3 … series.
+ *
+ * Deduping matters more here than it looks: delete is a SOFT delete and the
+ * key column is unique across the whole table, so a deleted form still owns
+ * its key forever. Without this, naming a form 'Test' after deleting a 'Test'
+ * failed with a raw 500.
+ */
+function uniqueFormKey(base: string, existing: Set<string>): string {
+  if (!existing.has(base)) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${base}_${String(n)}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+}
+
 /** A brand-new form starts with one empty page and the default SDB theme. */
 function initialPages(): FormPage[] {
   return [{ index: 0, title: 'About you', description: null }];
@@ -272,6 +315,16 @@ export function createCandidateFormsService(
         pages: unknown;
         theme: unknown;
         blocks: repo.BlockRecord[];
+        /**
+         * The typing test and documents steps are form-level flags, not blocks,
+         * so copying `blocks` alone silently dropped them: starting from the
+         * Candidate registration template produced a form that never asked for
+         * a CV and never ran the typing test, with no way to tell from the
+         * canvas — every block was copied faithfully. Carried here so a copy is
+         * a copy of what candidates actually meet.
+         */
+        hasTypingTest: boolean;
+        hasDocumentsStep: boolean;
       } | null = null;
       if (body.templateFormId !== undefined) {
         const source = await repo.getForm(db, body.templateFormId);
@@ -294,17 +347,31 @@ export function createCandidateFormsService(
           pages: sourceVersion.pages,
           theme: sourceVersion.theme,
           blocks: await repo.getBlocks(db, sourceVersion.id),
+          hasTypingTest: source.hasTypingTest,
+          hasDocumentsStep: source.hasDocumentsStep,
         };
       }
 
+      // Derived here, not in the browser: the key must be unique across every
+      // form that has ever existed, which only the server can know.
+      const existingKeys = new Set(await repo.listFormKeys(db));
+      const key = uniqueFormKey(
+        slugifyFormKey(body.key ?? body.label),
+        existingKeys,
+      );
+
       const created = await withTransaction(db, async (tx) => {
         const form = await repo.insertForm(tx, {
-          key: body.key,
+          key,
           label: body.label,
           description: body.description ?? null,
           roleCategoryId: body.roleCategoryId ?? null,
-          hasTypingTest: body.hasTypingTest ?? false,
-          hasDocumentsStep: body.hasDocumentsStep ?? false,
+          // An explicit value in the body wins; otherwise inherit the template's,
+          // and only then fall back to off. `??` and not `||` deliberately: an
+          // explicit false must be able to switch a template's step OFF.
+          hasTypingTest: body.hasTypingTest ?? template?.hasTypingTest ?? false,
+          hasDocumentsStep:
+            body.hasDocumentsStep ?? template?.hasDocumentsStep ?? false,
           createdBy: actor.userId,
         });
         // Every form starts with an editable draft, so the builder never has
@@ -342,7 +409,7 @@ export function createCandidateFormsService(
           actorRole: actor.role,
           toValue: 'draft',
           metadata: {
-            key: body.key,
+            key,
             label: body.label,
             ...(body.templateFormId !== undefined
               ? { copiedFrom: body.templateFormId, blockCount: template?.blocks.length ?? 0 }
@@ -350,6 +417,22 @@ export function createCandidateFormsService(
           },
         });
         return form;
+      }).catch((error: unknown) => {
+        // Two admins naming a form the same thing in the same instant slip past
+        // the dedupe above. Without this the DB error reaches the browser as
+        // "An internal error occurred", which tells an admin nothing.
+        const pg = error as { code?: string; constraint_name?: string };
+        if (
+          pg.code === PG_UNIQUE_VIOLATION &&
+          pg.constraint_name === FORM_KEY_CONSTRAINT
+        ) {
+          throw new ApiError(
+            'VALIDATION_FAILED',
+            'A form with that name was just created. Try a slightly different name.',
+            { fields: { label: 'That name is taken.' } },
+          );
+        }
+        throw error;
       });
       return detail(await requireForm(created.id));
     },
@@ -601,6 +684,28 @@ export function createCandidateFormsService(
         // a candidate, so de-duplication and "one submission per form" break.
         fields['email'] =
           'This form must ask for an email address — it is how a candidate is identified.';
+      }
+
+      /**
+       * A candidate cannot be created without a name.
+       *
+       * `candidates.first_name` and `last_name` are NOT NULL, and the
+       * submission service refuses to insert without them
+       * (candidate-form-submission.service.ts). Until this check existed, a
+       * form that skipped either question activated cleanly and then dead-ended
+       * every NEW candidate on the very last step — "A last name is required",
+       * naming a field they were never shown and could not supply. Returning
+       * candidates were unaffected, which made it look intermittent.
+       *
+       * Caught here so the person who can actually fix it — the admin building
+       * the form — hears about it before any candidate does.
+       */
+      for (const key of NAME_QUESTION_KEYS) {
+        if (!referenced.some((q) => q.key === key)) {
+          const label = key === 'first_name' ? 'a first name' : 'a last name';
+          fields[key] =
+            `This form must ask for ${label} — a candidate record cannot be created without one.`;
+        }
       }
 
       const unusable = referenced.filter(
