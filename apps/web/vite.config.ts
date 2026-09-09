@@ -23,5 +23,21 @@ export default defineConfig({
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}", "src/**/*.test.{ts,tsx}"],
     css: false,
+    /*
+     * Tests must not depend on apps/web/.env.local.
+     *
+     * That file is gitignored, so a clean checkout has none and Vite leaves
+     * every VITE_* undefined. This is precisely what broke CI: api-client threw
+     * on an undefined base URL, the query failed, and the intake form rendered
+     * "This form is not available" — a configuration problem wearing the
+     * costume of a deleted form, in two whole suites.
+     *
+     * Nothing here is ever contacted; every request in these tests is mocked.
+     */
+    env: {
+      VITE_API_BASE_URL: "http://localhost:3001",
+      VITE_SUPABASE_URL: "http://localhost:54321",
+      VITE_SUPABASE_ANON_KEY: "test-anon-key",
+    },
   },
 });

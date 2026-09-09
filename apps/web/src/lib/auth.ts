@@ -13,15 +13,15 @@ import {
   type SupabaseClient,
 } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
+import { env } from "./env";
 
 let client: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!client) {
-    client = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-    );
+    // Validated at import — a missing key here would otherwise surface as an
+    // opaque Supabase error on first sign-in rather than a build problem.
+    client = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
   }
   return client;
 }

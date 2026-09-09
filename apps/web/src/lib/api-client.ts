@@ -8,6 +8,7 @@
  */
 import type { ErrorCode } from "@sdb/contracts";
 import { getAccessToken } from "@/lib/auth";
+import { apiBaseUrl } from "./env";
 
 /** Client-side-only failure modes, in addition to the server's codes. */
 export type ClientErrorCode = "NETWORK_ERROR" | "UNPARSEABLE_RESPONSE";
@@ -69,7 +70,9 @@ interface RequestOptions {
 }
 
 function baseUrl(): string {
-  return `${import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")}/api/v1`;
+  // Validated in one place — see lib/env.ts for why reading the raw value here
+  // turned a missing variable into "This form is not available".
+  return apiBaseUrl();
 }
 
 function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
