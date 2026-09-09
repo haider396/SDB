@@ -20,7 +20,6 @@ import {
 import type {
   AccentStrength,
   Candidate,
-  CandidateConsentBody,
   CandidateDetail,
   CandidateFile,
   CreateCandidateBody,
@@ -31,6 +30,7 @@ import type {
   PoolStatus,
   PublicTaxonomy,
   RateUnit,
+  UpdateCandidateAnswersBody,
   UpdateCandidateBody,
   UpdateCandidateFileBody,
   VettingStatus,
@@ -162,6 +162,31 @@ export function useCreateCandidate() {
  * PATCH returns the bare Candidate row; the detail cache holds a
  * CandidateDetail, so merge the scalars over the existing child collections.
  */
+/**
+ * SDB staff correcting a candidate's submitted answers.
+ *
+ * Sends only the answers that changed, and invalidates the whole candidate
+ * detail rather than patching the cache: editing a MAPPED answer (email,
+ * first name, country…) also rewrites the real candidate columns server-side,
+ * so a local merge would leave the header and the application card telling
+ * different stories.
+ */
+export function useUpdateCandidateAnswers(candidateId: string) {
+  const invalidate = useInvalidateCandidate();
+  return useMutation<
+    { updated: number },
+    unknown,
+    UpdateCandidateAnswersBody
+  >({
+    mutationFn: (body) =>
+      apiFetch<{ updated: number }>(`/candidates/${candidateId}/answers`, {
+        method: "PATCH",
+        body,
+      }),
+    onSuccess: () => invalidate(candidateId),
+  });
+}
+
 export function useUpdateCandidate() {
   const queryClient = useQueryClient();
   const invalidate = useInvalidateCandidate();
@@ -189,54 +214,6 @@ export function useArchiveCandidate() {
     mutationFn: ({ id }) =>
       apiFetch<Candidate>(`/candidates/${id}/archive`, { method: "POST" }),
     onSuccess: (_updated, { id }) => invalidate(id),
-  });
-}
-
-/**
- * Consent capture — dedicated endpoint, applied optimistically with rollback
- * (05 §4.5). Never PATCH for consent.
- */
-export function useCaptureConsent(id: string) {
-  const queryClient = useQueryClient();
-  const invalidate = useInvalidateCandidate();
-  return useMutation<
-    Candidate,
-    unknown,
-    CandidateConsentBody,
-    { previous: CandidateDetail | undefined }
-  >({
-    mutationFn: (body) =>
-      apiFetch<Candidate>(`/candidates/${id}/consent`, {
-        method: "POST",
-        body,
-      }),
-    onMutate: async (body) => {
-      await queryClient.cancelQueries({ queryKey: candidateKeys.detail(id) });
-      const previous = queryClient.getQueryData<CandidateDetail>(
-        candidateKeys.detail(id),
-      );
-      if (previous !== undefined) {
-        queryClient.setQueryData<CandidateDetail>(candidateKeys.detail(id), {
-          ...previous,
-          hasConsentToShareProfile: body.hasConsentToShareProfile,
-          consentSource: body.consentSource,
-        });
-      }
-      return { previous };
-    },
-    onError: (_error, _body, context) => {
-      if (context?.previous !== undefined) {
-        queryClient.setQueryData(candidateKeys.detail(id), context.previous);
-      }
-    },
-    onSuccess: (updated) => {
-      queryClient.setQueryData<CandidateDetail>(
-        candidateKeys.detail(id),
-        (previous) =>
-          previous === undefined ? previous : { ...previous, ...updated },
-      );
-      invalidate(id);
-    },
   });
 }
 
@@ -287,18 +264,6 @@ export interface ChildWriteArgs {
   path: string;
   method: "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
-}
-
-export function useChildWrite(candidateId: string) {
-  const invalidate = useInvalidateCandidate();
-  return useMutation<unknown, unknown, ChildWriteArgs>({
-    mutationFn: ({ path, method, body }) =>
-      apiFetchEnvelope<unknown>(`/candidates/${candidateId}/${path}`, {
-        method,
-        body,
-      }),
-    onSuccess: () => invalidate(candidateId),
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -498,41 +463,4 @@ export interface DisqualifierOption {
   roleCategoryId: string | null;
   isActive: boolean;
   sortOrder: number;
-}
-
-export function useDisqualifierOptions() {
-  return useQuery<DisqualifierOption[]>({
-    queryKey: candidateKeys.options("disqualifiers"),
-    queryFn: async () => {
-      const { data } = await apiFetchCollection<unknown>("/disqualifiers");
-      return data
-        .flatMap((row): DisqualifierOption[] => {
-          if (typeof row !== "object" || row === null) return [];
-          const record = row as Record<string, unknown>;
-          if (
-            typeof record.id !== "string" ||
-            typeof record.label !== "string"
-          ) {
-            return [];
-          }
-          return [
-            {
-              id: record.id,
-              key: typeof record.key === "string" ? record.key : record.id,
-              label: record.label,
-              roleCategoryId:
-                typeof record.roleCategoryId === "string"
-                  ? record.roleCategoryId
-                  : null,
-              isActive: record.isActive !== false,
-              sortOrder:
-                typeof record.sortOrder === "number" ? record.sortOrder : 0,
-            },
-          ];
-        })
-        .filter((disqualifier) => disqualifier.isActive)
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key));
-    },
-    staleTime: 5 * 60_000,
-  });
 }

@@ -15,7 +15,7 @@
  *   malformed fields are dropped, not rejected.
  */
 import { z } from 'zod';
-import { StoredAnswerSchema } from './intake.js';
+import { IntakeAnswerSchema, StoredAnswerSchema } from './intake.js';
 import {
   AccentStrengthSchema,
   AutonomyLevelSchema,
@@ -566,6 +566,32 @@ export const DOWNLOAD_URL_TTL_SECONDS = 300;
  */
 export const CandidateAnswerSchema = StoredAnswerSchema;
 export type CandidateAnswer = z.infer<typeof CandidateAnswerSchema>;
+
+/**
+ * `PATCH /candidates/:id/answers` — SDB staff correcting what a candidate
+ * submitted.
+ *
+ * ⚠ This changes the ANSWER, never the QUESTION. `question_snapshot` records
+ * what the candidate was actually shown and is immutable (AC-IF-11, AC-IF-12);
+ * a recruiter fixing a typo has not changed what was asked. The API rejects any
+ * attempt to send one.
+ *
+ * Batched on purpose: one Save from the profile is one transaction and one
+ * event, so a half-applied edit is impossible and the audit trail reads as a
+ * single act rather than six unrelated ones.
+ *
+ * Reuses `IntakeAnswerSchema`, so the wire shape and its exactly-one-value rule
+ * are identical to a submission. A second shape here would drift from the
+ * pipeline that validates it.
+ */
+export const UpdateCandidateAnswersBodySchema = z
+  .object({
+    answers: z.array(IntakeAnswerSchema).min(1).max(200),
+  })
+  .strict();
+export type UpdateCandidateAnswersBody = z.infer<
+  typeof UpdateCandidateAnswersBodySchema
+>;
 
 export const CandidateSubmissionSchema = z.object({
   id: z.string().uuid(),

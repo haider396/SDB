@@ -11,10 +11,13 @@
  * editable, and editing one must not retroactively rewrite what a candidate is
  * recorded as having been asked.
  */
-import { MessageSquareText } from "lucide-react";
+import { useState } from "react";
+import { MessageSquareText, Pencil } from "lucide-react";
 import type { CandidateSubmission } from "@sdb/contracts";
+import { AnswerTable } from "@/components/patterns/answer-table";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import {
   groupAnswersByCategory,
@@ -22,6 +25,14 @@ import {
   snapshotString,
 } from "@/lib/answer-value";
 import { formatDate, humanizeKey } from "@/lib/format";
+import { toast } from "sonner";
+import { useUpdateCandidateAnswers } from "../api";
+import {
+  AnswerEditor,
+  draftFromAnswer,
+  isEditableAnswer,
+  type AnswerDraft,
+} from "./answer-editor";
 
 const SOURCE_LABEL: Record<CandidateSubmission["source"], string> = {
   public_form: "Public form",
@@ -60,15 +71,95 @@ function supersededKeys(
 
 export function FormSubmissionsCard({
   submissions,
+  candidateId,
 }: {
   submissions: readonly CandidateSubmission[];
+  candidateId: string;
 }) {
   const superseded = supersededKeys(submissions);
+  const update = useUpdateCandidateAnswers(candidateId);
+
+  /**
+   * Pending edits, keyed by questionKey. `null` means "not editing" — an empty
+   * map would mean "editing, nothing changed yet", and the two need to be
+   * distinguishable or Cancel cannot know whether to close.
+   */
+  const [drafts, setDrafts] = useState<Map<string, AnswerDraft> | null>(null);
+  const isEditing = drafts !== null;
+
+  const allAnswers = submissions.flatMap((submission) => submission.answers);
+
+  function startEditing() {
+    setDrafts(
+      new Map(
+        allAnswers
+          .filter(isEditableAnswer)
+          .map((answer) => [answer.questionKey, draftFromAnswer(answer)]),
+      ),
+    );
+  }
+
+  async function save() {
+    if (drafts === null) return;
+    // Send only what actually changed. An unchanged answer would still be
+    // rejected-or-written server-side, and would put a misleading entry in the
+    // event trail saying someone edited a field they only looked at.
+    const answers = allAnswers
+      .filter(isEditableAnswer)
+      .flatMap((answer) => {
+        const draft = drafts.get(answer.questionKey);
+        if (draft === undefined) return [];
+        const original = draftFromAnswer(answer);
+        const changed =
+          JSON.stringify(draft) !== JSON.stringify(original);
+        return changed ? [{ questionKey: answer.questionKey, ...draft }] : [];
+      });
+
+    if (answers.length === 0) {
+      setDrafts(null);
+      return;
+    }
+    await toast.promise(update.mutateAsync({ answers }), {
+      loading: "Saving changes…",
+      success: (result) =>
+        `${result.updated} answer${result.updated === 1 ? "" : "s"} updated.`,
+      error: (error) =>
+        error instanceof Error ? error.message : "Could not save the changes.",
+    }).unwrap().then(() => {
+      setDrafts(null);
+    });
+  }
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Form answers</CardTitle>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        {/* Named for what it is to a recruiter: the thing the candidate
+            applied with. Plural only when there is more than one. */}
+        <CardTitle>
+          {submissions.length > 1 ? "Applications" : "Application"}
+        </CardTitle>
+        {allAnswers.some(isEditableAnswer) ? (
+          isEditing ? (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDrafts(null)}
+                disabled={update.isPending}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" onClick={() => void save()} disabled={update.isPending}>
+                {update.isPending ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={startEditing}>
+              <Pencil className="mr-1 h-3 w-3" aria-hidden="true" />
+              Edit answers
+            </Button>
+          )
+        ) : null}
       </CardHeader>
       <CardContent>
         {submissions.length === 0 ? (
@@ -124,17 +215,50 @@ export function FormSubmissionsCard({
                             const isSuperseded =
                               superseded.get(submission.id)?.has(answer.questionKey) ===
                               true;
+                            const label =
+                              snapshotString(answer.questionSnapshot, "label") ??
+                              answer.label;
+                            // The SNAPSHOT's type, never the live question's:
+                            // no snapshot written before this feature says
+                            // repeating_group, so no stored answer can change
+                            // rendering (03 §1.4).
+                            const isTable =
+                              snapshotString(
+                                answer.questionSnapshot,
+                                "questionType",
+                              ) === "repeating_group";
                             return (
                               <div
                                 key={answer.id}
                                 className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[16rem_1fr] sm:gap-4"
                               >
-                                <dt className="text-sm text-neutral-500">
-                                  {snapshotString(answer.questionSnapshot, "label") ??
-                                    answer.label}
-                                </dt>
+                                <dt className="text-sm text-neutral-500">{label}</dt>
                                 <dd className="flex flex-wrap items-center gap-2 whitespace-pre-wrap text-sm text-neutral-800">
-                                  {renderAnswerValue(answer)}
+                                  {/* The table's own wrapper is w-full, so it
+                                      takes the whole flex line and the
+                                      Superseded chip wraps beneath it. */}
+                                  {isEditing && isEditableAnswer(answer) ? (
+                                    <div className="w-full">
+                                      <AnswerEditor
+                                        answer={answer}
+                                        draft={
+                                          drafts.get(answer.questionKey) ?? {}
+                                        }
+                                        onChange={(next) =>
+                                          setDrafts((previous) => {
+                                            if (previous === null) return previous;
+                                            const updated = new Map(previous);
+                                            updated.set(answer.questionKey, next);
+                                            return updated;
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                  ) : isTable ? (
+                                    <AnswerTable answer={answer} caption={label} />
+                                  ) : (
+                                    renderAnswerValue(answer)
+                                  )}
                                   {isSuperseded ? (
                                     <Chip tone="warning" size="sm">
                                       Superseded

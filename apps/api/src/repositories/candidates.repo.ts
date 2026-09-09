@@ -1561,6 +1561,63 @@ export async function getSubmissionsForCandidate(
   }));
 }
 
+/**
+ * Overwrite one stored answer's VALUE.
+ *
+ * ⚠ `question_snapshot` is deliberately absent from the SET list, and must
+ * stay absent. It records what the candidate was actually shown — the label,
+ * type and options as at the moment they answered (AC-IF-11, AC-IF-12). SDB
+ * staff correcting an answer have not changed the question, and rewriting the
+ * snapshot would destroy the only record of what was asked.
+ *
+ * All five value columns are written every time, so switching a question's
+ * answer between shapes cannot leave a stale value behind in the old column —
+ * `enforce_candidate_answer_value_shape` would then reject the row for
+ * populating two, which is the correct-but-baffling failure to avoid.
+ *
+ * `answered_by` becomes the editing user: the row's author is now whoever last
+ * set it, and a null there still means "the candidate said this themselves".
+ */
+export async function updateCandidateAnswerValue(
+  sql: Queryable,
+  answerId: string,
+  value: {
+    valueText: string | null;
+    valueNumber: number | null;
+    valueBoolean: boolean | null;
+    valueDate: string | null;
+    valueJson: unknown;
+  },
+  answeredBy: string | null,
+): Promise<void> {
+  await sql`
+    update candidate_answers set
+      value_text    = ${value.valueText},
+      value_number  = ${value.valueNumber},
+      value_boolean = ${value.valueBoolean},
+      value_date    = ${value.valueDate},
+      value_json    = ${value.valueJson === undefined ? null : sql.json(value.valueJson as never)},
+      answered_by   = ${answeredBy},
+      updated_at    = now()
+    where id = ${answerId}
+  `;
+}
+
+/** Replace the option rows behind a choice answer (multi- or single-select). */
+export async function replaceCandidateAnswerOptions(
+  sql: Queryable,
+  answerId: string,
+  optionIds: readonly string[],
+): Promise<void> {
+  await sql`delete from candidate_answer_options where answer_id = ${answerId}`;
+  if (optionIds.length === 0) return;
+  await sql`
+    insert into candidate_answer_options ${sql(
+      optionIds.map((optionId) => ({ answer_id: answerId, option_id: optionId })),
+    )}
+  `;
+}
+
 export interface CandidateAnswerRecord {
   id: string;
   submissionId: string | null;

@@ -21,28 +21,7 @@ import {
   DirtyRegistryProvider,
   useDirtySections,
 } from "./components/section-form";
-import {
-  CompensationSection,
-  IdentitySection,
-  LanguageSection,
-  ProfessionalSection,
-  RemoteEnvironmentSection,
-  SkillsSummarySection,
-  SourceSection,
-  VettingSection,
-} from "./components/sections";
-import { ConsentCard } from "./components/consent-card";
 import { FormSubmissionsCard } from "./components/form-submissions-card";
-import {
-  CertificationsCard,
-  EducationCard,
-  EmploymentCard,
-  LanguagesCard,
-  NotesCard,
-  ReferencesCard,
-} from "./components/collections";
-import { SkillsCard, ToolsCard } from "./components/tools-skills-card";
-import { DisqualifiersCard } from "./components/disqualifiers-card";
 import { FilesCard } from "./components/files-card";
 import {
   ArchiveRailCard,
@@ -62,25 +41,14 @@ const BREADCRUMBS = [
  * registry — as its registry id.
  */
 const SECTIONS: readonly { id: string; label: string }[] = [
-  { id: "identity", label: "Identity & location" },
-  { id: "language", label: "Language & communication" },
-  { id: "professional", label: "Professional" },
-  { id: "compensation", label: "Compensation & availability" },
-  { id: "vetting", label: "Vetting & fit" },
-  { id: "disqualifiers", label: "Disqualifier checks" },
-  { id: "remote-environment", label: "Remote environment" },
-  { id: "skills-summary", label: "Skills summary" },
-  { id: "languages", label: "Languages" },
-  { id: "tools", label: "Tools" },
-  { id: "skills", label: "Skills" },
-  { id: "employment", label: "Employment" },
-  { id: "education", label: "Education" },
-  { id: "certifications", label: "Certifications" },
-  { id: "references", label: "References" },
-  { id: "notes", label: "Notes" },
-  { id: "source", label: "Source & provenance" },
-  { id: "form-answers", label: "Form answers" },
-  { id: "consent", label: "Consent & retention" },
+  // The candidate page is their APPLICATION and nothing else.
+  //
+  // It used to carry eighteen more sections — the recruiter's own record, one
+  // fixed shape for every candidate regardless of how they arrived. On a
+  // bespoke form that read as a generic profile with most of it blank. The
+  // admin designs each form knowing what the role and the client need, so the
+  // form is the record.
+  { id: "form-answers", label: "Application" },
 ];
 
 const SECTION_LABEL_BY_ID = new Map(
@@ -122,9 +90,11 @@ function SectionJumpLink({
 }
 
 /** Rail card: one jump link per section card, in page order. */
-function SectionNavCard() {
+function SectionNavCard({ hasApplication }: { hasApplication: boolean }) {
   const dirty = useDirtySections();
   const dirtySet = new Set(dirty?.dirtyIds ?? []);
+  // A link to a section that is not rendered scrolls nowhere.
+  const sections = hasApplication ? SECTIONS : [];
   return (
     <Card>
       <CardHeader>
@@ -133,7 +103,7 @@ function SectionNavCard() {
       <CardContent>
         <nav aria-label="Candidate sections">
           <ul className="space-y-0.5">
-            {SECTIONS.map((section) => (
+            {sections.map((section) => (
               <li key={section.id}>
                 <SectionJumpLink
                   sectionId={section.id}
@@ -257,7 +227,11 @@ export function CandidateDetailPage() {
           breadcrumbs={[...BREADCRUMBS, { label: "Candidate" }]}
           title="Candidate"
         />
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        <ErrorState
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          backTo={{ to: "/admin/candidates", label: "Candidates" }}
+        />
       </div>
     );
   }
@@ -275,9 +249,28 @@ export function CandidateDetailPage() {
           meta={
             <>
               <span className="font-mono">{candidate.reference}</span>
-              <span>
-                via {SUBMISSION_CHANNEL_LABELS[candidate.submittedVia]}
-              </span>
+              {/*
+                Name the FORM, not just the channel.
+                "via Self-registered" says nothing about which of several live
+                forms this person answered, and the answers themselves sit near
+                the bottom of a nineteen-section page — so the first thing an
+                admin sees is a profile full of blank fields that reads like a
+                generic form. Naming it, and linking straight to the answers,
+                is the difference between "why is this empty" and "here is what
+                they told us".
+              */}
+              {candidate.submissions.length > 0 ? (
+                <a
+                  href="#candidate-section-form-answers"
+                  className="text-brand-blue underline-offset-4 hover:underline"
+                >
+                  via {candidate.submissions[0]?.formLabel} — see their answers
+                </a>
+              ) : (
+                <span>
+                  via {SUBMISSION_CHANNEL_LABELS[candidate.submittedVia]}
+                </span>
+              )}
             </>
           }
         />
@@ -295,71 +288,35 @@ export function CandidateDetailPage() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_20rem]">
           {/* ----- Main column: screening-call order (UX 2.5) ----- */}
           <div className="min-w-0 space-y-6">
-            <SectionAnchor sectionId="identity">
-              <IdentitySection candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="language">
-              <LanguageSection candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="professional">
-              <ProfessionalSection candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="compensation">
-              <CompensationSection candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="vetting">
-              <VettingSection candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="disqualifiers">
-              <DisqualifiersCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="remote-environment">
-              <RemoteEnvironmentSection candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="skills-summary">
-              <SkillsSummarySection candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="languages">
-              <LanguagesCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="tools">
-              <ToolsCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="skills">
-              <SkillsCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="employment">
-              <EmploymentCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="education">
-              <EducationCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="certifications">
-              <CertificationsCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="references">
-              <ReferencesCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="notes">
-              <NotesCard candidate={candidate} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="source">
-              <SourceSection candidate={candidate} />
-            </SectionAnchor>
-            {/* Read-only, so it deliberately does NOT register with the
-                dirty registry and never appears in the Save-all bar. */}
-            <SectionAnchor sectionId="form-answers">
-              <FormSubmissionsCard submissions={candidate.submissions} />
-            </SectionAnchor>
-            <SectionAnchor sectionId="consent">
-              <ConsentCard candidate={candidate} />
-            </SectionAnchor>
+            {/*
+              What the candidate actually applied with comes first.
+              Everything below it is the recruiter's own record — filled in
+              after the fact, and the same shape for every candidate whether
+              they arrived through a form, a CSV import or the webhook. Leading
+              with that record made a bespoke Graphic Designer application look
+              like a generic registration form with most of it blank.
+
+              Read-only, so it deliberately does NOT register with the dirty
+              registry and never appears in the Save-all bar.
+
+              Omitted entirely when there is no application: an imported
+              candidate should not be greeted by an empty card.
+            */}
+            {candidate.submissions.length > 0 ? (
+              <SectionAnchor sectionId="form-answers">
+                <FormSubmissionsCard
+                submissions={candidate.submissions}
+                candidateId={candidate.id}
+              />
+              </SectionAnchor>
+            ) : null}
+
           </div>
 
           {/* ----- Sticky right rail (05 §4.1) ----- */}
           <div className="space-y-6 self-start xl:sticky xl:top-6">
             <ProfileRailCard candidate={candidate} />
-            <SectionNavCard />
+            <SectionNavCard hasApplication={candidate.submissions.length > 0} />
             <QuickFactsCard candidate={candidate} />
             <FilesCard candidate={candidate} />
             <EventLogCard

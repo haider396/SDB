@@ -110,6 +110,7 @@ import {
 } from '../schemas/candidate-forms.js';
 import {
   CandidateConsentBodySchema,
+  UpdateCandidateAnswersBodySchema,
   CreateCandidateAssessmentBodySchema,
   CreateCandidateBodySchema,
   CreateCandidateCertificationBodySchema,
@@ -217,6 +218,7 @@ import {
   CandidateCollectionSchema,
   CandidateDetailEnvelopeSchema,
   CandidateEnvelopeSchema,
+  AnswersUpdatedEnvelopeSchema,
   CandidateFileEnvelopeSchema,
   CertificationCollectionSchema,
   DisqualifierCheckCollectionSchema,
@@ -1638,6 +1640,31 @@ export function buildOpenApiDocument(version: string): OpenAPIObject {
       200: ok('Archived', CandidateEnvelopeSchema),
       401: errorResponse('Unauthenticated'),
       404: errorResponse('Not found'),
+    },
+  });
+  registry.registerPath({
+    method: 'patch',
+    path: '/api/v1/candidates/{id}/answers',
+    summary: "Correct a candidate's submitted answers (SDB staff)",
+    description:
+      'Changes the ANSWER only. `question_snapshot` — what the candidate was ' +
+      'actually shown — is immutable (AC-IF-11, AC-IF-12) and cannot be sent. ' +
+      'Every changed answer emits a `candidate_answer_edited` event carrying ' +
+      'the old and new value, so the original submission is recoverable from ' +
+      'the event log. Editing one of the mapped keys also rewrites the ' +
+      'corresponding `candidates` column.',
+    tags: ['candidates'],
+    security: securedReq,
+    request: {
+      ...candidateIdParams,
+      ...jsonBody(UpdateCandidateAnswersBodySchema),
+    },
+    responses: {
+      200: ok('Answers updated', AnswersUpdatedEnvelopeSchema),
+      401: errorResponse('Unauthenticated'),
+      403: errorResponse('Forbidden'),
+      404: errorResponse('Not found'),
+      422: errorResponse('One or more answers could not be saved'),
     },
   });
   registry.registerPath({

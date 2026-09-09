@@ -12,6 +12,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   CandidateConsentBodySchema,
+  UpdateCandidateAnswersBodySchema,
   CreateCandidateAssessmentBodySchema,
   CreateCandidateBodySchema,
   CreateCandidateCertificationBodySchema,
@@ -55,17 +56,20 @@ import {
   NoteCollectionSchema,
   ReferenceCollectionSchema,
   SkillCollectionSchema,
+  AnswersUpdatedEnvelopeSchema,
   ToolCollectionSchema,
 } from '../schemas/candidates.js';
 import type {
   CandidateActor,
   CandidatesService,
 } from '../services/candidates.service.js';
+import type { CandidateAnswersService } from '../services/candidate-answers.service.js';
 import type { CandidateFilesService } from '../services/candidate-files.service.js';
 import type { CandidateWebhookService } from '../services/candidate-webhook.service.js';
 
 export interface CandidateRoutesOptions {
   candidatesService: CandidatesService;
+  candidateAnswersService: CandidateAnswersService;
   candidateFilesService: CandidateFilesService;
   candidateWebhookService: CandidateWebhookService;
 }
@@ -93,7 +97,12 @@ export async function candidateRoutes(
   opts: CandidateRoutesOptions,
 ): Promise<void> {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
-  const { candidatesService, candidateFilesService, candidateWebhookService } =
+  const {
+    candidatesService,
+    candidateAnswersService,
+    candidateFilesService,
+    candidateWebhookService,
+  } =
     opts;
 
   const guarded = (permission: Parameters<typeof requirePermission>[0]) => ({
@@ -219,6 +228,36 @@ export async function candidateRoutes(
     async (request) => ({
       data: await candidatesService.archive(
         request.params.id,
+        candidateActorOf(request),
+      ),
+    }),
+  );
+
+  /**
+   * Correct what a candidate submitted.
+   *
+   * Gated on `candidate.update`, so it is admin-only exactly like every other
+   * candidate write — a client role cannot reach it.
+   *
+   * PATCH, not PUT: the body carries only the answers that changed, so two
+   * staff editing different fields on the same profile do not overwrite each
+   * other's work. `question_snapshot` is not in the body and is not touched —
+   * see candidate-answers.service.ts.
+   */
+  app.patch(
+    '/candidates/:id/answers',
+    {
+      ...guarded('candidate.update'),
+      schema: {
+        params: CandidateIdParamSchema,
+        body: UpdateCandidateAnswersBodySchema,
+        response: { 200: AnswersUpdatedEnvelopeSchema },
+      },
+    },
+    async (request) => ({
+      data: await candidateAnswersService.updateAnswers(
+        request.params.id,
+        request.body,
         candidateActorOf(request),
       ),
     }),
