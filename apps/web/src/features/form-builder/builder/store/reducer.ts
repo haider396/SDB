@@ -15,6 +15,7 @@
  */
 import type { CanvasRect, FormBlock, FormDocument, FormTheme } from "@sdb/contracts";
 import { moveRect, resizeRect, restack, type ResizeEdge, type ZDirection } from "../../geometry";
+import { displaceOverlaps } from "../../block-height";
 
 export interface BuilderState {
   past: FormDocument[];
@@ -36,10 +37,28 @@ export type BuilderAction =
   | { type: "MOVE_BLOCKS"; ids: readonly string[]; deltaCols: number; deltaRows: number }
   | { type: "RESIZE_BLOCK"; id: string; edge: ResizeEdge; deltaCols: number; deltaRows: number }
   | { type: "SET_RECT"; id: string; rect: Partial<CanvasRect> }
+  /**
+   * Re-place several blocks at once — what "Tidy layout" dispatches. One
+   * action so the whole repair is a single undo step, and so the canvas
+   * re-renders once rather than once per block.
+   */
+  | { type: "SET_RECTS"; changes: readonly { id: string; rect: CanvasRect }[] }
   | { type: "SET_MOBILE_RECT"; id: string; rect: CanvasRect | null }
   | { type: "RESTACK"; id: string; direction: ZDirection }
-  | { type: "SET_BLOCK_STYLE"; id: string; patch: FormBlock["style"] }
-  | { type: "SET_BLOCK_PROPS"; id: string; patch: FormBlock["props"] }
+  | {
+      type: "SET_BLOCK_STYLE";
+      id: string;
+      patch: FormBlock["style"];
+      /** @see SET_CONTENT_OVERRIDE — padding makes a textarea taller. */
+      fitRowSpan?: number;
+    }
+  | {
+      type: "SET_BLOCK_PROPS";
+      id: string;
+      patch: FormBlock["props"];
+      /** @see SET_CONTENT_OVERRIDE — typing into a heading makes it taller. */
+      fitRowSpan?: number;
+    }
   | { type: "SET_REQUIRED_OVERRIDE"; id: string; value: boolean | null }
   | {
       type: "SET_CONTENT_OVERRIDE";
@@ -53,6 +72,18 @@ export type BuilderAction =
           | "optionValueOverrides"
         >
       >;
+      /**
+       * Grow the block to this many rows in the SAME action, never shrink it.
+       *
+       * Adding help text or a longer label makes a field taller, and on a
+       * fixed 8px grid a field that outgrows its box lands on top of the next
+       * one. The caller measures (block-height.ts) because the reducer cannot:
+       * heights depend on the question library, which is server state.
+       *
+       * It rides along rather than arriving as a second SET_RECT so that one
+       * keystroke stays one undo step and the coalescing window still works.
+       */
+      fitRowSpan?: number;
     }
   | { type: "SET_THEME"; patch: Partial<FormTheme> }
   | { type: "SET_PAGES"; pages: FormDocument["pages"] }
@@ -123,6 +154,55 @@ function mapBlock(
   };
 }
 
+/**
+ * Push aside whatever `pinnedIds` now cover, and return the document.
+ *
+ * The canvas places every block at an explicit `grid-row` on fixed 8px rows, so
+ * two blocks sharing rows are drawn one on top of the other rather than one
+ * pushing the other down. A move or a resize that lands on an occupied space
+ * therefore used to hide a field completely — the reported bug. The gesture's
+ * own block is authoritative: it keeps the rectangle the author gave it, and
+ * everything it collides with moves down.
+ *
+ * Shared by MOVE_BLOCKS and RESIZE_BLOCK so the two gestures cannot drift.
+ */
+function withDisplaced(
+  document: FormDocument,
+  pinnedIds: readonly string[],
+): FormDocument {
+  const displaced = new Map(
+    displaceOverlaps(document.blocks, pinnedIds).map((change) => [
+      change.id,
+      change.rect,
+    ]),
+  );
+  if (displaced.size === 0) return document;
+  return {
+    ...document,
+    blocks: document.blocks.map((block) => {
+      const rect = displaced.get(block.id);
+      return rect === undefined
+        ? block
+        : { ...block, layout: { ...block.layout, desktop: rect } };
+    }),
+  };
+}
+
+/**
+ * Grow a block to `rowSpan` rows, never shrink it. An author who dragged a
+ * field taller meant it; auto-fitting only ever adds the space content needs.
+ */
+function grown(block: FormBlock, rowSpan: number | undefined): FormBlock {
+  if (rowSpan === undefined || rowSpan <= block.layout.desktop.rowSpan) return block;
+  return {
+    ...block,
+    layout: {
+      ...block.layout,
+      desktop: { ...block.layout.desktop, rowSpan },
+    },
+  };
+}
+
 /** Apply the action to the document. History is handled by the caller. */
 function applyAction(
   document: FormDocument,
@@ -166,28 +246,30 @@ function applyAction(
 
     case "MOVE_BLOCKS": {
       const moving = new Set(action.ids);
-      return {
-        ...document,
-        blocks: document.blocks.map((block) =>
-          moving.has(block.id)
-            ? {
-                ...block,
-                layout: {
-                  ...block.layout,
-                  desktop: moveRect(
-                    block.layout.desktop,
-                    action.deltaCols,
-                    action.deltaRows,
-                  ),
-                },
-              }
-            : block,
-        ),
-      };
+      const moved = document.blocks.map((block) =>
+        moving.has(block.id)
+          ? {
+              ...block,
+              layout: {
+                ...block.layout,
+                desktop: moveRect(
+                  block.layout.desktop,
+                  action.deltaCols,
+                  action.deltaRows,
+                ),
+              },
+            }
+          : block,
+      );
+      // Dropping a field on top of another used to leave both drawn in the same
+       // rows — the one underneath simply vanished behind it. The dropped block
+       // keeps the position it was dropped at; anything it now covers is pushed
+       // down, in the SAME action so it stays one undo step.
+      return withDisplaced({ ...document, blocks: moved }, action.ids);
     }
 
-    case "RESIZE_BLOCK":
-      return mapBlock(document, action.id, (block) => ({
+    case "RESIZE_BLOCK": {
+      const resized = mapBlock(document, action.id, (block) => ({
         ...block,
         layout: {
           ...block.layout,
@@ -199,6 +281,12 @@ function applyAction(
           ),
         },
       }));
+      // Growing a field over its neighbour drew the two on top of each other,
+      // exactly as dropping one on another did. Same rule, same single pass:
+      // the block being resized keeps its new rectangle, the rest make way.
+      // Both gestures dispatch once, on release, so this runs once per gesture.
+      return withDisplaced(resized, [action.id]);
+    }
 
     case "SET_RECT":
       return mapBlock(document, action.id, (block) => ({
@@ -208,6 +296,20 @@ function applyAction(
           desktop: { ...block.layout.desktop, ...action.rect },
         },
       }));
+
+    case "SET_RECTS": {
+      if (action.changes.length === 0) return document;
+      const byId = new Map(action.changes.map((change) => [change.id, change.rect]));
+      return {
+        ...document,
+        blocks: document.blocks.map((block) => {
+          const rect = byId.get(block.id);
+          return rect === undefined
+            ? block
+            : { ...block, layout: { ...block.layout, desktop: rect } };
+        }),
+      };
+    }
 
     case "SET_MOBILE_RECT":
       return mapBlock(document, action.id, (block) => ({
@@ -233,16 +335,14 @@ function applyAction(
     }
 
     case "SET_BLOCK_STYLE":
-      return mapBlock(document, action.id, (block) => ({
-        ...block,
-        style: { ...block.style, ...action.patch },
-      }));
+      return mapBlock(document, action.id, (block) =>
+        grown({ ...block, style: { ...block.style, ...action.patch } }, action.fitRowSpan),
+      );
 
     case "SET_BLOCK_PROPS":
-      return mapBlock(document, action.id, (block) => ({
-        ...block,
-        props: { ...block.props, ...action.patch },
-      }));
+      return mapBlock(document, action.id, (block) =>
+        grown({ ...block, props: { ...block.props, ...action.patch } }, action.fitRowSpan),
+      );
 
     case "SET_REQUIRED_OVERRIDE":
       return mapBlock(document, action.id, (block) => ({
@@ -251,10 +351,9 @@ function applyAction(
       }));
 
     case "SET_CONTENT_OVERRIDE":
-      return mapBlock(document, action.id, (block) => ({
-        ...block,
-        ...action.patch,
-      }));
+      return mapBlock(document, action.id, (block) =>
+        grown({ ...block, ...action.patch }, action.fitRowSpan),
+      );
 
     case "SET_THEME":
       return { ...document, theme: { ...document.theme, ...action.patch } };
