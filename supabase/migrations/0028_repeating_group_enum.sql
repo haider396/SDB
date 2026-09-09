@@ -1,0 +1,33 @@
+-- 0028_repeating_group_enum.sql
+--
+-- The `repeating_group` question type: an answer that is a LIST OF ROWS, each
+-- row having a few defined columns and an "Add another" button. One type
+-- covers the five needs that would otherwise be five features — skills and
+-- tools, employment history, education history, certifications, and other
+-- languages. See docs/superpowers/specs/2026-09-09-repeating-group-question
+-- -type-design.md §1.
+--
+-- Split from 0029 deliberately, for the same reason 0016 was split from 0017
+-- and stated in its own header: Postgres forbids USING a new enum value in the
+-- same transaction that adds it. 0029 teaches the two answer-shape functions
+-- what the value means, and its rolled-back validation has to INSERT a
+-- `repeating_group` answer to prove it — neither is possible until this file
+-- has committed. So the value lands here, alone, and everything that
+-- references it lives in 0029.
+--
+-- ── What this does and does not change ─────────────────────────────────────
+-- Adding an enum value is additive: no existing row, index, view or function
+-- is touched, and nothing can be a `repeating_group` yet because no question
+-- has that type and no code writes one. Until 0029 lands, an answer against
+-- such a question would raise CASE_NOT_FOUND from the value-shape trigger —
+-- the safety net working, not a gap.
+--
+-- ── Reversibility, stated plainly ──────────────────────────────────────────
+-- Postgres cannot drop an enum value. This migration is undone only by leaving
+-- it in place — which is harmless, because an unused enum value costs nothing
+-- and nothing can reach it without a question of that type. `if not exists`
+-- makes the file a no-op on re-run, so a fresh database and an already-
+-- migrated one land on the identical enum, in the identical order (appended
+-- last, after 'file_upload').
+
+alter type question_type add value if not exists 'repeating_group';
