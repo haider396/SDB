@@ -9,6 +9,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   Copy,
   ExternalLink,
   Eye,
@@ -26,6 +27,7 @@ import type {
   FormBlock,
   FormDocument,
   IntakeFormQuestion,
+  Question,
   QuestionDetail,
 } from "@sdb/contracts";
 import { ErrorState } from "@/components/patterns/error-state";
@@ -47,16 +49,21 @@ import {
 } from "@/features/question-manager/api";
 import { QuestionEditor } from "@/features/question-manager/components/question-editor";
 import {
+  errorFieldMessages,
   useCreateDraft,
   useDeleteForm,
   useForm,
   useSaveDocument,
   useSetFormStatus,
+  useUpdateForm,
 } from "../api";
+import { fittedRowSpan, tidyBlocks } from "../block-height";
 import { CONTENT_BLOCKS, makeBlock, newBlockId } from "../defaults";
 import { nextFreeRow } from "../geometry";
 import { BuilderCanvas } from "./components/builder-canvas";
 import { Inspector } from "./components/inspector";
+import { ActivationBlockers } from "./components/activation-blockers";
+import { ExtraStepsPanel } from "./components/extra-steps-panel";
 import { LayerTree } from "./components/layer-tree";
 import { StepBar } from "./components/step-bar";
 import { PreviewPane } from "./components/preview-pane";
@@ -68,6 +75,9 @@ import {
 } from "./store/reducer";
 
 type Device = "desktop" | "mobile";
+
+/** Email identifies a candidate; no form activates without it (04 §8.3). */
+const IDENTITY_KEY = "email";
 
 const DEVICE_WIDTH: Record<Device, string> = {
   desktop: "100%",
@@ -88,6 +98,7 @@ export function FormBuilderPage() {
       <ErrorState
         error={formQuery.error}
         onRetry={() => void formQuery.refetch()}
+        backTo={{ to: "/admin/forms", label: "Forms" }}
       />
     );
   }
@@ -117,6 +128,7 @@ export function FormBuilderPage() {
       hasTypingTest={detail.hasTypingTest}
       hasDocumentsStep={detail.hasDocumentsStep}
       isDefault={detail.isDefault}
+      hasRoleCategory={detail.roleCategory !== null}
       document={{
         pages: version.pages,
         theme: version.theme,
@@ -143,6 +155,7 @@ function BuilderInner({
   hasTypingTest,
   hasDocumentsStep,
   isDefault,
+  hasRoleCategory,
   document,
   questions,
 }: {
@@ -158,16 +171,10 @@ function BuilderInner({
   hasTypingTest: boolean;
   hasDocumentsStep: boolean;
   isDefault: boolean;
+  /** A form must be tied to a role before it can go live, unless it is the default. */
+  hasRoleCategory: boolean;
   document: FormDocument;
-  questions: {
-    id: string;
-    key: string;
-    label: string;
-    questionType: IntakeFormQuestion["questionType"];
-    isRequired: boolean;
-    helpText: string | null;
-    placeholder: string | null;
-  }[];
+  questions: Question[];
 }) {
   const [state, dispatchAction] = useReducer(builderReducer, initialState(document));
   /*
@@ -245,7 +252,18 @@ function BuilderInner({
   const setStatus = useSetFormStatus(formId);
   const remove = useDeleteForm(formId);
   const createDraft = useCreateDraft(formId);
+  /**
+   * The typing test and documents steps are FORM-level, not part of the
+   * versioned document, so they save the moment they are ticked and are not
+   * undoable with Ctrl+Z. That is the same split as the question library panel
+   * in the inspector, and the panel below says so out loud — two controls that
+   * look alike but persist differently is precisely how the last builder bug
+   * went unnoticed.
+   */
+  const updateForm = useUpdateForm(formId);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Reasons the SERVER refused — rules the browser cannot check for itself.
+  const [serverBlockers, setServerBlockers] = useState<string[]>([]);
   const navigate = useNavigate();
   const dirty = isDirty(state);
 
@@ -254,12 +272,16 @@ function BuilderInner({
 
   /**
    * The builder previews questions from the library. It renders the REAL
-   * QuestionField, with the question's real type and required flag, so what an
-   * admin arranges is what a candidate sees. Values go nowhere.
+   * QuestionField, with the question's real type, choices, validation and
+   * required flag, so what an admin arranges is what a candidate sees. Values
+   * go nowhere.
    *
-   * Options are not fetched (the list endpoint omits them), so a select
-   * previews as an empty dropdown — the shape is right even where the choices
-   * are not.
+   * The choices matter for more than looks. `GET /questions` has always
+   * returned them (questions.service.ts `assemble`), but this map used to
+   * throw them away and hand every select an empty option list — so a
+   * five-choice question previewed as a 36px dropdown while the candidate got
+   * a 130px radio group, and the admin could not see the overlap they were
+   * building. It is also what block-height.ts measures.
    */
   const questionsById = useMemo(() => {
     const map = new Map<string, IntakeFormQuestion>();
@@ -273,13 +295,63 @@ function BuilderInner({
         questionType: question.questionType,
         isRequired: question.isRequired,
         sortOrder: 0,
-        validation: {},
-        options: [],
+        validation: question.validation,
+        options: question.options
+          .filter((option) => option.isActive)
+          .map((option) => ({ value: option.value, label: option.label })),
         conditional: null,
       });
     }
     return map;
   }, [questions]);
+
+  /*
+   * What still stops this form going live.
+   *
+   * The server is the authority — it re-checks everything at activate, and can
+   * see things the browser cannot (a question deactivated in another tab). But
+   * finding out only when you press Activate, from a toast that says nothing
+   * more than "not ready", is how an admin ends up staring at a form with no
+   * idea what is wrong. These are the checks the browser CAN make, shown while
+   * there is still something to do about them.
+   *
+   * Deliberately mirrors candidate-forms.service.ts's gate. If that gains a
+   * rule, this list gets stale rather than wrong: the server still refuses, and
+   * its reasons are rendered alongside these.
+   */
+  const questionBlocks = state.present.blocks.filter(
+    (block) => block.blockType === "question" && block.questionId !== null,
+  );
+  const emailQuestion = questions.find((question) => question.key === IDENTITY_KEY);
+  const hasEmailBlock =
+    emailQuestion !== undefined &&
+    questionBlocks.some((block) => block.questionId === emailQuestion.id);
+
+  const blockers: { id: string; message: string; fix?: () => void }[] = [];
+  if (questionBlocks.length === 0) {
+    blockers.push({
+      id: "blocks",
+      message: "Add at least one question before activating.",
+    });
+  }
+  if (!hasEmailBlock) {
+    blockers.push({
+      id: "email",
+      message:
+        "This form must ask for an email address — it is how a candidate is identified, and how two applications from one person are recognised as the same candidate.",
+      // The question is already in the library; making the admin hunt for it
+      // in the picker is a pointless extra step.
+      ...(emailQuestion !== undefined && !readOnly
+        ? { fix: () => { addQuestion(emailQuestion.id); } }
+        : {}),
+    });
+  }
+  if (!isDefault && !hasRoleCategory) {
+    blockers.push({
+      id: "role",
+      message: "Choose the role this form is for.",
+    });
+  }
 
   const page = state.present.pages[state.activePageIndex];
   const selected =
@@ -288,11 +360,14 @@ function BuilderInner({
       : null;
 
   /**
-   * The inspector needs the selected question's CHOICES, which the list
-   * endpoint omits. Fetching them one selection at a time keeps the builder's
-   * first paint cheap — a form with 23 choice questions would otherwise pull
-   * every option list to show one panel — and TanStack Query caches each
-   * question, so re-selecting is free.
+   * The inspector needs each choice's `isActive` flag, which the list response
+   * does not carry — it hands the builder only the value and label of the
+   * choices a candidate would see. The detail read is what distinguishes a
+   * deactivated choice from a live one, and an admin ticking a dead choice
+   * would otherwise be silently dropped at render time.
+   *
+   * Fetched one selection at a time, and cached by TanStack Query, so
+   * re-selecting is free.
    */
   const selectedQuestionId =
     selected?.blockType === "question" ? (selected.questionId ?? undefined) : undefined;
@@ -317,9 +392,10 @@ function BuilderInner({
   }, [selectedQuestionId, questionsById, selectedQuestion.data]);
 
   /**
-   * The canvas gets those same choices, so unticking one in the inspector is
-   * visible in the preview straight away. Unselected blocks keep the empty
-   * list described above — the shape is right even where the choices are not.
+   * The canvas gets the selected question's choices from the DETAIL read, so
+   * activating or retiring one in the library shows up in the preview straight
+   * away. Every other block already has its real choices from the list
+   * response — this only overlays the one the inspector is holding open.
    */
   const canvasQuestions = useMemo(() => {
     if (selectedQuestionId === undefined || inspectorQuestion === null) {
@@ -357,6 +433,101 @@ function BuilderInner({
       patch.options = question.options.filter((option) => shown.has(option.value));
     }
     return patch;
+  };
+
+  /** The question exactly as this form asks it: library content plus overrides. */
+  const effectiveQuestion = (
+    block: FormBlock,
+    question: IntakeFormQuestion,
+  ): IntakeFormQuestion => ({
+    ...question,
+    ...overriddenContent(block, question),
+    isRequired: requiredFor(block, question),
+  });
+
+  /** What a block renders, or null while its question is still loading. */
+  const resolveQuestion = (block: FormBlock): IntakeFormQuestion | null => {
+    if (block.questionId === null) return null;
+    const question = canvasQuestions.get(block.questionId);
+    return question === undefined ? null : effectiveQuestion(block, question);
+  };
+
+  /**
+   * Grow a block to fit what it renders.
+   *
+   * The canvas grid has fixed 8px rows, so a block that outgrows its row span
+   * lands on top of the next one rather than pushing it down. Every path that
+   * creates a block or changes its content runs through here.
+   */
+  const fitBlock = (block: FormBlock): FormBlock => {
+    const rowSpan = fittedRowSpan(
+      block,
+      resolveQuestion(block),
+      state.present.theme,
+    );
+    if (rowSpan === block.layout.desktop.rowSpan) return block;
+    return {
+      ...block,
+      layout: {
+        ...block.layout,
+        desktop: { ...block.layout.desktop, rowSpan },
+      },
+    };
+  };
+
+  /**
+   * Rectangles that would change if the layout were tidied — empty when the
+   * form is already clean, which is what decides whether to offer the repair.
+   *
+   * Not memoised: it walks a few dozen blocks, and every input it depends on
+   * (the resolver, the overrides) is rebuilt each render anyway, so a useMemo
+   * here would promise a stability it cannot deliver.
+   */
+  const layoutFixes = tidyBlocks(
+    state.present.blocks,
+    resolveQuestion,
+    state.present.theme,
+  );
+
+  /**
+   * The inspector's dispatch, with auto-fit attached.
+   *
+   * Adding help text, unticking a choice or typing a longer heading all change
+   * how tall a block renders. `fitRowSpan` rides along on the same action so
+   * one keystroke stays one undo step and the coalescing window still works —
+   * a follow-up SET_RECT would break both.
+   */
+  const dispatchFitting = (action: BuilderAction) => {
+    if (
+      action.type !== "SET_CONTENT_OVERRIDE" &&
+      action.type !== "SET_BLOCK_PROPS" &&
+      action.type !== "SET_BLOCK_STYLE"
+    ) {
+      dispatch(action);
+      return;
+    }
+    const block = state.present.blocks.find((entry) => entry.id === action.id);
+    if (block === undefined) {
+      dispatch(action);
+      return;
+    }
+    const patched: FormBlock =
+      action.type === "SET_CONTENT_OVERRIDE"
+        ? { ...block, ...action.patch }
+        : action.type === "SET_BLOCK_PROPS"
+          ? { ...block, props: { ...block.props, ...action.patch } }
+          : // Style matters here for one control only: a textarea has no fixed
+            // height, so the Style panel's padding and border steppers really
+            // do make it taller. Everything else is `h-9` and cannot move.
+            { ...block, style: { ...block.style, ...action.patch } };
+    dispatch({
+      ...action,
+      fitRowSpan: fittedRowSpan(
+        patched,
+        resolveQuestion(patched),
+        state.present.theme,
+      ),
+    });
   };
 
   /**
@@ -399,7 +570,10 @@ function BuilderInner({
 
   function addBlock(type: Parameters<typeof makeBlock>[0]) {
     const row = nextFreeRow(state.present.blocks, state.activePageIndex);
-    dispatch({ type: "ADD_BLOCK", block: makeBlock(type, state.activePageIndex, row) });
+    dispatch({
+      type: "ADD_BLOCK",
+      block: fitBlock(makeBlock(type, state.activePageIndex, row)),
+    });
     setAnnouncement(`${type} added at row ${String(row + 1)}.`);
   }
 
@@ -414,10 +588,26 @@ function BuilderInner({
       return;
     }
     const row = nextFreeRow(state.present.blocks, state.activePageIndex);
+    // Sized from the question itself: a five-choice select renders as a radio
+    // group more than twice the height of a text box, and a block that lands
+    // too short overlaps whatever comes after it.
     dispatch({
       type: "ADD_BLOCK",
-      block: makeBlock("question", state.activePageIndex, row, { questionId }),
+      block: fitBlock(
+        makeBlock("question", state.activePageIndex, row, { questionId }),
+      ),
     });
+  }
+
+  /** Grow every block to fit its content and re-stack so nothing overlaps. */
+  function tidyLayout() {
+    if (layoutFixes.length === 0) return;
+    const count = layoutFixes.length;
+    dispatch({ type: "SET_RECTS", changes: layoutFixes });
+    setAnnouncement(`${String(count)} ${count === 1 ? "field" : "fields"} repositioned.`);
+    toast.success(
+      `${String(count)} ${count === 1 ? "field" : "fields"} resized to fit. Save to keep it.`,
+    );
   }
 
   async function onSave() {
@@ -498,7 +688,13 @@ function BuilderInner({
                */
               <Button
                 size="sm"
-                onClick={() => setStatus.mutate("active")}
+                onClick={() => {
+                  setServerBlockers([]);
+                  setStatus.mutate("active", {
+                    onError: (error) => setServerBlockers(errorFieldMessages(error)),
+                    onSuccess: () => setServerBlockers([]),
+                  });
+                }}
                 disabled={setStatus.isPending}
               >
                 Publish changes
@@ -507,7 +703,13 @@ function BuilderInner({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setStatus.mutate(status === "active" ? "inactive" : "active")}
+              onClick={() => {
+                setServerBlockers([]);
+                setStatus.mutate(status === "active" ? "inactive" : "active", {
+                  onError: (error) => setServerBlockers(errorFieldMessages(error)),
+                  onSuccess: () => setServerBlockers([]),
+                });
+              }}
             >
               {status === "active" ? "Turn off" : "Activate"}
             </Button>
@@ -601,6 +803,59 @@ function BuilderInner({
         </p>
       ) : null}
 
+      <ActivationBlockers
+        blockers={blockers}
+        serverBlockers={serverBlockers}
+        isActive={status === "active"}
+        hasDraft={hasDraft}
+      />
+
+      {/*
+        Fields that do not fit the box they were given.
+
+        The canvas grid has fixed 8px rows, so a field taller than its row span
+        does not push the next one down — it renders on top of it. That is
+        invisible to the admin until they open the live form, which is exactly
+        how it shipped: every block used to be created 8 rows tall regardless
+        of what it renders.
+
+        Offered rather than applied. Rearranging someone's layout the moment
+        they open a form is not a repair they asked for, and on a published
+        version there is nothing to save it to.
+      */}
+      {layoutFixes.length > 0 ? (
+        <section
+          aria-label="Fields that do not fit"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-warning bg-warning-subtle px-3 py-2.5"
+        >
+          <div className="flex min-w-0 items-start gap-1.5">
+            <AlertTriangle
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-text"
+              aria-hidden="true"
+            />
+            <p className="min-w-0 text-xs text-neutral-800">
+              <span className="font-semibold text-warning-text">
+                {layoutFixes.length}{" "}
+                {layoutFixes.length === 1 ? "field does" : "fields do"} not fit
+                the space {layoutFixes.length === 1 ? "it has" : "they have"}.
+              </span>{" "}
+              {/* Deliberately the mechanism, not a claim about this form: a
+                  field can be too short with nothing beneath it to overlap. */}
+              A field taller than its box renders on top of whatever is under it.
+            </p>
+          </div>
+          {readOnly ? (
+            <p className="text-xs text-neutral-700">
+              Start a new draft to fix this.
+            </p>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={tidyLayout}>
+              Tidy layout
+            </Button>
+          )}
+        </section>
+      ) : null}
+
       <div
         className={cn(
           "grid grid-cols-1 gap-4",
@@ -659,6 +914,14 @@ function BuilderInner({
               ))}
             </div>
           </section>
+
+          <ExtraStepsPanel
+            hasTypingTest={hasTypingTest}
+            hasDocumentsStep={hasDocumentsStep}
+            isSaving={updateForm.isPending}
+            isLive={status === "active"}
+            onChange={(patch) => updateForm.mutateAsync(patch)}
+          />
 
           <section className="space-y-2">
             <h2 className="text-2xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -816,11 +1079,7 @@ function BuilderInner({
                 renderQuestion={(question, block) => (
                   <div className="pointer-events-none">
                     <QuestionField
-                      question={{
-                        ...question,
-                        ...overriddenContent(block, question),
-                        isRequired: requiredFor(block, question),
-                      }}
+                      question={effectiveQuestion(block, question)}
                       value={undefined}
                       onChange={() => undefined}
                       onBlur={() => undefined}
@@ -847,7 +1106,9 @@ function BuilderInner({
           <Inspector
             block={selected}
             theme={state.present.theme}
-            dispatch={dispatch}
+            // Content edits here change how tall a block renders, so they go
+            // through the auto-fitting dispatch rather than the raw one.
+            dispatch={dispatchFitting}
             question={inspectorQuestion}
           />
           {status === "active" ? (
