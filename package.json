@@ -10,7 +10,9 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "start": "node apps/api/dist/server.js",
+    "build:api": "pnpm --filter @sdb/contracts build && pnpm --filter @sdb/api build"
   },
   "devDependencies": {
     "prettier": "^3.3.3",
