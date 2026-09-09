@@ -10,7 +10,13 @@
  * hatch and a live "test a value" probe.
  */
 import { useState } from "react";
-import type { RateUnit, QuestionType, ValidationRules } from "@sdb/contracts";
+import type {
+  RateUnit,
+  QuestionType,
+  RepeatingGroupColumnType,
+  RepeatingGroupConfig,
+  ValidationRules,
+} from "@sdb/contracts";
 import { ACCEPTED_UPLOAD_MIME_TYPES } from "@sdb/contracts";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +42,7 @@ const RULE_LABELS: Record<ValidationRuleKey, string> = {
   allowedUnits: "Allowed rate units",
   acceptedMimeTypes: "Accepted file types",
   maxFileSizeMb: "Maximum file size (MB)",
+  repeatingGroup: "Columns",
 };
 
 const RATE_UNITS: readonly RateUnit[] = ["hourly", "monthly"];
@@ -165,6 +172,75 @@ function PatternField({
         </div>
       ) : null}
     </div>
+  );
+}
+
+const COLUMN_TYPE_LABELS: Record<RepeatingGroupColumnType, string> = {
+  short_text: "Short text",
+  long_text: "Long text",
+  number: "Number",
+  month: "Month",
+  single_select: "Single select",
+};
+
+/**
+ * A repeating group's columns, READ ONLY — and it must stay that way.
+ *
+ * Option A (design §11): we define the columns, the admin edits the choices
+ * through the options editor she already uses. So this renders no input, no
+ * button, and never calls set(). An editor here would let someone rename or
+ * retire a column that answers are already stored against, and since a stored
+ * answer keys its cells by column key, the meaning of every one of those rows
+ * would change with nothing to warn about it.
+ *
+ * The explanatory sentence is the UI expression of that decision. Without it
+ * an admin hunts the screen for an editor that does not exist and concludes
+ * the page is broken.
+ */
+function RepeatingGroupSummary({
+  config,
+}: {
+  config: RepeatingGroupConfig | undefined;
+}) {
+  const columns = config?.columns ?? [];
+
+  return (
+    <fieldset className="space-y-1 sm:col-span-2">
+      <legend className="block text-sm font-medium text-neutral-800">
+        {RULE_LABELS.repeatingGroup}
+      </legend>
+      {columns.length === 0 ? (
+        // Reachable: "Repeating table" is in the type dropdown, so an admin can
+        // land here on a brand-new question. Saying nothing would read as a
+        // broken editor; the API rejects the save either way (AC-FB-01).
+        <p className="text-xs text-neutral-600">
+          No columns are defined yet. A repeating table needs at least one, and
+          columns are set by Staffing Done Better — ask your SDB contact.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-neutral-600">
+            {columns.length === 1 ? "1 column" : `${columns.length} columns`}.
+            Columns are set by Staffing Done Better. You can still edit this
+            question&rsquo;s wording and its choice list.
+          </p>
+          <ul className="divide-y divide-neutral-200 border-t border-neutral-200 pt-1">
+            {columns.map((column) => (
+              <li
+                key={column.key}
+                className="flex flex-wrap items-baseline gap-x-2 py-1 text-sm text-neutral-800"
+              >
+                <span className="font-medium">{column.label}</span>
+                <span className="text-xs text-neutral-600">
+                  {COLUMN_TYPE_LABELS[column.columnType]} &middot;{" "}
+                  {column.isRequired ? "Required" : "Optional"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </fieldset>
   );
 }
 
@@ -341,6 +417,10 @@ export function ValidationRulesEditor({
               </fieldset>
             );
           }
+          case "repeatingGroup":
+            return (
+              <RepeatingGroupSummary key={key} config={value.repeatingGroup} />
+            );
           default: {
             const unhandled: never = key;
             throw new Error(`Unhandled validation rule: ${String(unhandled)}`);

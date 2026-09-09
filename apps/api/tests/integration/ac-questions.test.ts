@@ -26,6 +26,7 @@ let db: TestDb;
 let harness: TestApp;
 let superAdmin: string;
 let admin: string;
+let clientUser: string;
 let nowMs = Date.now();
 
 /** Unique source IP per call so public GETs never trip the 60/min limiter. */
@@ -57,6 +58,8 @@ beforeAll(async () => {
   await assignRole(db.sql, superAdmin, 'super_admin');
   admin = await insertUser(db.sql);
   await assignRole(db.sql, admin, 'admin');
+  clientUser = await insertUser(db.sql);
+  await assignRole(db.sql, clientUser, 'client_user');
   harness = await buildTestApp(db, undefined, { now: () => nowMs });
 });
 
@@ -116,14 +119,23 @@ describe('AC-Q-01 — super_admin creates a question with options; visible in GE
   });
 });
 
-describe('AC-Q-02 — an admin (non-super) receives 403 on every /questions write endpoint', () => {
-  it('route-table-driven: every question.manage route rejects the admin role', async () => {
-    const writeRoutes = harness.app.routeTable.filter(
+describe('AC-Q-02 (revised by migration 0027) — admin manages questions; client roles never do', () => {
+  // Originally: "an admin (non-super) receives 403 on every /questions write
+  // endpoint". 0011 seeded question.manage to super_admin alone, which stopped
+  // being tenable once the candidate form builder was put behind the same key —
+  // an admin could open /admin/forms and 403 on every save. 0027 grants
+  // question.manage to admin (client-approved). The client roles are the half
+  // of this criterion that has NOT changed, so they are asserted just as hard.
+  const manageRoutes = () =>
+    harness.app.routeTable.filter(
       (route) =>
         route.method !== 'HEAD' &&
         route.method !== 'OPTIONS' &&
         route.config['permission'] === 'question.manage',
     );
+
+  it('route-table-driven: every question.manage route ADMITS the admin role', async () => {
+    const writeRoutes = manageRoutes();
     // POST/PATCH/DELETE questions + options + categories endpoints.
     expect(writeRoutes.length).toBeGreaterThanOrEqual(13);
     for (const route of writeRoutes) {
@@ -133,9 +145,43 @@ describe('AC-Q-02 — an admin (non-super) receives 403 on every /questions writ
         url,
         headers: await harness.bearer(admin),
       });
-      expect(res.statusCode, `${route.method} ${route.url}`).toBe(403);
-      expect(res.json<{ error: { code: string } }>().error.code).toBe('FORBIDDEN');
+      // Reaching the handler is the assertion. A bodyless request to a real
+      // handler legitimately 400s or 404s; what it must never be is 401/403.
+      expect([401, 403], `${route.method} ${route.url} should admit admin`)
+        .not.toContain(res.statusCode);
+      expect(res.statusCode, `${route.method} ${route.url}`).toBeLessThan(500);
     }
+  });
+
+  it('route-table-driven: every question.manage route still REJECTS client_user', async () => {
+    const writeRoutes = manageRoutes();
+    expect(writeRoutes.length).toBeGreaterThanOrEqual(13);
+    for (const route of writeRoutes) {
+      const url = route.url.replaceAll(/:[^/]+/g, randomUUID());
+      const res = await harness.app.inject({
+        method: route.method as 'POST',
+        url,
+        headers: await harness.bearer(clientUser),
+      });
+      expect(res.statusCode, `${route.method} ${route.url}`).toBe(403);
+      const body = res.json<{
+        error: { code: string; details?: { requiredPermission?: string } };
+      }>();
+      expect(body.error.code).toBe('FORBIDDEN');
+      expect(body.error.details?.requiredPermission).toBe('question.manage');
+    }
+  });
+
+  it('the grant is exactly two roles wide — the seed itself, not just the routes', async () => {
+    const rows = await db.sql<{ key: string }[]>`
+      select r.key
+      from roles r
+      join role_permissions rp on rp.role_id = r.id
+      join permissions p on p.id = rp.permission_id
+      where p.key = 'question.manage'
+      order by r.key
+    `;
+    expect(rows.map((row) => row.key)).toEqual(['admin', 'super_admin']);
   });
 });
 

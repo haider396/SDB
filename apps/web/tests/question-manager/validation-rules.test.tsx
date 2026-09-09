@@ -4,11 +4,12 @@
  * (422 INVALID_VALIDATION_RULE) cannot be produced (03 §1.5, 02 §6).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   installApiMock,
   makeCategory,
+  makeQuestion,
   renderQuestionManager,
   type ServerState,
 } from "./helpers";
@@ -110,5 +111,117 @@ describe("validation rules adapt to the question type", () => {
     // Custom exposes the raw regex input.
     await user.selectOptions(preset, "custom");
     expect(screen.getByLabelText("Regular expression")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Option A: WE define the columns, Rebecca edits the choices. The editor
+ * therefore shows what the columns are and offers no way to change them.
+ * An editor that could write them would let an admin rename a column out from
+ * under every answer already stored against it.
+ */
+describe("a repeating group's columns are shown, never edited", () => {
+  const category = makeCategory({ key: "candidate_skills", label: "Skills" });
+  const skills = makeQuestion({
+    key: "skills_and_tools",
+    categoryId: category.id,
+    label: "Skills & tools",
+    questionType: "repeating_group",
+    validation: {
+      repeatingGroup: {
+        columns: [
+          {
+            key: "skill",
+            label: "Skill",
+            columnType: "single_select",
+            isRequired: true,
+            widthWeight: 2,
+            choices: { from: "question_options" },
+          },
+          {
+            key: "proficiency",
+            label: "Proficiency",
+            columnType: "single_select",
+            isRequired: true,
+            widthWeight: 1,
+            choices: {
+              from: "inline",
+              options: [{ value: "expert", label: "Expert" }],
+            },
+          },
+          {
+            key: "notes",
+            label: "Notes",
+            columnType: "short_text",
+            isRequired: false,
+            widthWeight: 3,
+            maxLength: 500,
+          },
+        ],
+        minRows: 0,
+        maxRows: 20,
+        addRowLabel: "Add another",
+      },
+    },
+  });
+
+  beforeEach(() => {
+    installApiMock({ categories: [category], questions: [skills] });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("summarises the stored columns and offers no editor for them", async () => {
+    const user = userEvent.setup();
+    renderQuestionManager();
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Skills & tools" }),
+    );
+
+    const summary = await screen.findByRole("group", { name: "Columns" });
+    expect(summary).toHaveTextContent("3 columns");
+    expect(summary).toHaveTextContent("Skill");
+    expect(summary).toHaveTextContent("Proficiency");
+    expect(summary).toHaveTextContent("Notes");
+    // Type and required flag, so an admin can see what the form will ask for.
+    expect(summary).toHaveTextContent("Single select");
+    expect(summary).toHaveTextContent("Required");
+    expect(summary).toHaveTextContent("Optional");
+    // The sentence that stops an admin hunting for an editor that is not there.
+    expect(summary).toHaveTextContent(/set by Staffing Done Better/i);
+
+    // Option A: columns are ours, choices are hers.
+    expect(
+      screen.queryByRole("button", { name: /add column/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: /column label/i }),
+    ).not.toBeInTheDocument();
+    // Not one control inside the summary — nothing here can call set().
+    expect(within(summary).queryAllByRole("textbox")).toHaveLength(0);
+    expect(within(summary).queryAllByRole("button")).toHaveLength(0);
+    expect(within(summary).queryAllByRole("combobox")).toHaveLength(0);
+    expect(within(summary).queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("says so plainly when a new repeating group has no columns yet", async () => {
+    // "Repeating table" is in the type dropdown, so an admin can reach this
+    // state. A silent blank would read as a broken editor.
+    const user = userEvent.setup();
+    renderQuestionManager();
+    await user.click(
+      await screen.findByRole("button", { name: "New question" }),
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Type"),
+      "repeating_group",
+    );
+
+    const summary = await screen.findByRole("group", { name: "Columns" });
+    expect(summary).toHaveTextContent(/no columns/i);
   });
 });

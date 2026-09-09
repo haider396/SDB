@@ -99,3 +99,33 @@ describe("buildAnswers / buildSubmission", () => {
     expect(IntakeSubmissionSchema.safeParse(submission).success).toBe(true);
   });
 });
+
+describe("toAnswer — repeating_group", () => {
+  const question = makeQuestion({
+    key: "skills_and_tools",
+    questionType: "repeating_group",
+  });
+
+  it("sends the rows on valueJson, as an object and never a bare array", () => {
+    // A bare array would be caught by the Array.isArray branch in
+    // lib/answer-value.ts and rendered as "[object Object]".
+    const rows = [{ skill: "ClickUp", proficiency: "expert" }];
+    const answer = toAnswer(question, { rows });
+    expect(answer).toEqual({
+      questionKey: "skills_and_tools",
+      valueJson: { rows },
+    });
+    expect(IntakeAnswerSchema.safeParse(answer).success).toBe(true);
+  });
+
+  it("drops a malformed value rather than letting the server reject it", () => {
+    // The candidate never typed this shape, so an error naming it would be
+    // meaningless to them.
+    expect(toAnswer(question, { rows: [{ skill: { nested: true } }] })).toBeNull();
+    expect(toAnswer(question, [{ skill: "ClickUp" }])).toBeNull();
+  });
+
+  it("omits an emptied table entirely — isBlank catches it first", () => {
+    expect(toAnswer(question, { rows: [] })).toBeNull();
+  });
+});

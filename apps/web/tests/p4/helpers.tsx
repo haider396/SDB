@@ -83,6 +83,7 @@ export function makeRequisition(
     overlapTimezone: null,
     targetStartDate: null,
     urgency: null,
+    priority: "normal",
     principalUserId: null,
     principalApprovedAt: null,
     submittedAt: NOW,

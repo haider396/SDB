@@ -128,7 +128,11 @@ export function RequisitionDetailPage() {
           breadcrumbs={[...breadcrumbs, { label: "Placement" }]}
           title="Placement"
         />
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        <ErrorState
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          backTo={{ to: "/admin/requisitions", label: "Requisitions" }}
+        />
       </div>
     );
   }

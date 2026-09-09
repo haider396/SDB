@@ -79,3 +79,8 @@ export const CandidateFileParamsSchema = z.object({
   fileId: z.string().uuid(),
 });
 export const FileIdParamSchema = z.object({ fileId: z.string().uuid() });
+
+/** `PATCH /candidates/:id/answers` — how many answers actually changed. */
+export const AnswersUpdatedEnvelopeSchema = SingleResponseSchema(
+  z.object({ updated: z.number().int().nonnegative() }),
+);

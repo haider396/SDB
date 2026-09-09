@@ -8,10 +8,11 @@
  * question configuration with a layout layer on top, and PERMISSION_KEYS is
  * documented as exhaustive for the MVP.
  *
- * NOTE for whoever wires the first non-super-admin operator: `question.manage`
- * is seeded to super_admin ONLY (migration 0011 excludes `admin` explicitly),
- * so an admin-role user will get a 403 here. That is a seed decision, not a
- * code one — see the plan's open items.
+ * That reuse is why `admin` now holds `question.manage`. 0011 seeded it to
+ * super_admin only, which meant an admin-role user could open /admin/forms
+ * (gated on `question.manage`'s read sibling) and then 403 on every save,
+ * publish and block edit. Migration 0027 grants it to `admin` as well. It stays
+ * out of reach of both client roles.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';

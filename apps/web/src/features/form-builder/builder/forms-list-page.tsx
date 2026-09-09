@@ -1,7 +1,7 @@
 /**
  * /admin/forms — every candidate form, with its status and public link.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Copy, LayoutTemplate, Plus, Trash2 } from "lucide-react";
@@ -221,7 +221,6 @@ function NewFormDialog({
   onOpenChange: (open: boolean) => void;
   templates: CandidateFormSummary[];
   onCreate: (body: {
-    key: string;
     label: string;
     roleCategoryId: string;
     templateFormId?: string;
@@ -237,22 +236,32 @@ function NewFormDialog({
     () => templates.find((form) => form.isDefault)?.id ?? "",
   );
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Creating a form takes most of a second, and without a guard an impatient
+   * second click makes a second form with the same name.
+   *
+   * The ref is what actually blocks it. Two clicks in the same tick both read
+   * the same `submitting` state — React has not re-rendered between them — so
+   * a state check alone lets the second through. The state exists only to
+   * drive the button's label and disabled attribute.
+   */
+  const inFlight = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
+    if (inFlight.current) return;
     setError(null);
     if (label.trim() === "" || roleCategoryId === "") {
       setError("Give the form a name and choose the role it is for.");
       return;
     }
+    inFlight.current = true;
+    setSubmitting(true);
     try {
       await onCreate({
-        // A stable machine key derived from the name. Immutable afterwards,
-        // which is why it is derived once here rather than edited later.
-        key: label
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "_")
-          .replace(/^_|_$/g, "")
-          .slice(0, 90),
+        // The machine key is the SERVER's to derive. It has to be unique across
+        // every form that ever existed — including deleted ones, which keep
+        // their key — and the browser cannot know that list.
         label: label.trim(),
         roleCategoryId,
         ...(templateFormId === "" ? {} : { templateFormId }),
@@ -261,6 +270,9 @@ function NewFormDialog({
       setRoleCategoryId("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not create the form.");
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -324,10 +336,16 @@ function NewFormDialog({
           ) : null}
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="secondary"
+            disabled={submitting}
+            onClick={() => onOpenChange(false)}
+          >
             Cancel
           </Button>
-          <Button onClick={() => void submit()}>Create</Button>
+          <Button disabled={submitting} onClick={() => void submit()}>
+            {submitting ? "Creating…" : "Create"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

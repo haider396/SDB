@@ -71,6 +71,14 @@ export const VALIDATION_KEYS_BY_TYPE: Record<
   date: [],
   scale: ["scaleMin", "scaleMax", "scaleMinLabel", "scaleMaxLabel"],
   file_upload: ["acceptedMimeTypes", "maxFileSizeMb"],
+  /*
+   * 'repeatingGroup' MUST be here. pruneValidation() keeps only the keys in
+   * this list, so an empty array — which compiles perfectly — makes every save
+   * from the question editor silently DELETE the column definitions. The
+   * question survives, its columns do not, and the form renders an empty
+   * table. Nothing warns and nothing throws. AC-FB-14 is the regression test.
+   */
+  repeating_group: ["repeatingGroup"],
 };
 
 /** Types that carry an options list. */
@@ -128,6 +136,7 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   date: "Date",
   scale: "Scale",
   file_upload: "File upload",
+  repeating_group: "Repeating table",
 };
 
 /**

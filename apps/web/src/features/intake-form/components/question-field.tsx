@@ -12,6 +12,7 @@ import type { QuestionType } from "@sdb/contracts";
 import { CurrencyRangeField } from "./fields/currency-range-field";
 import { FileUploadField } from "./fields/file-upload-field";
 import { MultiSelectField } from "./fields/multi-select-field";
+import { RepeatingGroupField } from "./fields/repeating-group-field";
 import {
   ScaleField,
   SingleSelectField,
@@ -39,6 +40,7 @@ export const HANDLED_QUESTION_TYPES = {
   date: true,
   scale: true,
   file_upload: true,
+  repeating_group: true,
 } as const satisfies Record<QuestionType, true>;
 
 export function QuestionField(props: FieldProps) {
@@ -66,6 +68,8 @@ export function QuestionField(props: FieldProps) {
       return <ScaleField {...props} />;
     case "file_upload":
       return <FileUploadField {...props} />;
+    case "repeating_group":
+      return <RepeatingGroupField {...props} />;
     default: {
       const unhandled: never = type;
       throw new Error(`Unhandled question type: ${String(unhandled)}`);

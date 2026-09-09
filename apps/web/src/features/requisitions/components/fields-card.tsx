@@ -13,6 +13,7 @@ import {
   EngagementTypeSchema,
   FullTimeTransitionSchema,
   RateUnitSchema,
+  RequisitionPrioritySchema,
   SeniorityLevelSchema,
 } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { priorityLabel } from "@/components/patterns/priority-chip";
 import { ApiError } from "@/lib/api-client";
 import {
   ENGAGEMENT_LABELS,
@@ -46,6 +48,7 @@ const FormSchema = z
     overlapTimezone: z.string(),
     targetStartDate: z.string(),
     urgency: z.string().max(200),
+    priority: RequisitionPrioritySchema,
     regionPreference: z.string().max(500),
     principalUserId: z.string(),
     budgetMin: z.string(),
@@ -105,6 +108,7 @@ function defaults(requisition: RequisitionDetail): FormValues {
     overlapTimezone: requisition.overlapTimezone ?? "",
     targetStartDate: requisition.targetStartDate ?? "",
     urgency: requisition.urgency ?? "",
+    priority: requisition.priority,
     regionPreference: requisition.regionPreference ?? "",
     principalUserId: requisition.principalUserId ?? "",
     budgetMin:
@@ -160,6 +164,7 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
       targetStartDate:
         values.targetStartDate === "" ? null : values.targetStartDate,
       urgency: values.urgency.trim() === "" ? null : values.urgency.trim(),
+      priority: values.priority,
       regionPreference:
         values.regionPreference.trim() === ""
           ? null
@@ -345,9 +350,31 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
                 </p>
               ) : null}
             </div>
+            {/* Urgency and Priority sit together on purpose: they look alike
+                and mean different things, and seeing them side by side is what
+                stops someone treating one as the other. Urgency is what the
+                CLIENT told us at intake — it is also frozen in their answer
+                snapshot, so editing it here would put the two out of step.
+                Priority is SDB's own ranking of the work. Migration 0030. */}
             <div className="space-y-1.5">
               <Label htmlFor="req-urgency">Urgency</Label>
               <Input id="req-urgency" {...form.register("urgency")} />
+              <p className="text-2xs text-neutral-500">
+                What the client told us when they requested this hire.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="req-priority">Priority</Label>
+              <NativeSelect id="req-priority" {...form.register("priority")}>
+                {RequisitionPrioritySchema.options.map((value) => (
+                  <option key={value} value={value}>
+                    {priorityLabel(value)}
+                  </option>
+                ))}
+              </NativeSelect>
+              <p className="text-2xs text-neutral-500">
+                Our ranking. The client sees this on their position.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="req-region">Region preference</Label>

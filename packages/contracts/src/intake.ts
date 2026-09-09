@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { QuestionTypeSchema } from './enums.js';
+import { IntakeFormOptionSchema } from './options.js';
 import { ValidationRulesSchema } from './validation-rules.js';
 
 /** Recursive JSON value — the only shape allowed in `valueJson`. */
@@ -49,11 +50,14 @@ export const QuestionConditionalSchema = z.object({
 });
 export type QuestionConditional = z.infer<typeof QuestionConditionalSchema>;
 
-export const IntakeFormOptionSchema = z.object({
-  value: z.string(),
-  label: z.string(),
-});
-export type IntakeFormOption = z.infer<typeof IntakeFormOptionSchema>;
+/**
+ * Defined in ./options.js and re-exported here so `IntakeFormOption` keeps the
+ * import path it has always had. It had to move: `repeating-group.ts` needs the
+ * same option shape for its inline-choice columns, and reaching it through this
+ * module would close an import cycle back to validation-rules.js. options.ts
+ * carries the full account of what that cycle silently broke.
+ */
+export { IntakeFormOptionSchema, type IntakeFormOption } from './options.js';
 
 export const IntakeFormQuestionSchema = z.object({
   id: z.string().uuid(),

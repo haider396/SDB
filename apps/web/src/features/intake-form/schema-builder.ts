@@ -11,9 +11,16 @@
  * a compile error.
  */
 import { z } from "zod";
-import type { IntakeFormQuestion, RateUnit, ValidationRules } from "@sdb/contracts";
+import type {
+  IntakeFormQuestion,
+  RateUnit,
+  RepeatingGroupColumn,
+  RepeatingGroupFieldError,
+  ValidationRules,
+} from "@sdb/contracts";
 import { RateUnitSchema } from "@sdb/contracts";
 import { isBlank, type IntakeValues } from "./conditional";
+import { columnOptions, repeatingGroupConfig } from "./repeating-group";
 
 export const REQUIRED_MESSAGE = "This field is required.";
 
@@ -189,6 +196,102 @@ function scaleSchema(rules: ValidationRules): z.ZodTypeAny {
     .max(max, `Choose a value between ${min} and ${max}.`);
 }
 
+function cellSchema(
+  question: IntakeFormQuestion,
+  column: RepeatingGroupColumn,
+): z.ZodTypeAny {
+  switch (column.columnType) {
+    case "number": {
+      let schema = z.number({ invalid_type_error: "Enter a number." });
+      if (column.min !== undefined) {
+        schema = schema.min(column.min, `Must be at least ${String(column.min)}.`);
+      }
+      if (column.max !== undefined) {
+        schema = schema.max(column.max, `Must be at most ${String(column.max)}.`);
+      }
+      return schema;
+    }
+    case "month":
+      // \d, not a literal 'd'. The escape was lost transcribing this from the
+      // design, and the typo silently rejects EVERY month a candidate can
+      // type — the control is <input type="month">, so nothing else can
+      // reach here to expose it.
+      return z
+        .string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Enter a month, for example 2024-03.");
+    case "single_select": {
+      const values = columnOptions(question, column).map((option) => option.value);
+      const [first, ...rest] = values;
+      // A misconfigured column with no choices accepts any string; the server
+      // remains the authority (INVALID_OPTION).
+      if (first === undefined) return z.string();
+      return z.enum([first, ...rest], {
+        invalid_type_error: "Choose one of the provided options.",
+      });
+    }
+    case "short_text":
+    case "long_text": {
+      let schema = z.string();
+      if (column.maxLength !== undefined) {
+        schema = schema.max(
+          column.maxLength,
+          `Must be at most ${String(column.maxLength)} characters.`,
+        );
+      }
+      return schema;
+    }
+    default: {
+      const unhandled: never = column.columnType;
+      throw new Error(`Unhandled repeating-group column type: ${String(unhandled)}`);
+    }
+  }
+}
+
+/**
+ * Schema for a repeating-group answer, built column by column so Zod issue
+ * paths come out as ["rows", 2, "skill"] — which is what lets an error find
+ * its exact cell instead of collapsing to one message for the whole table.
+ *
+ * A REQUIRED cell is `.optional()` followed by a refine, not a bare required
+ * schema. z.preprocess turns "" into undefined, and an undefined value against
+ * a non-optional schema produces Zod's own "Required" wording rather than
+ * REQUIRED_MESSAGE — which is the copy every other field in this form uses.
+ *
+ * `.strict()` is deliberately NOT used on the row object. An unknown column
+ * key — a column retired between page load and submit — is stripped by
+ * z.object's default behaviour rather than raising, which mirrors the server's
+ * step 3 and means a mid-session config change cannot block a submission.
+ */
+export function repeatingGroupSchema(question: IntakeFormQuestion): z.ZodTypeAny {
+  const config = repeatingGroupConfig(question);
+  // Not a repeating group, or a misconfigured one. The API rejects the latter
+  // on write (AC-FB-01); the renderer must not crash on it in the meantime.
+  if (config === null) return z.unknown();
+
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const column of config.columns) {
+    const cell = cellSchema(question, column).optional();
+    shape[column.key] = z.preprocess(
+      blankToUndefined,
+      column.isRequired
+        ? cell.refine((value) => value !== undefined, REQUIRED_MESSAGE)
+        : cell,
+    );
+  }
+
+  return z.object({
+    rows: z
+      .array(z.object(shape))
+      .min(
+        config.minRows,
+        config.minRows === 1
+          ? "Add at least one row."
+          : `Add at least ${String(config.minRows)} rows.`,
+      )
+      .max(config.maxRows, `Add at most ${String(config.maxRows)} rows.`),
+  });
+}
+
 /**
  * Schema for a single question's value, before required/optional wrapping.
  * Exhaustive over QuestionType — the `never` default is the AC-IF-18 guard.
@@ -223,6 +326,8 @@ function baseSchemaFor(question: IntakeFormQuestion): z.ZodTypeAny {
       // Upload arrives in P3 — the P1 renderer shows a disabled drop zone
       // and never carries a value, required or not.
       return z.unknown();
+    case "repeating_group":
+      return repeatingGroupSchema(question);
     default: {
       const unhandled: never = type;
       throw new Error(`Unhandled question type: ${String(unhandled)}`);
@@ -235,6 +340,27 @@ export function buildQuestionSchema(question: IntakeFormQuestion): z.ZodTypeAny 
   const base = baseSchemaFor(question);
   if (question.questionType === "file_upload") {
     return z.unknown().optional();
+  }
+  if (question.questionType === "repeating_group") {
+    /*
+     * An unanswered repeating group is { rows: [] }, which the schema accepts
+     * when minRows is 0 — so requiredness is enforced by minRows and by the
+     * explicit check below, NOT by the generic optional() wrapper. Wrapping it
+     * would run blankToUndefined first, and isBlank now calls { rows: [] }
+     * blank, so an optional table would be handed `undefined` and a required
+     * one would fail with the wrong message before minRows was ever consulted.
+     *
+     * The undefined arm is not theoretical: react-hook-form starts every
+     * field undefined, so a candidate who never touches the table submits the
+     * step with no value at all.
+     */
+    const table = z.preprocess(
+      (value) => (value === undefined ? { rows: [] } : value),
+      base,
+    );
+    return question.isRequired
+      ? table.refine((value) => !isBlank(value), REQUIRED_MESSAGE)
+      : table;
   }
   return z.preprocess(
     blankToUndefined,
@@ -261,6 +387,30 @@ export interface IntakeValidationResult {
   values: IntakeValues | null;
   /** First message per questionKey. */
   errors: Record<string, string>;
+  /**
+   * Cell-precise failures for repeating groups, per questionKey.
+   *
+   * Additive: `errors` still holds exactly one message per key, so no existing
+   * caller changes. Repeating-group cells are the only failures that cannot be
+   * expressed as one message on one control (spec §7.4).
+   */
+  rowErrors: Record<string, RepeatingGroupFieldError[]>;
+}
+
+/**
+ * The Zod issue path for one cell of a repeating group, or null.
+ *
+ * Paths come out as [questionKey, "rows", 2, "skill"] because
+ * repeatingGroupSchema is built column by column rather than as one blob —
+ * which is the whole reason an error can find its exact input.
+ */
+function cellFrom(
+  path: readonly (string | number)[],
+): { rowIndex: number; columnKey: string } | null {
+  const [, marker, rowIndex, columnKey] = path;
+  if (marker !== "rows") return null;
+  if (typeof rowIndex !== "number" || typeof columnKey !== "string") return null;
+  return { rowIndex, columnKey };
 }
 
 /**
@@ -274,13 +424,36 @@ export function validateIntakeValues(
   const schema = buildIntakeSchema(questions);
   const result = schema.safeParse(values);
   if (result.success) {
-    return { values: result.data, errors: {} };
+    return { values: result.data, errors: {}, rowErrors: {} };
   }
   const errors: Record<string, string> = {};
+  const rowErrors: Record<string, RepeatingGroupFieldError[]> = {};
   for (const issue of result.error.issues) {
     const key = issue.path[0];
-    if (typeof key !== "string" || errors[key] !== undefined) continue;
+    if (typeof key !== "string") continue;
+    const cell = cellFrom(issue.path);
+    if (cell !== null) {
+      const bucket = rowErrors[key] ?? [];
+      bucket.push({ ...cell, message: issue.message });
+      rowErrors[key] = bucket;
+      continue;
+    }
+    if (errors[key] !== undefined) continue;
     errors[key] = issue.message;
   }
-  return { values: null, errors };
+  /*
+   * A repeating group whose only failures are per-cell still needs a message
+   * on the fieldset itself — the cells may be off-screen, and the summary
+   * links need something to say. The wording mirrors what the server sends
+   * for the same failure (spec §7.3), so the two surfaces cannot disagree.
+   */
+  for (const [key, cells] of Object.entries(rowErrors)) {
+    if (errors[key] !== undefined) continue;
+    const affected = new Set(cells.map((cell) => cell.rowIndex)).size;
+    errors[key] =
+      affected === 1
+        ? "1 row has problems."
+        : `${String(affected)} rows have problems.`;
+  }
+  return { values: null, errors, rowErrors };
 }

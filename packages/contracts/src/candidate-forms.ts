@@ -430,11 +430,17 @@ export type CandidateFormDetail = z.infer<typeof CandidateFormDetailSchema>;
 
 export const CreateCandidateFormBodySchema = z
   .object({
+    /**
+     * Optional. The server derives it from the label and makes it unique
+     * against every form that has ever existed — including deleted ones, whose
+     * rows survive a soft delete and keep owning their key.
+     */
     key: z
       .string()
       .min(1)
       .max(100)
-      .regex(/^[a-z0-9_]+$/, 'Use lowercase letters, numbers and underscores.'),
+      .regex(/^[a-z0-9_]+$/, 'Use lowercase letters, numbers and underscores.')
+      .optional(),
     label: z.string().min(1).max(200),
     description: z.string().max(2000).nullable().optional(),
     roleCategoryId: z.string().uuid().nullable().optional(),

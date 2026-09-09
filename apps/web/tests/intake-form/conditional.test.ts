@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateConditional,
+  isBlank,
   isQuestionVisible,
   visibleQuestions,
 } from "@/features/intake-form/conditional";
@@ -119,5 +120,39 @@ describe("hidden questions are excluded from the payload (05 §5 req 4/7)", () =
     const answers = buildAnswers(questions, { flag: false, detail: "stale" });
     expect(answers).toEqual([{ questionKey: "flag", valueBoolean: false }]);
     expect(answers.some((answer) => answer.questionKey === "detail")).toBe(false);
+  });
+});
+
+describe("isBlank knows an emptied repeating group is empty", () => {
+  it("calls a table with no rows blank, and one with a row not blank", () => {
+    // A candidate who adds a row and then deletes it submits { rows: [] }.
+    // Without this the required check passes on an answer with nothing in it
+    // and an empty answer row is written. Mirrors the API's own isBlank.
+    expect(isBlank({ rows: [] })).toBe(true);
+    expect(isBlank({ rows: [{}] })).toBe(false);
+    expect(isBlank({ rows: [{ skill: "ClickUp" }] })).toBe(false);
+  });
+
+  it("leaves every other object shape alone", () => {
+    // currency_range's value is an object too, and must stay non-blank.
+    expect(isBlank({ min: 1, max: 2, unit: "monthly", currency: "USD" })).toBe(
+      false,
+    );
+  });
+
+  it("hides a dependent whose controlling table was emptied", () => {
+    const controller = makeQuestion({
+      key: "skills",
+      questionType: "repeating_group",
+    });
+    const dependent = makeQuestion({
+      key: "detail",
+      conditional: { questionKey: "skills", operator: "not_equals", value: null },
+    });
+    expect(
+      visibleQuestions([controller, dependent], { skills: { rows: [] } }).map(
+        (question) => question.key,
+      ),
+    ).toEqual(["skills"]);
   });
 });

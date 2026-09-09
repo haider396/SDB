@@ -35,6 +35,11 @@ const baseRequisition = {
   overlapTimezone: null,
   targetStartDate: null,
   urgency: null,
+  // T18 / migration 0030. Required and NOT NULL — the column is defaulted in
+  // Postgres, so every row has one and no reader has to decide what a missing
+  // priority means. Distinct from `urgency` directly above it, which is the
+  // client's own intake answer.
+  priority: 'normal' as const,
   principalUserId: null,
   principalApprovedAt: null,
   submittedAt: NOW,

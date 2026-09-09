@@ -22,6 +22,31 @@ export function errorId(key: string): string {
   return `field-${key}-error`;
 }
 
+/**
+ * Anchor/focus target for one cell of a repeating group. The error summary
+ * uses this to land on the exact input that failed rather than row 1 cell 1.
+ */
+export function cellFieldId(
+  questionKey: string,
+  rowIndex: number,
+  columnKey: string,
+): string {
+  return `${fieldId(questionKey)}-r${String(rowIndex)}-${columnKey}`;
+}
+
+/**
+ * The remove button for one row. Focus lands here after a removal, so it needs
+ * an id the component can look up rather than a DOM walk.
+ */
+export function cellRemoveId(questionKey: string, rowIndex: number): string {
+  return `${fieldId(questionKey)}-r${String(rowIndex)}-remove`;
+}
+
+/** The "Add another" button. Focus lands here when the last row is removed. */
+export function addRowId(questionKey: string): string {
+  return `${fieldId(questionKey)}-add`;
+}
+
 export function describedBy(
   question: IntakeFormQuestion,
   hasError: boolean,

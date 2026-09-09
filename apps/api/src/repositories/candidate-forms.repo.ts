@@ -182,6 +182,19 @@ export interface CreateFormInput {
   createdBy: string | null;
 }
 
+/**
+ * Every form key ever used, INCLUDING archived forms.
+ *
+ * candidate_forms.key is unique across the whole table, and delete is a soft
+ * delete — so an archived form still owns its key. Callers dedupe against this
+ * before inserting, or "Test" can never be created again once a "Test" has been
+ * deleted.
+ */
+export async function listFormKeys(sql: Queryable): Promise<string[]> {
+  const rows = await sql<{ key: string }[]>`select key from candidate_forms`;
+  return rows.map((row) => row.key);
+}
+
 export async function insertForm(
   sql: Queryable,
   input: CreateFormInput,

@@ -10,6 +10,7 @@
  * - the identity question ('email') cannot be deactivated → 409
  * - a question cannot leave audience 'candidate' while a form still uses it → 409
  * - validation bag strict-parsed → 422 INVALID_VALIDATION_RULE
+ * - a `repeating_group` question must declare its columns → 422 (AC-FB-01)
  * - conditional cycles rejected → 422 CIRCULAR_CONDITION
  * - deactivating a question with conditional dependents → 200 + warnings[]
  * - option `value` frozen once referenced by any answer; options never hard-deleted
@@ -20,6 +21,7 @@ import {
   ValidationRulesSchema,
   isCandidateMappedQuestionKey,
   isMappedQuestionKey,
+  validateRepeatingGroupConfig,
   type CreateQuestionBody,
   type CreateQuestionCategoryBody,
   type CreateQuestionOptionBody,
@@ -30,6 +32,7 @@ import {
   type QuestionConditional,
   type QuestionDeactivateWarning,
   type QuestionDetail,
+  type QuestionType,
   type ReorderQuestionCategoriesBody,
   type ReorderQuestionsBody,
   type UpdateQuestionBody,
@@ -181,6 +184,47 @@ function parseValidationBag(
     );
   }
   return result.data;
+}
+
+/**
+ * AC-FB-01 — a `repeating_group` question must declare at least one column.
+ *
+ * The columns live in `validation.repeatingGroup` (spec §3.5), so this is a
+ * validation-rule failure and reuses INVALID_VALIDATION_RULE rather than
+ * inventing a code: an admin's mental model is "the rules are wrong", and a new
+ * code would need a new entry in the error catalogue and the OpenAPI doc.
+ *
+ * This is the ONLY thing standing between the question editor and a table with
+ * no columns. `pruneValidation` on the web side keeps `repeatingGroup` for this
+ * type (spec §11.1), but a client-side filter is a convenience, never a
+ * control — anyone can PATCH `validation: {}` straight at the endpoint. The
+ * question would survive, its columns would not, and nothing would surface the
+ * damage until the next submission rendered an empty table.
+ *
+ * Exported for the same reason `slugify` is: it is the pure half of the guard,
+ * and the create/update paths that call it need a real Postgres to exercise.
+ */
+export function assertRepeatingGroupConfigured(
+  questionType: QuestionType,
+  validation: ValidationRules,
+): void {
+  if (questionType !== 'repeating_group') return;
+  const config = validation.repeatingGroup;
+  if (config === undefined) {
+    const message =
+      "A 'repeating_group' question must declare validation.repeatingGroup with at least one column.";
+    throw new ApiError('INVALID_VALIDATION_RULE', message, {
+      fields: { validation: message },
+    });
+  }
+  // Cross-field rules — duplicate keys, a select with no choices, minRows above
+  // maxRows — live in contracts so the schema itself stays OpenAPI-walkable.
+  const problem = validateRepeatingGroupConfig(config);
+  if (problem !== null) {
+    throw new ApiError('INVALID_VALIDATION_RULE', problem, {
+      fields: { validation: problem },
+    });
+  }
 }
 
 function assertConditionalCoherent(conditional: QuestionConditional): void {
@@ -459,6 +503,7 @@ export function createQuestionsService(
       }
       assertCategoryMatchesAudience(category, body.audience);
       const validation = parseValidationBag(body.validation);
+      assertRepeatingGroupConfigured(body.questionType, validation);
       if (
         body.options !== undefined &&
         body.options.length > 0 &&
@@ -616,6 +661,21 @@ export function createQuestionsService(
         body.validation === undefined
           ? undefined
           : parseValidationBag(body.validation);
+
+      /*
+       * Check the row the update will PRODUCE, not just the half that changed.
+       * Two distinct ways to end up with a columnless table: send
+       * `validation: {}` for a question that is already a repeating group (the
+       * pruneValidation regression, spec §11.1), or flip `questionType` to
+       * repeating_group without sending any validation at all.
+       */
+      const nextQuestionType = body.questionType ?? current.questionType;
+      if (nextQuestionType === 'repeating_group') {
+        assertRepeatingGroupConfigured(
+          nextQuestionType,
+          validation ?? parseValidationBag(current.validation),
+        );
+      }
 
       if (body.categoryId !== undefined || body.audience !== undefined) {
         // Check the pair the row will END UP with, not just the half that

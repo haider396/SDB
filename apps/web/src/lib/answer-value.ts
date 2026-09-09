@@ -9,6 +9,14 @@
  * Structurally typed on purpose: RequisitionAnswer and CandidateAnswer are the
  * same row shape, so `AnswerLike` accepts both with no generics and no casts.
  */
+import type {
+  RepeatingGroupColumn,
+  RepeatingGroupRow,
+} from "@sdb/contracts";
+import {
+  RepeatingGroupSnapshotSchema,
+  RepeatingGroupValueSchema,
+} from "@sdb/contracts";
 import { formatDate } from "./format";
 
 export interface AnswerLike {
@@ -38,6 +46,27 @@ export function renderAnswerValue(answer: AnswerLike): string {
   if (answer.valueJson !== null && answer.valueJson !== undefined) {
     if (typeof answer.valueJson === "object" && !Array.isArray(answer.valueJson)) {
       const json = answer.valueJson as Record<string, unknown>;
+      /*
+       * repeating_group: { rows: [...] }. Keyed on the VALUE's shape, not on
+       * the question type, and placed first: every branch below is a loose
+       * shape check too, and the one that runs first wins. Without this arm
+       * the value falls through to JSON.stringify and a recruiter reads raw
+       * JSON.
+       *
+       * A COUNT, not the contents. This function's contract is a string and
+       * its string-only callers depend on that — notably supersededKeys() in
+       * form-submissions-card.tsx, which compares two renderings. A count is a
+       * COARSE comparison there: two applications listing different skills but
+       * the same number of them do not read as superseded. That is the right
+       * trade for now — the alternative is serialising every row into the
+       * comparison key, and "Superseded" on a table of twenty skills because
+       * one note changed is noise, not information. The rows themselves are
+       * rendered by <AnswerTable/> from the snapshot's columns.
+       */
+      if (Array.isArray(json["rows"])) {
+        const count = json["rows"].length;
+        return `${String(count)} row${count === 1 ? "" : "s"}`;
+      }
       // currency_range: { min, max, unit, currency } (02 §7)
       if (typeof json["min"] === "number" || typeof json["max"] === "number") {
         const currency = typeof json["currency"] === "string" ? json["currency"] : "";
@@ -60,6 +89,55 @@ export function renderAnswerValue(answer: AnswerLike): string {
     return JSON.stringify(answer.valueJson);
   }
   return "—";
+}
+
+export interface RepeatingGroupAnswer {
+  columns: RepeatingGroupColumn[];
+  rows: RepeatingGroupRow[];
+}
+
+/**
+ * A stored repeating-group answer, read ENTIRELY from its own snapshot — or
+ * null when this answer is not one.
+ *
+ * Null is the normal answer, not an error path: every row stored before this
+ * feature has no `repeatingGroup` key in its snapshot, which is precisely why
+ * nothing already in the database can take the table rendering path. A stored
+ * snapshot is never reinterpreted.
+ *
+ * Both halves must parse. A snapshot with columns but a value that is not a
+ * row list is a shape nothing writes, and rendering half of it would invent an
+ * answer the candidate did not give.
+ */
+export function readRepeatingGroup(
+  answer: SnapshotAnswer,
+): RepeatingGroupAnswer | null {
+  const snapshot = RepeatingGroupSnapshotSchema.safeParse(
+    answer.questionSnapshot["repeatingGroup"],
+  );
+  if (!snapshot.success) return null;
+  const value = RepeatingGroupValueSchema.safeParse(answer.valueJson);
+  if (!value.success) return null;
+  return { columns: snapshot.data.columns, rows: value.data.rows };
+}
+
+/**
+ * The label recorded for a choice cell, falling back to the raw stored value.
+ *
+ * The fallback is the point: an option renamed, retired, or simply missing
+ * from the snapshot's resolved list must never make an answer disappear. A
+ * value we cannot label is still what the candidate chose.
+ */
+export function repeatingGroupCellText(
+  column: RepeatingGroupColumn,
+  cell: string | number | undefined,
+): string | null {
+  if (cell === undefined || cell === "") return null;
+  const raw = String(cell);
+  if (column.choices?.from !== "inline") return raw;
+  return (
+    column.choices.options.find((option) => option.value === raw)?.label ?? raw
+  );
 }
 
 /** A snapshot field, when it is a string. Snapshots are loosely typed. */

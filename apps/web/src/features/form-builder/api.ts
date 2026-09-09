@@ -94,6 +94,24 @@ function failureMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+/**
+ * The per-field reasons behind a 422, in the order the server listed them.
+ *
+ * The activation gate already writes admin-readable sentences — "This form
+ * must ask for an email address — it is how a candidate is identified." —
+ * into details.fields. Reading only error.message threw all of that away and
+ * left the admin with "This form is not ready to go live." and nothing to act
+ * on. The candidate-facing renderer has always read these; the builder did not.
+ */
+export function errorFieldMessages(error: unknown): string[] {
+  if (!(error instanceof ApiError)) return [];
+  const fields = error.details?.["fields"];
+  if (typeof fields !== "object" || fields === null) return [];
+  return Object.values(fields as Record<string, unknown>).filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+}
+
 export function useCreateForm() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -186,7 +204,13 @@ export function useSetFormStatus(id: string) {
       if (context?.previous !== undefined) {
         queryClient.setQueryData(formKeys.detail(id), context.previous);
       }
-      toast.error(failureMessage(error, "Could not change the form's status."));
+      const reasons = errorFieldMessages(error);
+      toast.error(
+        failureMessage(error, "Could not change the form's status."),
+        // A list of blockers does not belong in a toast that disappears — the
+        // page renders them inline. Keep the toast to the headline.
+        reasons.length > 0 ? { description: "See the list on the page." } : {},
+      );
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: formKeys.root });

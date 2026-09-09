@@ -6,6 +6,7 @@
  */
 import { MessageSquareText } from "lucide-react";
 import type { RequisitionAnswer } from "@sdb/contracts";
+import { AnswerTable } from "@/components/patterns/answer-table";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { humanizeKey } from "@/lib/format";
@@ -58,6 +59,13 @@ export function AnswersCard({ answers }: { answers: RequisitionAnswer[] }) {
                     const label =
                       snapshotField(answer.questionSnapshot, "label") ??
                       answer.label;
+                    // The SNAPSHOT's type, never the live question's: no
+                    // snapshot written before this feature says
+                    // repeating_group, so no stored answer can change
+                    // rendering (03 §1.4).
+                    const isTable =
+                      snapshotField(answer.questionSnapshot, "questionType") ===
+                      "repeating_group";
                     return (
                       <div
                         key={answer.id}
@@ -65,7 +73,11 @@ export function AnswersCard({ answers }: { answers: RequisitionAnswer[] }) {
                       >
                         <dt className="text-sm text-neutral-500">{label}</dt>
                         <dd className="whitespace-pre-wrap text-sm text-neutral-800">
-                          {renderValue(answer)}
+                          {isTable ? (
+                            <AnswerTable answer={answer} caption={label} />
+                          ) : (
+                            renderValue(answer)
+                          )}
                         </dd>
                       </div>
                     );

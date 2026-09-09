@@ -66,6 +66,7 @@ import { taxonomyRoutes } from './routes/taxonomy.js';
 import { createAssignmentsService } from './services/assignments.service.js';
 import { createAttentionQueueService } from './services/attention-queue.service.js';
 import { createAuthService } from './services/auth.service.js';
+import { createCandidateAnswersService } from './services/candidate-answers.service.js';
 import { createCandidateFilesService } from './services/candidate-files.service.js';
 import {
   createCandidateWebhookService,
@@ -343,6 +344,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.decorate('attentionQueue', attentionQueueService);
   const placementsService = createPlacementsService({ db });
   const candidatesService = createCandidatesService({ db, storage, logger });
+  const candidateAnswersService = createCandidateAnswersService({ db });
   const candidateFilesService = createCandidateFilesService({ db, storage });
   const candidateWebhookService = createCandidateWebhookService({
     db,
@@ -450,6 +452,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(candidateRoutes, {
     prefix: '/api/v1',
     candidatesService,
+    candidateAnswersService,
     candidateFilesService,
     candidateWebhookService,
   });

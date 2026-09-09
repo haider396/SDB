@@ -360,7 +360,18 @@ export function QuestionEditor({
         }
         const body: CreateQuestionBody = {
           categoryId: values.categoryId,
-          ...(values.key !== "" ? { key: values.key } : {}),
+          /*
+           * Send the key ONLY when it was typed by hand.
+           *
+           * The field auto-fills from the label as a preview, and sending that
+           * preview made the server treat a generated key as a deliberate
+           * choice: naming a second question "Occupation" was refused outright
+           * instead of becoming occupation_2. Omitting it lets the server
+           * derive a unique key, which is the only place that can see every key
+           * already taken. A key the admin actually typed still collides
+           * loudly, which is right — they asked for that exact key.
+           */
+          ...(keyTouched && values.key !== "" ? { key: values.key } : {}),
           label: values.label,
           helpText: values.helpText === "" ? null : values.helpText,
           placeholder: values.placeholder === "" ? null : values.placeholder,
@@ -575,9 +586,10 @@ export function QuestionEditor({
                       onChange: () => setKeyTouched(true),
                     })}
                   />
-                  <p className="text-xs text-neutral-500">
-                    Auto-generated from the label. Editable now, immutable
-                    after creation — it is the reporting join key.
+                  <p className="text-xs text-neutral-600">
+                    Auto-generated from the label — a number is added if this
+                    one is taken. Editable now, immutable after creation, since
+                    it is the reporting join key.
                   </p>
                   {errors.key?.message !== undefined ? (
                     <p className="text-xs text-danger-text">

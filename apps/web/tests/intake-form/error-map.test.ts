@@ -97,3 +97,97 @@ describe("mapSubmissionError", () => {
     expect(mapped.summary).toContain("could not be submitted");
   });
 });
+
+/**
+ * Repeating groups add `rows` beside the `message` the server already sends
+ * (spec §7.3). The extension is only additive if the OLD reading still works,
+ * so every test here pins fieldErrors as well.
+ */
+describe("mapSubmissionError — repeating-group rows", () => {
+  const rowsFailure = new ApiError({
+    code: "VALIDATION_FAILED",
+    message: "Validation failed.",
+    details: {
+      fields: {
+        skills_and_tools: {
+          message: "2 rows have problems.",
+          rows: [
+            {
+              rowIndex: 1,
+              columnKey: "proficiency",
+              message: "This field is required.",
+            },
+            {
+              rowIndex: 3,
+              columnKey: "skill",
+              message: "Not an active option of this question.",
+            },
+          ],
+        },
+        hours_per_week: "Must be at most 60.",
+      },
+    },
+    requestId: null,
+    status: 422,
+  });
+
+  it("extracts details.fields[key].rows onto their row and column", () => {
+    expect(mapSubmissionError(rowsFailure).rowErrors).toEqual({
+      skills_and_tools: [
+        {
+          rowIndex: 1,
+          columnKey: "proficiency",
+          message: "This field is required.",
+        },
+        {
+          rowIndex: 3,
+          columnKey: "skill",
+          message: "Not an active option of this question.",
+        },
+      ],
+    });
+  });
+
+  it("still puts .message into fieldErrors exactly as it does today", () => {
+    expect(mapSubmissionError(rowsFailure).fieldErrors).toEqual({
+      skills_and_tools: "2 rows have problems.",
+      hours_per_week: "Must be at most 60.",
+    });
+  });
+
+  it("drops a malformed rows entry without losing the field's message", () => {
+    const mapped = mapSubmissionError(
+      new ApiError({
+        code: "VALIDATION_FAILED",
+        message: "Validation failed.",
+        details: {
+          fields: {
+            skills_and_tools: {
+              message: "Something is wrong.",
+              rows: [{ rowIndex: "one", columnKey: "skill", message: "no" }],
+            },
+          },
+        },
+        requestId: null,
+        status: 422,
+      }),
+    );
+    expect(mapped.fieldErrors).toEqual({
+      skills_and_tools: "Something is wrong.",
+    });
+    expect(mapped.rowErrors).toEqual({});
+  });
+
+  it("returns an empty map for an ordinary field-level failure", () => {
+    const mapped = mapSubmissionError(
+      new ApiError({
+        code: "VALIDATION_FAILED",
+        message: "Validation failed.",
+        details: { fields: { hours_per_week: "Must be at most 60." } },
+        requestId: null,
+        status: 422,
+      }),
+    );
+    expect(mapped.rowErrors).toEqual({});
+  });
+});

@@ -23,6 +23,20 @@ export function isBlank(value: unknown): boolean {
   if (typeof value === "string") return value.length === 0;
   if (typeof value === "number") return Number.isNaN(value);
   if (Array.isArray(value)) return value.length === 0;
+  /*
+   * A repeating group whose rows were all removed is blank. Without this a
+   * candidate who adds a row and then deletes it submits { rows: [] }, the
+   * required check passes on an answer with nothing in it, and an empty
+   * answer row is written. No other question type produces an object with a
+   * `rows` key, so this branch cannot affect one.
+   *
+   * Deliberately duplicated from the API's own isBlank
+   * (services/intake-submission.service.ts) — the two must agree, and merging
+   * them is a separate refactor.
+   */
+  if (typeof value === "object" && Array.isArray((value as { rows?: unknown }).rows)) {
+    return (value as { rows: unknown[] }).rows.length === 0;
+  }
   return false;
 }
 

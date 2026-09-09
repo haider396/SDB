@@ -241,7 +241,7 @@ export function createCandidateFormSubmissionService(
               valueBoolean: answer.valueBoolean,
               valueDate: answer.valueDate,
               valueJson: answer.valueJson,
-              questionSnapshot: buildSnapshot(answer.question, capturedAt),
+              questionSnapshot: buildSnapshot(answer.question, capturedAt, answer.valueJson),
             });
             if (answer.optionIds.length > 0) {
               await insertCandidateAnswerOptions(tx, answerId, answer.optionIds);

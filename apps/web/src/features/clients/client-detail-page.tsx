@@ -137,7 +137,11 @@ export function ClientDetailPage() {
           breadcrumbs={[...breadcrumbs, { label: "Client" }]}
           title="Client"
         />
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        <ErrorState
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          backTo={{ to: "/admin/clients", label: "Clients" }}
+        />
       </div>
     );
   }

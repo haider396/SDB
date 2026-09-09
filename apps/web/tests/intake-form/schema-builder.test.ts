@@ -9,7 +9,7 @@ import {
   validateIntakeValues,
   REQUIRED_MESSAGE,
 } from "@/features/intake-form/schema-builder";
-import { makeQuestion } from "./helpers";
+import { makeQuestion, makeRepeatingGroupQuestion } from "./helpers";
 
 function firstError(schema: ReturnType<typeof buildQuestionSchema>, value: unknown) {
   const result = schema.safeParse(value);
@@ -279,5 +279,59 @@ describe("validateIntakeValues", () => {
     });
     expect(valid.errors).toEqual({});
     expect(valid.values).toEqual({ a: "hello", b: 3 });
+  });
+});
+
+/**
+ * Cell-precise validation for the client intake form, which validates through
+ * validateIntakeValues() rather than zodResolver. The group message and the
+ * per-cell messages are three different levels of the same failure (spec §9)
+ * and both have to survive the trip.
+ */
+describe("validateIntakeValues — repeating groups", () => {
+  const question = makeRepeatingGroupQuestion({
+    key: "skills_and_tools",
+    label: "Skills & tools",
+    options: [{ value: "ClickUp", label: "ClickUp" }],
+  });
+
+  it("locates each failure on its row and column", () => {
+    const result = validateIntakeValues([question], {
+      skills_and_tools: { rows: [{ skill: "ClickUp" }, { proficiency: "expert" }] },
+    });
+    expect(result.values).toBeNull();
+    expect(result.rowErrors["skills_and_tools"]).toEqual([
+      { rowIndex: 0, columnKey: "proficiency", message: REQUIRED_MESSAGE },
+      { rowIndex: 1, columnKey: "skill", message: REQUIRED_MESSAGE },
+    ]);
+  });
+
+  it("still returns one message per key, counting the affected rows", () => {
+    const result = validateIntakeValues([question], {
+      skills_and_tools: { rows: [{ skill: "ClickUp" }, { proficiency: "expert" }] },
+    });
+    expect(result.errors["skills_and_tools"]).toBe("2 rows have problems.");
+  });
+
+  it("leaves a group-level row-count message as the field message", () => {
+    const capped = makeRepeatingGroupQuestion({
+      key: "skills_and_tools",
+      options: [{ value: "ClickUp", label: "ClickUp" }],
+    });
+    const group = capped.validation.repeatingGroup;
+    if (group === undefined) throw new Error("fixture must define a group");
+    capped.validation = {
+      repeatingGroup: { ...group, minRows: 2 },
+    };
+    const result = validateIntakeValues([capped], {
+      skills_and_tools: { rows: [] },
+    });
+    expect(result.errors["skills_and_tools"]).toMatch(/at least 2 rows/i);
+    expect(result.rowErrors["skills_and_tools"]).toBeUndefined();
+  });
+
+  it("returns an empty row map for a form with no repeating group", () => {
+    const plain = makeQuestion({ key: "a", isRequired: true });
+    expect(validateIntakeValues([plain], { a: "" }).rowErrors).toEqual({});
   });
 });

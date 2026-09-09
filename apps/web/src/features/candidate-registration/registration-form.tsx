@@ -25,6 +25,10 @@ import { StepProgress } from "@/features/intake-form/components/step-progress";
 import { ErrorSummary } from "@/features/intake-form/components/error-summary";
 import { visibleQuestions, type IntakeValues } from "@/features/intake-form/conditional";
 import { mapSubmissionError, type SubmissionErrorMap } from "@/features/intake-form/error-map";
+import {
+  activeRowErrors,
+  summaryEntriesFor,
+} from "@/features/intake-form/repeating-group";
 import { buildIntakeSchema } from "@/features/intake-form/schema-builder";
 import { buildAnswers } from "@/features/intake-form/submission";
 import { startRegistrationSession, useRegistrationForm, useSubmitRegistration } from "./api";
@@ -198,14 +202,21 @@ export function RegistrationForm() {
         <ErrorSummary
           summary={serverError.summary}
           requestId={serverError.requestId}
-          entries={Object.entries(serverError.fieldErrors).map(
-            ([questionKey, message]) => ({
-              questionKey,
-              label:
-                allQuestions.find((question) => question.key === questionKey)
-                  ?.label ?? questionKey,
-              message,
-            }),
+          // flatMap: a repeating group contributes one line per failing cell,
+          // each anchored at that cell rather than at the whole table.
+          entries={Object.entries(serverError.fieldErrors).flatMap(
+            ([questionKey, message]) => {
+              const question = allQuestions.find(
+                (candidate) => candidate.key === questionKey,
+              );
+              return question === undefined
+                ? [{ questionKey, label: questionKey, message }]
+                : summaryEntriesFor(
+                    question,
+                    message,
+                    serverError.rowErrors[questionKey],
+                  );
+            },
           )}
           onNavigateToField={(questionKey) => {
             // Server errors can point at a field on an earlier step; move
@@ -245,6 +256,13 @@ export function RegistrationForm() {
                       onChange={field.onChange}
                       onBlur={field.onBlur}
                       error={fieldState.error?.message}
+                      // zodResolver nests a repeating group's issues under the
+                      // field name, so fieldState.error carries the whole rows
+                      // tree — not just a message.
+                      rowErrors={activeRowErrors(
+                        fieldState.error,
+                        serverError?.rowErrors[question.key],
+                      )}
                     />
                   )}
                 />

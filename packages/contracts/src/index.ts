@@ -4,6 +4,8 @@ export * from './stages.js';
 export * from './permissions.js';
 export * from './errors.js';
 export * from './envelopes.js';
+export * from './options.js';
+export * from './repeating-group.js';
 export * from './validation-rules.js';
 export * from './mapped-questions.js';
 export * from './intake.js';

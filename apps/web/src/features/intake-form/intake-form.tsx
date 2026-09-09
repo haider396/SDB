@@ -22,6 +22,7 @@ import type {
   IntakeFormCategory,
   IntakeFormQuestion,
   IntakeSubmissionResponse,
+  RepeatingGroupFieldError,
 } from "@sdb/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,12 +38,14 @@ import {
 } from "./api";
 import { isQuestionVisible, type IntakeValues } from "./conditional";
 import { mapSubmissionError, type SubmissionErrorMap } from "./error-map";
+import { summaryEntriesFor } from "./repeating-group";
 import { validateIntakeValues } from "./schema-builder";
 import { buildSubmission } from "./submission";
 import { Confirmation } from "./components/confirmation";
 import {
   ErrorSummary,
   focusField,
+  type FieldCell,
   type SummaryEntry,
 } from "./components/error-summary";
 import { IntakeFormSkeleton } from "./components/intake-form-skeleton";
@@ -121,6 +124,15 @@ export function IntakeForm({
   const [submitted, setSubmitted] = useState<IntakeSubmissionResponse | null>(
     null,
   );
+  /**
+   * Cell-precise failures for repeating groups, from the client's own
+   * validation. They cannot live in react-hook-form's error map, which holds
+   * one message per field name — the fieldset's message goes there, these sit
+   * beside it (spec §7.4).
+   */
+  const [clientRowErrors, setClientRowErrors] = useState<
+    Record<string, RepeatingGroupFieldError[]>
+  >({});
 
   const categories: IntakeFormCategory[] = useMemo(
     () =>
@@ -152,6 +164,17 @@ export function IntakeForm({
         isQuestionVisible(question, questionsRef.current, values),
       );
       const result = validateIntakeValues(visible, values);
+      /*
+       * Safe to set state here: RHF calls the resolver on blur and on submit,
+       * never during a render. The identity guard keeps a form with no
+       * repeating group from re-rendering on every blur for an empty object.
+       */
+      setClientRowErrors((current) =>
+        Object.keys(current).length === 0 &&
+        Object.keys(result.rowErrors).length === 0
+          ? current
+          : result.rowErrors,
+      );
       if (result.values !== null) {
         return { values: result.values, errors: {} };
       }
@@ -253,9 +276,21 @@ export function IntakeForm({
     return labels;
   };
 
-  const navigateToField = (questionKey: string) => {
+  /**
+   * The cells to mark on one control. The client's map is refreshed by every
+   * validation pass, so it is the fresher of the two; the server's stands only
+   * where the client has said nothing about that question.
+   */
+  const rowErrorsFor = (
+    questionKey: string,
+  ): readonly RepeatingGroupFieldError[] | undefined =>
+    clientRowErrors[questionKey] ?? serverError?.rowErrors[questionKey];
+
+  const navigateToField = (questionKey: string, cell?: FieldCell) => {
     goToStep(stepIndexOfQuestion(questionKey));
-    requestAnimationFrame(() => focusField(questionKey));
+    requestAnimationFrame(() => {
+      focusField(questionKey, cell);
+    });
   };
 
   const handleNext = async () => {
@@ -379,14 +414,17 @@ export function IntakeForm({
   const isLastStep = nextEnabledStep(stepIndex) === null;
   const currentCategory =
     stepIndex > 0 ? categories[stepIndex - 1] : undefined;
-  const summaryEntries: SummaryEntry[] = allQuestions
-    .filter((question) => fieldErrors[question.key] !== undefined)
-    .map((question) => ({
-      questionKey: question.key,
-      label: question.label,
-      message:
-        fieldErrors[question.key]?.message ?? "This answer needs attention.",
-    }));
+  // flatMap, not map: a repeating group contributes one line per failing cell
+  // so the summary can land on the exact input rather than the table.
+  const summaryEntries: SummaryEntry[] = allQuestions.flatMap((question) => {
+    const error = fieldErrors[question.key];
+    if (error === undefined) return [];
+    return summaryEntriesFor(
+      question,
+      error.message ?? "This answer needs attention.",
+      rowErrorsFor(question.key),
+    );
+  });
   /**
    * Summary for SERVER errors only.
    *
@@ -499,6 +537,7 @@ export function IntakeForm({
                         onChange={field.onChange}
                         onBlur={field.onBlur}
                         error={fieldState.error?.message}
+                        rowErrors={rowErrorsFor(question.key)}
                       />
                     )}
                   />

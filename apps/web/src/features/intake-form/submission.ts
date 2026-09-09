@@ -12,6 +12,7 @@ import type {
   IntakeSubmission,
   JsonValue,
 } from "@sdb/contracts";
+import { RepeatingGroupValueSchema } from "@sdb/contracts";
 import { isBlank, visibleQuestions, type IntakeValues } from "./conditional";
 
 export interface CurrencyRangeValue {
@@ -85,6 +86,18 @@ export function toAnswer(
     case "file_upload":
       // Upload arrives in P3; the P1 public form never submits file answers.
       return null;
+    case "repeating_group": {
+      const parsed = RepeatingGroupValueSchema.safeParse(value);
+      // A malformed value is dropped rather than sent — the server would
+      // reject it with VALUE_TYPE_MISMATCH and the candidate would see an
+      // error about a shape they never typed.
+      return parsed.success
+        ? {
+            questionKey: question.key,
+            valueJson: { rows: parsed.data.rows } as JsonValue,
+          }
+        : null;
+    }
     default: {
       const unhandled: never = type;
       throw new Error(`Unhandled question type: ${String(unhandled)}`);

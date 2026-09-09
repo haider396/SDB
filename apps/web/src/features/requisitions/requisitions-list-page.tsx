@@ -21,6 +21,7 @@ import {
 } from "@/components/patterns/data-table";
 import { MoneyFigure } from "@/components/patterns/money-figure";
 import { PageHeader } from "@/components/patterns/page-header";
+import { PriorityChip } from "@/components/patterns/priority-chip";
 import {
   REQUISITION_STATUS_META,
   RequisitionStatusBadge,
@@ -92,6 +93,25 @@ const baseColumns: ColumnDef<Requisition, unknown>[] = [
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => <RequisitionStatusBadge status={row.original.status} />,
+  },
+  {
+    id: "priority",
+    accessorKey: "priority",
+    header: "Priority",
+    /*
+     * ⚠ DISPLAY ONLY — do not make this sortable.
+     *
+     * This list is CURSOR-PAGINATED (`useCursorPagination` below), so a
+     * client-side sort orders the rows on the current page and nothing else.
+     * It looks like it worked, which is the expensive kind of wrong: an admin
+     * scanning for urgent roles would see the urgent ones from page one and
+     * conclude there are no others. Sorting here needs a server-side `sortBy`
+     * that becomes part of the cursor's fixed filter set — its own task.
+     *
+     * `normal` renders nothing, so the column reads as a list of exceptions
+     * rather than a wall of grey chips.
+     */
+    cell: ({ row }) => <PriorityChip priority={row.original.priority} size="sm" />,
   },
   {
     id: "headcount",

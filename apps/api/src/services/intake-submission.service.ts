@@ -20,9 +20,11 @@ import {
   EngagementTypeSchema,
   LanguageLevelSchema,
   RateUnitSchema,
+  RepeatingGroupValueSchema,
   type IntakeAnswer,
   type IntakeSubmission,
   type QuestionType,
+  type RepeatingGroupFieldError,
   type UserRoleKey,
 } from '@sdb/contracts';
 import { withTransaction, type Db } from '../lib/db.js';
@@ -44,6 +46,13 @@ import {
 } from '../repositories/intake.repo.js';
 import { emitEvent } from './events.js';
 import type { IntakeFormService } from './intake-form.service.js';
+import {
+  hasNoAnsweredCells,
+  normaliseRepeatingGroup,
+  readRepeatingGroupConfig,
+  snapshotRepeatingGroup,
+  type NormalisedRepeatingGroup,
+} from './repeating-group.js';
 
 // ---------------------------------------------------------------------------
 // Value plumbing
@@ -78,6 +87,7 @@ const EXPECTED_FIELD: Record<QuestionType, ValueField> = {
   multi_select: 'valueJson',
   currency_range: 'valueJson',
   file_upload: 'valueJson',
+  repeating_group: 'valueJson',
 };
 
 function providedField(answer: IntakeAnswer): ValueField {
@@ -94,6 +104,22 @@ function isBlank(value: unknown): boolean {
   if (typeof value === 'string') return value.length === 0;
   if (typeof value === 'number') return Number.isNaN(value);
   if (Array.isArray(value)) return value.length === 0;
+  /*
+   * A repeating group whose rows were all removed is blank. Without this a
+   * candidate who adds a row and then deletes it submits { rows: [] }, the
+   * required check passes on an answer with nothing in it, and an empty
+   * answer row is written. No other question type produces an object with a
+   * `rows` key, so this branch cannot affect one.
+   *
+   * `hasNoAnsweredCells`, not `rows.length === 0`: a row that was added and
+   * abandoned is dropped by the normaliser (AC-FB-05), so a submission of
+   * nothing but empty rows must read as unanswered HERE too. Otherwise a
+   * required question passes step 2 on { rows: [{}, {}] } and then stores an
+   * answer with no rows in it, and the two halves of the same rule disagree.
+   */
+  if (typeof value === 'object' && Array.isArray((value as { rows?: unknown }).rows)) {
+    return hasNoAnsweredCells((value as { rows: unknown[] }).rows);
+  }
   return false;
 }
 
@@ -216,6 +242,11 @@ function jsonShapeOk(questionType: QuestionType, value: unknown): boolean {
       return isCurrencyRange(value);
     case 'file_upload':
       return isFileRefs(value);
+    case 'repeating_group':
+      // An OBJECT with a rows key, never a bare array — a bare array is caught
+      // by the Array.isArray branch in the web's answer-value.ts and printed as
+      // "[object Object]" by every consumer we forget to teach.
+      return RepeatingGroupValueSchema.safeParse(value).success;
     default:
       return true;
   }
@@ -303,12 +334,33 @@ function checkValidationRules(
   return null;
 }
 
+/**
+ * One entry in `details.fields`.
+ *
+ * A plain string for every scalar question, exactly as before. A repeating
+ * group adds `rows` alongside the message, so the client can put each failure
+ * on its own cell (spec §7.3). This is additive by design: `messageFrom()` in
+ * the web's mapSubmissionError already reads `.message` off an object, so a
+ * caller that knows nothing about rows still shows a sensible message.
+ */
+type FieldDetail =
+  | string
+  | { message: string; rows: readonly RepeatingGroupFieldError[] };
+
 function fieldError(
   code: 'UNKNOWN_QUESTION' | 'VALUE_TYPE_MISMATCH' | 'VALIDATION_FAILED' | 'INVALID_OPTION' | 'CONDITION_NOT_MET',
   message: string,
-  fields: Record<string, string>,
+  fields: Record<string, FieldDetail>,
 ): ApiError {
   return new ApiError(code, message, { fields });
+}
+
+/** "2 rows have problems." — the top-level message for a row-located failure. */
+function rowProblemSummary(
+  errors: readonly RepeatingGroupFieldError[],
+): string {
+  const rows = new Set(errors.map((error) => error.rowIndex)).size;
+  return rows === 1 ? '1 row has problems.' : `${String(rows)} rows have problems.`;
 }
 
 /**
@@ -408,11 +460,66 @@ export function validateSubmission(
     );
   }
 
+  /*
+   * Repeating groups are normalised ONCE, here, between the shape check and the
+   * rule check. Step 4 reports the result's rule failures, step 5 its option
+   * failures, and the prepared answer stores its normalised rows. Running the
+   * validator three times would be three chances for the stored value, the
+   * snapshot and the error list to disagree about the same submission.
+   */
+  const repeatingByKey = new Map<string, NormalisedRepeatingGroup>();
+  const misconfigured: Record<string, FieldDetail> = {};
+  for (const answer of nonBlank) {
+    const question = byKey.get(answer.questionKey);
+    if (question?.questionType !== 'repeating_group') continue;
+    const config = readRepeatingGroupConfig(question.validation);
+    if (config === null) {
+      // Unreachable for any question created or updated since AC-FB-01: a
+      // repeating group with no columns cannot be saved. Refusing the answer is
+      // still the right failure — storing rows against columns nobody declared
+      // would produce an answer no snapshot can render.
+      misconfigured[answer.questionKey] =
+        'This question is not configured with any columns and cannot accept an answer.';
+      continue;
+    }
+    repeatingByKey.set(
+      answer.questionKey,
+      normaliseRepeatingGroup(config, question.options, answer.valueJson),
+    );
+  }
+  if (Object.keys(misconfigured).length > 0) {
+    throw fieldError(
+      'VALIDATION_FAILED',
+      'Some questions are missing their column definitions.',
+      misconfigured,
+    );
+  }
+
   // Step 4 — validation rules.
-  const ruleErrors: Record<string, string> = {};
+  const ruleErrors: Record<string, FieldDetail> = {};
   for (const answer of nonBlank) {
     const question = byKey.get(answer.questionKey);
     if (question === undefined) continue;
+    const normalised = repeatingByKey.get(answer.questionKey);
+    if (normalised !== undefined) {
+      /*
+       * The generic rule bag has nothing to say about a table — its keys read
+       * valueText and valueNumber, both undefined here — so a repeating group
+       * delegates wholesale to its own validator. A group-level failure (wrong
+       * shape, too few or too many rows) has no cell to point at and stays a
+       * plain string; per-cell failures carry `rows` so the UI can land the
+       * error on the exact input (AC-FB-03, AC-FB-04).
+       */
+      if (normalised.groupError !== null) {
+        ruleErrors[answer.questionKey] = normalised.groupError;
+      } else if (normalised.ruleErrors.length > 0) {
+        ruleErrors[answer.questionKey] = {
+          message: rowProblemSummary(normalised.ruleErrors),
+          rows: normalised.ruleErrors,
+        };
+      }
+      continue;
+    }
     const message = checkValidationRules(question, answer);
     if (message !== null) ruleErrors[answer.questionKey] = message;
   }
@@ -426,11 +533,31 @@ export function validateSubmission(
 
   // Step 5 — select answers reference active options of that question.
   // (Scope options are already active-only.)
-  const optionErrors: Record<string, string> = {};
+  const optionErrors: Record<string, FieldDetail> = {};
   const optionIdsByKey = new Map<string, string[]>();
   for (const answer of nonBlank) {
     const question = byKey.get(answer.questionKey);
     if (question === undefined) continue;
+    if (question.questionType === 'repeating_group') {
+      /*
+       * Membership was checked cell by cell in the normalise pass; this step
+       * only decides the code. It is reported as INVALID_OPTION rather than
+       * folded into step 4 so a bad choice inside a table comes back under the
+       * same code as a bad choice anywhere else (AC-FB-06).
+       *
+       * NO answer_options rows are written for this type: the join table's
+       * primary key is (answer_id, option_id) and cannot express WHICH row
+       * picked the option — two rows choosing the same skill would collide.
+       */
+      const normalised = repeatingByKey.get(answer.questionKey);
+      if (normalised !== undefined && normalised.optionErrors.length > 0) {
+        optionErrors[answer.questionKey] = {
+          message: rowProblemSummary(normalised.optionErrors),
+          rows: normalised.optionErrors,
+        };
+      }
+      continue;
+    }
     if (question.questionType === 'single_select') {
       const option = question.options.find(
         (candidate) => candidate.value === answer.valueText,
@@ -491,6 +618,26 @@ export function validateSubmission(
     if (question === undefined) {
       throw new ApiError('INTERNAL_ERROR', 'Question scope lookup failed.');
     }
+    /*
+     * A repeating group stores the NORMALISED rows, not what arrived on the
+     * wire: empty rows dropped, unknown column keys stripped, cells coerced to
+     * their column's declared type. This is a behaviour change for this type
+     * alone, and it is the point — the stored value_json must always match the
+     * columns its question_snapshot records, or the answer renders against a
+     * table it does not fit.
+     */
+    const normalised = repeatingByKey.get(answer.questionKey);
+    if (normalised !== undefined) {
+      return {
+        question,
+        valueText: null,
+        valueNumber: null,
+        valueBoolean: null,
+        valueDate: null,
+        valueJson: { rows: normalised.rows },
+        optionIds: [],
+      };
+    }
     return {
       question,
       valueText: answer.valueText ?? null,
@@ -507,9 +654,18 @@ export function validateSubmission(
 // Snapshot (03 §1.4)
 // ---------------------------------------------------------------------------
 
+/**
+ * @param answerValueJson The prepared answer's `valueJson`. Only a repeating
+ * group reads it: its snapshot carries the options its rows actually use, so
+ * the catalogue cannot be resolved without knowing what was answered. Every
+ * other question type ignores it, which is why it is optional and why the
+ * argument is the stored value rather than rows — the call sites already have
+ * `entry.valueJson` in hand and cannot get it wrong.
+ */
 export function buildSnapshot(
   question: FormQuestionRecord,
   capturedAt: string,
+  answerValueJson?: unknown,
 ): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {
     questionKey: question.key,
@@ -532,12 +688,36 @@ export function buildSnapshot(
     capturedAt,
   };
   if (question.helpText !== null) snapshot['helpText'] = question.helpText;
-  if (question.options.length > 0) {
+
+  const repeatingGroup =
+    question.questionType === 'repeating_group'
+      ? readRepeatingGroupConfig(question.validation)
+      : null;
+
+  if (repeatingGroup !== null) {
+    const parsed = RepeatingGroupValueSchema.safeParse(answerValueJson);
+    /*
+     * The resolved column definitions, and the ONLY key a reader should use:
+     * `validation.repeatingGroup` below is the live config as configured, with
+     * catalogue columns still unresolved and therefore unrenderable on its own.
+     *
+     * The top-level `options` catalogue is deliberately NOT written for this
+     * type (AC-FB-07). Every option a row needs is already inline on its
+     * column, so writing the whole ~200-entry skill list as well would store
+     * the same catalogue twice, at ~15 KB per candidate, to render nothing.
+     */
+    snapshot['repeatingGroup'] = snapshotRepeatingGroup(
+      repeatingGroup,
+      question.options,
+      parsed.success ? parsed.data.rows : [],
+    );
+  } else if (question.options.length > 0) {
     snapshot['options'] = question.options.map((option) => ({
       value: option.value,
       label: option.label,
     }));
   }
+
   if (Object.keys(question.validation).length > 0) {
     snapshot['validation'] = question.validation;
   }
@@ -797,7 +977,7 @@ export function createIntakeSubmissionService(
           valueBoolean: entry.valueBoolean,
           valueDate: entry.valueDate,
           valueJson: entry.valueJson,
-          questionSnapshot: buildSnapshot(entry.question, capturedAt),
+          questionSnapshot: buildSnapshot(entry.question, capturedAt, entry.valueJson),
           answeredBy: args.actor.userId,
         });
         if (entry.optionIds.length > 0) {

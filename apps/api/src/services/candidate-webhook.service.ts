@@ -21,6 +21,13 @@
  *    not logged: an unauthenticated payload is untrusted input.)
  * 8. Responds 200 { candidateReference, result, dataCompleteness, droppedFields }.
  *
+ * Email identity (0024): behaviours 1–8 predate the unique index that made
+ * email a SECOND identity for a live candidate. A payload whose email already
+ * belongs to a DIFFERENT live candidate is refused with 422 + details.fields
+ * .email and logged 'rejected' — never merged, and never a 500. See the comment
+ * on CANDIDATE_EMAIL_INDEX for why this endpoint refuses where the public
+ * registration form attaches.
+ *
  * Idempotency-Key (04 §1): when the header is present and a prior successful
  * ingest recorded the same key, the payload is NOT re-applied; the prior
  * outcome is replayed from the log/candidate row. The key is stored inside
@@ -52,8 +59,10 @@ import {
 import {
   findCandidateByExternalId,
   findCandidateById,
+  findLiveCandidateByEmail,
   findRoleCategoryIdByKey,
   insertCandidate,
+  lockCandidateEmail,
   setCvPrimaryFileIfUnset,
   updateCandidate,
 } from '../repositories/candidates.repo.js';
@@ -139,6 +148,81 @@ function extractLenient(payload: Record<string, unknown>): Extracted {
   take('expectedRateAmount', z.number().nonnegative());
   take('expectedRateUnit', RateUnitSchema);
   return { fields, dropped };
+}
+
+// ---------------------------------------------------------------------------
+// Email identity (0024)
+// ---------------------------------------------------------------------------
+
+const UNIQUE_VIOLATION = '23505';
+
+/**
+ * One LIVE candidate per email address.
+ *
+ * ── Why this endpoint REFUSES rather than attaching ─────────────────────────
+ * The public registration form attaches: a repeat submission updates the
+ * existing candidate (candidate-form-submission.service.ts, T38). That is right
+ * there because the submitter IS the person the address belongs to — attaching
+ * reunites one human's records.
+ *
+ * A webhook caller is a third party writing about other people, and the two
+ * nearest precedents split on exactly that line: the ADMIN endpoints
+ * (04 §8, POST/PATCH /candidates) already answer this same collision with
+ * `422 VALIDATION_FAILED` + `details.fields.email`. A sourcing platform is a
+ * lower-trust caller than an admin; if an admin does not get a silent merge,
+ * neither does it.
+ *
+ * Three more reasons, in order of weight:
+ *   - 04 §8.2 behaviour 1 makes externalId the ONLY upsert key, and that
+ *     contract is locked. Attaching on email would quietly make this a second
+ *     identity resolver, so a push from source A could overwrite a candidate
+ *     owned by source B.
+ *   - the update branch below overwrites firstName, lastName and source
+ *     outright. Merging on a third party's say-so is destructive to a record an
+ *     admin or the candidate themselves may have curated, and there is no
+ *     un-merge and no merge UI.
+ *   - 0024's own comment refuses to automate this judgement — "deciding which
+ *     of two records is the real person is a judgement no migration should
+ *     make" — for the un-archive collision. The same reasoning holds here.
+ *
+ * Refusing is not the silent failure 04 §8.2's leniency rationale warns about:
+ * the caller gets a named field and the conflicting reference, and the
+ * webhook_ingest_log row records 'rejected' with the reason, so it surfaces to
+ * whoever reviews ingest rather than disappearing.
+ */
+const CANDIDATE_EMAIL_INDEX = 'idx_candidates_email_live';
+
+/**
+ * The index violation, as postgres.js reports it. Discriminated by CONSTRAINT
+ * and not by SQLSTATE alone: `candidates.external_id` is unique too, and the
+ * two mean different things to the caller.
+ */
+export function isEmailIdentityViolation(error: unknown): boolean {
+  // Guarded rather than cast blind: this runs in a catch, and `throw null` is
+  // legal JavaScript. A crash in the handler that maps the error would put the
+  // 500 back that this whole path exists to remove.
+  if (typeof error !== 'object' || error === null) return false;
+  const pg = error as { code?: unknown; constraint_name?: unknown };
+  return (
+    pg.code === UNIQUE_VIOLATION && pg.constraint_name === CANDIDATE_EMAIL_INDEX
+  );
+}
+
+/**
+ * Raised inside the ingest transaction so it rolls back, and caught outside so
+ * the rejection can still be logged. It cannot be logged inside: a statement
+ * error aborts the whole transaction, so the log row has to be written on the
+ * pool after the rollback — which is why the pre-check exists at all rather
+ * than relying on 23505 alone.
+ */
+class EmailIdentityConflict extends Error {
+  constructor(
+    readonly email: string,
+    readonly conflictingReference: string | null,
+  ) {
+    super('email already belongs to another live candidate');
+    this.name = 'EmailIdentityConflict';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -359,83 +443,172 @@ export function createCandidateWebhookService(
         errorDetailParts.push(`dropped fields: ${dropped.join(', ')}`);
       }
 
-      const outcome = await withTransaction(db, async (tx) => {
-        // Behaviour 1: upsert on externalId (AC-CA-08).
-        const existing =
-          externalId === null
-            ? null
-            : await findCandidateByExternalId(tx, externalId);
+      const email =
+        typeof candidateFields['email'] === 'string'
+          ? candidateFields['email']
+          : null;
 
-        let candidate: Candidate;
-        let result: 'created' | 'updated';
-        if (existing === null) {
-          candidate = await insertCandidate(tx, {
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            source,
-            submittedVia: 'webhook',
-            dataCompleteness: completeness,
-            externalId,
-            fields: candidateFields,
-          });
-          result = 'created';
-          await emitEvent(tx, {
-            entityType: 'candidate',
-            entityId: candidate.id,
-            eventType: 'candidate_created',
-            actorId: null,
-            actorRole: null,
-            toValue: candidate.reference,
-            metadata: { submittedVia: 'webhook', source, externalId },
-          });
-        } else {
-          await updateCandidate(tx, existing.id, {
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            source,
-            ...candidateFields,
-            dataCompleteness: completeness,
-          });
-          result = 'updated';
-          await emitEvent(tx, {
-            entityType: 'candidate',
-            entityId: existing.id,
-            eventType: 'candidate_updated',
-            actorId: null,
-            actorRole: null,
-            metadata: {
-              submittedVia: 'webhook',
-              externalId,
-              changedKeys: Object.keys(candidateFields),
-            },
-          });
-          const refreshed = await findCandidateById(tx, existing.id, {
-            includeArchived: true,
-          });
-          if (refreshed === null) throw new Error('candidate vanished mid-upsert');
-          candidate = refreshed;
+      /**
+       * Behaviour 7 (AC-CA-12) holds on the refusal path too — but the log row
+       * cannot be written inside the transaction that just aborted, so it is
+       * written on the pool after the rollback. No `events` row: invariant 4
+       * covers state TRANSITIONS, and a refusal changed no state. The ingest
+       * log is the audit trail for this outcome.
+       */
+      const rejectEmailConflict = async (
+        conflictEmail: string,
+        knownReference: string | null,
+      ): Promise<never> => {
+        let reference = knownReference;
+        if (reference === null) {
+          const owner = await findLiveCandidateByEmail(db, conflictEmail);
+          reference = owner === null ? null : owner.reference;
         }
-
-        // Behaviour 5: server-side CV fetch; failure is recorded, not fatal.
-        if (cvUrl !== null) {
-          const cvError = await storeCv(tx, candidate, cvUrl);
-          if (cvError !== null) errorDetailParts.push(cvError);
-        }
-
-        // Behaviour 7: exactly one log row, inside the same transaction.
-        await insertIngestLog(tx, {
+        const detail =
+          reference === null
+            ? `email ${conflictEmail} already belongs to another live candidate`
+            : `email ${conflictEmail} already belongs to live candidate ${reference}`;
+        await insertIngestLog(db, {
           source: sourceForLog,
           externalId,
           rawPayload: payload,
           idempotencyKey,
-          result,
-          candidateId: candidate.id,
-          errorDetail:
-            errorDetailParts.length > 0 ? errorDetailParts.join('; ') : null,
+          result: 'rejected',
+          // Stays null: nothing was written to any candidate, and pointing the
+          // row at the record we REFUSED to touch would read as though this
+          // ingest had updated it.
+          candidateId: null,
+          errorDetail: [...errorDetailParts, detail].join('; '),
         });
+        deps.logger?.warn(
+          { externalId, email: conflictEmail, conflictsWith: reference },
+          'webhook ingest refused: email belongs to another live candidate',
+        );
+        // The conflicting reference is returned so the integrator can act on it
+        // instead of retrying forever. Safe at this trust boundary: the caller
+        // holds the webhook token, and the 200 response already carries
+        // candidate references.
+        throw new ApiError(
+          'VALIDATION_FAILED',
+          'This email address already belongs to a different candidate.',
+          {
+            fields: { email: 'Already used by another candidate.' },
+            ...(reference === null
+              ? {}
+              : { conflictingCandidateReference: reference }),
+          },
+        );
+      };
 
-        return { candidate, result };
+      let outcome: { candidate: Candidate; result: 'created' | 'updated' };
+      try {
+        outcome = await withTransaction(db, async (tx) => {
+          // 0024 made email a second identity for a live candidate. The advisory
+          // lock — not the unique index — is what actually serialises two callers
+          // racing on one address; the index is only the backstop for a path that
+          // forgets it. Taken BEFORE the externalId read as well, so the loser of
+          // a race reads the winner's committed row instead of guessing.
+          if (email !== null) await lockCandidateEmail(tx, email);
+
+          // Behaviour 1: upsert on externalId (AC-CA-08).
+          const existing =
+            externalId === null
+              ? null
+              : await findCandidateByExternalId(tx, externalId);
+
+          // A collision is with a DIFFERENT candidate only: an address this
+          // externalId already owns is not one. Archived rows sit outside both
+          // the index and this lookup, so archiving frees the address exactly as
+          // 0024 intends.
+          if (email !== null) {
+            const owner = await findLiveCandidateByEmail(tx, email);
+            if (owner !== null && owner.id !== (existing?.id ?? null)) {
+              throw new EmailIdentityConflict(email, owner.reference);
+            }
+          }
+
+          let candidate: Candidate;
+          let result: 'created' | 'updated';
+          if (existing === null) {
+            candidate = await insertCandidate(tx, {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              source,
+              submittedVia: 'webhook',
+              dataCompleteness: completeness,
+              externalId,
+              fields: candidateFields,
+            });
+            result = 'created';
+            await emitEvent(tx, {
+              entityType: 'candidate',
+              entityId: candidate.id,
+              eventType: 'candidate_created',
+              actorId: null,
+              actorRole: null,
+              toValue: candidate.reference,
+              metadata: { submittedVia: 'webhook', source, externalId },
+            });
+          } else {
+            await updateCandidate(tx, existing.id, {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              source,
+              ...candidateFields,
+              dataCompleteness: completeness,
+            });
+            result = 'updated';
+            await emitEvent(tx, {
+              entityType: 'candidate',
+              entityId: existing.id,
+              eventType: 'candidate_updated',
+              actorId: null,
+              actorRole: null,
+              metadata: {
+                submittedVia: 'webhook',
+                externalId,
+                changedKeys: Object.keys(candidateFields),
+              },
+            });
+            const refreshed = await findCandidateById(tx, existing.id, {
+              includeArchived: true,
+            });
+            if (refreshed === null) throw new Error('candidate vanished mid-upsert');
+            candidate = refreshed;
+          }
+
+          // Behaviour 5: server-side CV fetch; failure is recorded, not fatal.
+          if (cvUrl !== null) {
+            const cvError = await storeCv(tx, candidate, cvUrl);
+            if (cvError !== null) errorDetailParts.push(cvError);
+          }
+
+          // Behaviour 7: exactly one log row, inside the same transaction.
+          await insertIngestLog(tx, {
+            source: sourceForLog,
+            externalId,
+            rawPayload: payload,
+            idempotencyKey,
+            result,
+            candidateId: candidate.id,
+            errorDetail:
+              errorDetailParts.length > 0 ? errorDetailParts.join('; ') : null,
+          });
+
+          return { candidate, result };
       });
+      } catch (error) {
+        if (error instanceof EmailIdentityConflict) {
+          await rejectEmailConflict(error.email, error.conflictingReference);
+        }
+        // Backstop: a 23505 that slipped past the lock, or one raised by a
+        // write this service does not own. Same conflict, same answer — an
+        // inbound webhook never gets a 500 for a data collision.
+        if (email !== null && isEmailIdentityViolation(error)) {
+          await rejectEmailConflict(email, null);
+        }
+        throw error;
+      }
 
       // Behaviour 6 (AC-CA-13): nothing above touches assignments; candidates
       // land in the pool ('active' default) and are presented only by humans.

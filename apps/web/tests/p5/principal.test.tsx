@@ -66,7 +66,10 @@ describe("principal approval panel", () => {
     expect(screen.getByText("We need a senior EA.")).toBeInTheDocument();
   });
 
-  it("shows a 'brief is being finalised' card instead of the approve CTA when the brief is empty (UX 3.4)", async () => {
+  it("shows a 'job description is being finalised' card instead of the approve CTA when it is empty (UX 3.4)", async () => {
+    // The word "brief" was retired with the admin-authored brief in migration
+    // 0018 — what a client reads and approves is the job description. The copy
+    // caught up with the data model here.
     const { mock, me, requisition } = pendingApprovalState(null);
     requisition.principalUserId = me.user.id;
     requisition.jobDescription = null;
@@ -74,7 +77,7 @@ describe("principal approval panel", () => {
     renderClientPortal(`/client/requisitions/${requisition.id}`);
 
     expect(
-      await screen.findByText("The brief is being finalised"),
+      await screen.findByText("The job description is being finalised"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Your approval is needed")).not.toBeInTheDocument();
     expect(

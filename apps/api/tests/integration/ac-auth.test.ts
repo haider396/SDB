@@ -40,7 +40,11 @@ import {
 
 // --- expected permission sets (docs/02-DATABASE.md §3) -----------------------
 const ALL_PERMISSIONS = [...PERMISSION_KEYS];
-const ADMIN_EXCLUDED: PermissionKey[] = ['settings.manage', 'user.manage', 'question.manage'];
+// 0011 seeded admin as "all except settings.manage, user.manage and
+// question.manage". Migration 0027 returned question.manage to admin, because
+// the candidate form builder is gated on it and an admin could open the builder
+// but not save in it. settings.manage and user.manage remain super_admin-only.
+const ADMIN_EXCLUDED: PermissionKey[] = ['settings.manage', 'user.manage'];
 const CLIENT_ADMIN_PERMISSIONS: PermissionKey[] = [
   'client.view', 'client.invite_user', 'requisition.view', 'requisition.create',
   'requisition.approve_as_principal', 'candidate.view', 'assignment.view',
@@ -104,7 +108,7 @@ beforeAll(async () => {
     // Stub routes exercising the guard chain exactly as production routes do.
     // Two permissions so the AC-AUTH-04 matrix exercises both the allowed and
     // the denied branch for every role:
-    //   question.manage → super_admin only
+    //   question.manage → super_admin + admin (0011 then 0027)
     //   assignment.view → all four roles
     app.get(
       '/api/v1/_test/perm/question-manage',
@@ -300,8 +304,8 @@ describe('AC-AUTH-04 — generated permission matrix', () => {
       }
     }
     // Both branches of the matrix must have been exercised.
-    expect(allowedCases).toBeGreaterThanOrEqual(5); // assignment.view ×4 + question.manage ×1
-    expect(deniedCases).toBeGreaterThanOrEqual(3); //  question.manage for admin/client_admin/client_user
+    expect(allowedCases).toBeGreaterThanOrEqual(6); // assignment.view ×4 + question.manage ×2 (0027)
+    expect(deniedCases).toBeGreaterThanOrEqual(2); //  question.manage for client_admin/client_user
   });
 });
 
