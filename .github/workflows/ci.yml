@@ -34,6 +34,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # @sdb/contracts is consumed as a built package: apps/api and apps/web
+      # resolve it through its `types`/`exports`, not its source. `dist/` is
+      # gitignored, so on a clean checkout nothing can resolve @sdb/contracts
+      # until it is built — every consumer fails with TS2307. It has to run
+      # before typecheck, lint and tests, not as part of the later Build step.
+      # A developer machine hides this: dist/ is left over from an earlier build.
+      - name: Build contracts
+        run: pnpm --filter @sdb/contracts build
+
       - name: Typecheck
         run: pnpm typecheck
 
