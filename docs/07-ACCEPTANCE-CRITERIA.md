@@ -41,7 +41,7 @@ Every criterion is independently verifiable by an automated test. Each reference
 | ID | Criterion | Verified by |
 |---|---|---|
 | AC-Q-01 | A `super_admin` creates a question with options; it appears in `GET /intake-form` within the cache TTL | Integration test with clock control |
-| AC-Q-02 | An `admin` (non-super) receives `403` on every `/questions` write endpoint | Integration test |
+| AC-Q-02 | **Amended by migration 0027 (client-approved).** An `admin` reaches every `/questions` and `/candidate-forms` write endpoint; `client_admin` and `client_user` still receive `403`. *v1.1 read: "an `admin` (non-super) receives `403` on every `/questions` write endpoint" — reversed once the form builder was gated on the same permission* | Integration test |
 | AC-Q-03 | Deactivating a question removes it from `GET /intake-form` and leaves all existing answers intact and readable | Integration test asserting answer count before and after |
 | AC-Q-04 | Deactivating a category removes its questions from the form without changing any question's own `is_active`; reactivating restores the prior per-question state exactly | Integration test |
 | AC-Q-05 | `PATCH /questions/:id` changing `questionType` on an answered question returns `409 QUESTION_TYPE_LOCKED` | Integration test |

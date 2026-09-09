@@ -101,7 +101,7 @@ This is why we do not need a full form-versioning subsystem with draft/publish c
 
 ## 2. Super admin capabilities
 
-All of the following are behind the `question.manage` permission, held only by `super_admin`.
+All of the following are behind the `question.manage` permission, held by `super_admin` and — since migration 0027, client-approved — `admin`. At v1.1 it was `super_admin` only; the candidate form builder was later gated on the same key, so an admin could open the builder and be refused every save. Both client roles are still excluded.
 
 ### 2.1 Category management
 - Create a category with label, description, sort order

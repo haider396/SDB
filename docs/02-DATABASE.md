@@ -166,7 +166,7 @@ settings.manage, user.manage, event.view
 | Role | Permissions |
 |---|---|
 | `super_admin` | All of the above |
-| `admin` | All except `settings.manage`, `user.manage`, `question.manage` |
+| `admin` | All except `settings.manage`, `user.manage`. **Amended by migration 0027 (client-approved):** at v1.1 `question.manage` was also excluded; it is now granted, because the candidate form builder reuses that key and an admin could otherwise open the builder and be refused every save |
 | `client_admin` | `client.view` (own), `client.invite_user`, `requisition.view`, `requisition.create`, `requisition.approve_as_principal`, `candidate.view`, `assignment.view`, `assignment.reject`, `interview.view` |
 | `client_user` | Same as `client_admin` minus `client.invite_user` and `requisition.approve_as_principal` |
 

@@ -52,7 +52,7 @@ Error:
 | 403 | `FORBIDDEN` | Authenticated but lacks the required permission |
 | 403 | `WRONG_TENANT` | Client user requested another client's resource |
 | 404 | `NOT_FOUND` | Resource absent or not visible to this caller |
-| 409 | `INVALID_TRANSITION` | Illegal state transition. `details` carries `from` and `to` |
+| 409 | `INVALID_TRANSITION` | Illegal state transition. `details` carries `from` and `to` for requisition and assignment transitions. The candidate form lifecycle (§8.3) reuses the code for a write the form's current state forbids — editing a published version, deleting an active form, activating with no draft — and carries no `details` |
 | 409 | `QUESTION_TYPE_LOCKED` | Type change attempted on an answered question |
 | 409 | `MAPPED_QUESTION_PROTECTED` | Delete or key change on a mapped question |
 | 409 | `DUPLICATE_ASSIGNMENT` | Candidate already assigned to this requisition |
@@ -106,6 +106,12 @@ Login, password reset, and token refresh are handled by the Supabase Auth client
 
 All require `question.manage` except the read endpoints, which require `question.view`.
 
+`question.manage` is held by `super_admin` and — since migration `0027`, client-approved —
+`admin`. At v1.1 it was `super_admin` only; the candidate form builder (§8.3) was later gated
+on the same key, so an `admin` could open the builder and then be refused every save, publish
+and block edit. Reading without writing is the worst of both — the UI implies a permission the
+API withholds. Neither client role holds it, and nothing in §8.3 can grant it to them.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/questions` | Query: `categoryId?`, `isActive?`, `roleCategoryId?`, `audience?`, `includeAnswerCounts=true`. Returns every audience unless `audience` narrows it |
@@ -121,7 +127,7 @@ All require `question.manage` except the read endpoints, which require `question
 | POST | `/questions/:id/options/:optionId/deactivate` | Soft-disable |
 | GET | `/question-categories` | Query: `isActive?`, `audience?`. `questionCount` counts questions of the category's own audience |
 | POST | `/question-categories` | Body: `{ key?, label, description?, sortOrder?, audience? }` — `audience` defaults to `client` |
-| PATCH | `/question-categories/:id` | |
+| PATCH | `/question-categories/:id` | Label, description and sort order. `audience` is fixed at creation: it decides which admin surface owns the category, and flipping it would hand a group of questions to a page that then refuses to edit them (last row of §4.1) |
 | POST | `/question-categories/:id/activate` \| `/deactivate` | Cascades visibility, not per-question state |
 | PATCH | `/question-categories/reorder` | Body: `{ orderedCategoryIds: [uuid] }` |
 | GET | `/questions/preview` | Query: `roleCategoryId?`. Returns the exact public payload for preview (client audience, pinned server-side) |
@@ -285,25 +291,46 @@ a question by id and never copies its content, so renaming a question in
 `/questions` reaches every form that has not deliberately overridden it.
 
 Permissions reuse `question.manage` / `question.view`: a form builder is
-question configuration, not a new subject.
+question configuration, not a new subject. That reuse is why migration `0027`
+grants `question.manage` to `admin` as well as `super_admin` (§4) — the builder
+is a working screen for an operator, not a settings page.
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
-| GET | `/candidate-forms` | `question.view` | List with status, public path and submission counts |
-| POST | `/candidate-forms` | `question.manage` | Body: `{ label, roleCategoryId?, templateFormId? }`. `templateFormId` copies another form's blocks and theme into a new draft; the source is never modified. `slug` is DB-owned and cannot be supplied |
+| GET | `/candidate-forms` | `question.view` | Query: `status?`, `roleCategoryId?`, `includeArchived?`. Returns status, public path and submission counts |
+| POST | `/candidate-forms` | `question.manage` | Body: `{ label, description?, roleCategoryId?, hasTypingTest?, hasDocumentsStep?, key?, templateFormId? }`. `templateFormId` copies another form's blocks and theme into a new draft; the source is never modified. `slug` is DB-owned and cannot be supplied, and `key` is derived server-side even when one is sent — see **The form key** below |
 | GET | `/candidate-forms/:id` | `question.view` | Draft and published versions, with blocks |
-| PATCH | `/candidate-forms/:id` | `question.manage` | Label, description, role category, `hasTypingTest`, `hasDocumentsStep`. Consent is never configurable |
-| DELETE | `/candidate-forms/:id` | `question.manage` | Refused while the form is active — deactivate first. Submissions already made are kept on their candidates |
-| POST | `/candidate-forms/:id/activate` | `question.manage` | Publishes the draft and returns the public URL. See the activation gate below |
+| PATCH | `/candidate-forms/:id` | `question.manage` | Label, description, role category, `hasTypingTest`, `hasDocumentsStep`. Consent is never configurable. `key` and `slug` are absent on purpose — the slug is a link already shared with candidates. Clearing `roleCategoryId` on a non-default form returns `422` with `details.fields.roleCategoryId`, rather than the check constraint's bare 500 |
+| DELETE | `/candidate-forms/:id` | `question.manage` | Soft delete (`archived_at`). Refused while the form is active — deactivate first, so the public link stops working before the form disappears — and the seeded default form can never be deleted. Submissions already made are kept on their candidates, and the archived row keeps owning its `key` |
+| POST | `/candidate-forms/:id/activate` | `question.manage` | Publishes the draft and returns the public URL. `409 INVALID_TRANSITION` when there is no draft to publish. See the activation gate below |
 | POST | `/candidate-forms/:id/deactivate` | `question.manage` | The public link starts returning `404`, indistinguishable from an unknown slug |
-| POST | `/candidate-forms/:id/versions` | `question.manage` | Starts a new draft, copying the published version |
-| PUT | `/candidate-forms/:id/versions/:versionId` | `question.manage` | Whole-document save: pages, theme and every block |
+| POST | `/candidate-forms/:id/versions` | `question.manage` | Starts a new draft, copying the published version. Idempotent — an existing draft is returned unchanged, so two admins pressing **New draft** do not produce two |
+| PUT | `/candidate-forms/:id/versions/:versionId` | `question.manage` | Whole-document save: pages, theme and every block. The block tree is replaced wholesale, so the caller must send the complete document, never a delta |
 | POST | `/candidate-forms/:id/versions/:versionId/blocks` | `question.manage` | Add one block |
-| PATCH | `/candidate-forms/:id/versions/:versionId/blocks/:blockId` | `question.manage` | Single-block update — the drag/resize endpoint. One row, so two admins arranging one form do not clobber each other |
+| PATCH | `/candidate-forms/:id/versions/:versionId/blocks/:blockId` | `question.manage` | Single-block update — the drag/resize endpoint. One row, so two admins arranging one form do not clobber each other. Deliberately the one write here that emits **no** event: moving a rectangle is not a state change, and a row per pointer-up would bury the log |
 | DELETE | `/candidate-forms/:id/versions/:versionId/blocks/:blockId` | `question.manage` | |
 
 Only a **draft** version accepts writes. A published version is immutable;
 editing means starting a new draft.
+
+#### The form key
+
+`key` is derived on the server from the label — lowercased, underscore-separated,
+forced to start with a letter, mirroring the question library's rule — and then
+made unique as `base`, `base_2`, `base_3` and so on. A body may carry `key`, but
+it goes through the same slugify-and-dedupe path; there is no way to claim a key
+directly, because uniqueness is a fact only the server holds.
+
+De-duplication runs against **every** row in `candidate_forms`, archived
+included. `DELETE` is a soft delete and `key` is unique across the whole table,
+so a deleted form owns its key forever — without this, naming a form "Test"
+after deleting a "Test" failed with a bare 500.
+
+Two admins creating the same name in the same instant still slip past a
+read-then-insert. The resulting unique violation on `candidate_forms_key_key` is
+returned as `422 VALIDATION_FAILED` with `details.fields.label`, not as a key
+error: the label is the field the admin can actually change, and the key is one
+they never see.
 
 #### Activation gate
 
@@ -341,32 +368,60 @@ down.
 
 #### Per-form overrides
 
-A block may override four things for its form only, without touching the
-question library: `isRequiredOverride`, `labelOverride`, `placeholderOverride`,
-`helpTextOverride`, and `optionValueOverrides` (a subset of the question's own
-choices). `null` means "use the library value"; an empty string is a real
-override, such as a deliberately blank help line.
+A block may override five things for its form only, without touching the
+question library: `isRequiredOverride`, and — since `0023` — `labelOverride`,
+`placeholderOverride`, `helpTextOverride` and `optionValueOverrides` (a subset of
+the question's own choices, in the order this form lists them). All five are
+accepted on `POST .../blocks`, on `PATCH .../blocks/:blockId` and inside the
+whole-document `PUT`. `null` means "use the library value"; an empty string is a
+real override, such as a deliberately blank help line — which is why the server
+tests these against `null` and never against falsiness.
+
+`optionValueOverrides` narrows, never invents. A value the question does not
+have is dropped rather than offered, so an answer always resolves to a real
+`question_options` row and the same answer means the same thing on every form.
+Adding a genuinely new choice is a change to the question, not to one form.
 
 Overrides are applied to the resolved question **before** validation, and
 therefore before `question_snapshot` is built — so the snapshot records the
 wording the candidate actually saw (`03` §1.4), not the library's. `questionType`
 is deliberately not overridable: it decides which value column an answer is
-stored in.
+stored in, and `candidates.email` and its siblings read from those columns.
+
+The public payload echoes each block's raw override fields as well, but the
+wording a renderer should use comes from `categories`, which the server has
+already resolved. They are the same values reported twice, not a second place to
+apply them — applying them again is how a client ends up double-overriding.
 
 #### Public endpoints
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
 | GET | `/candidate-forms/public/:slug` | **Public** | Blocks, theme, pages, plus `categories` in the `/intake-form` shape. `404` for unknown, draft, inactive **and** archived alike — a closed form must not leak that it ever existed |
-| POST | `/candidate-forms/public/:slug/submissions` | **Public** | Body as `/candidate-registrations` plus `formVersionId`. `409 DUPLICATE_SUBMISSION` on a repeat of the same form |
+| POST | `/candidate-forms/public/:slug/submissions` | **Public** | Body as `/candidate-registrations` plus `formVersionId`. Returns `201 { received: true }` — no ids, so a public caller learns nothing about our records. `409 DUPLICATE_SUBMISSION` on a repeat of the same form. Typing attempts or files sent to a form that has no such step are refused with `422` on `details.fields.typingAttempts` / `.files`, rather than silently dropped |
 
 Both are covered by the 60/min/IP limiter. The renderer computes the
 candidate-audience question set independently and **intersects** the form's
 blocks against it, with the audience pinned in code — so an internal question
 can neither render nor be answered even if a block row named one (AC-IF-02).
 
+A `formVersionId` that no longer matches the published version is accepted and
+logged, not rejected: republishing between load and submit is not the
+candidate's fault. The answers are validated against what is live **now**, which
+is the safe side to err on.
+
 `GET /candidate-registration-form` and `POST /candidate-registrations` keep
-identical paths and schemas; they now resolve the default form.
+identical paths and schemas; only their source changed, to the seeded default
+form. The rest of the self-registration surface is unchanged and listed here
+because §8.3 now refers to it. All are **Public**, on the same 60/min/IP limiter.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/candidate-registration-form` | The default form, narrowed to the legacy `categories` shape. The block and theme payload is served only at `/candidate-forms/public/:slug` |
+| POST | `/candidate-registrations/session` | Starts a fill session; `201` |
+| POST | `/candidate-registrations/:sessionId/upload-url` | Signed upload URL for a documents-step file |
+| POST | `/candidate-registrations/:sessionId/files/:fileId/confirm` | Marks that upload complete |
+| POST | `/candidate-registrations` | Submit. The same submit path as a slug submission, with the slug resolved to the default form — so the identity rule, the newest-wins patch and the per-form step guards all apply here too |
 
 #### Candidate identity
 
@@ -377,8 +432,32 @@ roles is **one** candidate with two submissions, and
 "which roles has this candidate applied for?" without a join table.
 
 A later submission overwrites mapped profile columns — newest wins — but only
-for the questions that form actually asked. Archived candidates are outside the
-index, so archiving frees an address for a fresh application.
+for the questions that form actually asked. Role tagging follows the same
+restraint: `primary_role_category_id` is set only when it is unset, because
+overwriting it on every application would destroy a recruiter's classification
+and the submission rows already answer "which roles did they apply for".
+Archived candidates are outside the index, so archiving frees an address for a
+fresh application.
+
+What a duplicate address does depends on the path:
+
+| Path | Behaviour |
+|---|---|
+| A public submission whose address already exists | Attaches to that candidate. Not an error — this is the point of the rule |
+| A repeat of the **same** form by that candidate | `409 DUPLICATE_SUBMISSION` (`uq_submission_per_form_per_candidate`). A *different* form is fine and attaches to the same candidate |
+| Two submissions of one address racing each other | `422 VALIDATION_FAILED` on `details.fields.email`, asking the candidate to submit again |
+| `POST` or `PATCH /candidates` by an admin | `422 VALIDATION_FAILED` on `details.fields.email` — the address belongs to another live candidate |
+
+The submit transaction takes a `pg_advisory_xact_lock` on the address before it
+looks the candidate up, and that lock is what actually serialises two
+simultaneous submissions. The unique index is the backstop for every path that
+forgets it: a missed lock becomes a clean `422` rather than a duplicate human
+being in the pipeline.
+
+Consent is written through its own setter and never through the profile patch.
+The consent columns are not in the field map and unknown keys are dropped
+silently, so a patch would look right and do nothing — and without consent a
+candidate can never be presented (`422 CONSENT_MISSING`).
 
 ---
 

@@ -431,16 +431,34 @@ notes round-trips. Add an integration test asserting notes persists.
 **Why**
 > **18:01** — *"have it be organized by section, and tech stack would be a section... and then leadership would be a section."*
 
-**Current state** — the `tools` and `skills` tables **already have a `category` column**; it is simply
-unpopulated. This is a data task, not a schema task.
+**Current state** — ~~the `category` column is simply unpopulated~~. **Corrected 9 Sep**: it was
+never unpopulated. All 16 rows `dev_seed.sql` inserts already carried a category —
+`automation, communication, crm, design, documentation, project_management` on tools and
+`administrative, analytical, client_experience, finance, marketing, operations` on skills. What was
+missing were the two sections Rebecca actually named by mouth, **Tech Stack** and **Leadership**,
+and enough rows in each section to be usable. So "populate category on the existing rows" was never
+the job, and doing it would have *changed* correct data. This is a data task, not a schema task.
+
+**Data half — done.** `supabase/seed/skills_tools_taxonomy_seed.sql` adds 94 tools and 90 skills
+across 14 categories (the 12 that existed, plus `tech_stack` and `leadership`), leaving every
+existing row and its category untouched. Applied 9 Sep: tools 8 → 102, skills 8 → 98. The two
+tables now share one category vocabulary, which is what T7 needs to render them in one grouped
+table.
+
+**UI half — outstanding.** There is no admin taxonomy UI to surface `category` in: `/admin/settings`
+is still the `PlaceholderPage` in `apps/web/src/routes/admin/index-pages.tsx`. The API is also
+create-only — `GET`/`POST /api/v1/tools` and `/skills` exist, there is no `PATCH` and no way to flip
+`is_active`, so editing a seeded row means new endpoints and new `Update*BodySchema` contracts.
 
 ```
-The tools and skills tables already have an unused `category` column.
-Seed a starter taxonomy via supabase/seed (NOT a migration — this is reference
-data the client edits): Tech Stack, Leadership, Communication, Admin/EA,
-Marketing, Sales, Finance, Design.
-Populate category on the existing seeded tools/skills rows.
-Surface category as an editable field in the admin taxonomy UI.
+Remaining: surface category as an editable field in the admin taxonomy UI.
+Needs, in order: PATCH /api/v1/tools/:id and /api/v1/skills/:id (settings.manage)
+with UpdateToolBodySchema / UpdateSkillBodySchema in packages/contracts, then the
+taxonomy screen itself behind /admin/settings. Category is free-form text on
+both the column and the Zod schema — keep it that way; the client edits it.
+Display labels for the 14 keys live in the UI, not the data: tools/skills have
+no label column. humanizeKey() in apps/web/src/lib/format.ts gives sentence
+case ("Project management"), not the title case these headers want.
 ```
 
 ---
