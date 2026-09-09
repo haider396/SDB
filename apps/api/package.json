@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -13,7 +13,8 @@
     "lint": "eslint src tests",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:all": "pnpm run test && pnpm run test:integration"
+    "test:all": "pnpm run test && pnpm run test:integration",
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.0",
