@@ -229,18 +229,11 @@ export function ClientDetailPage() {
 
 
           <InternalNotesCard client={client} />
-          <EventLogCard
-            events={eventsQuery.data}
-            isLoading={eventsQuery.isPending}
-            isError={eventsQuery.isError}
-            error={eventsQuery.error}
-            onRetry={() => void eventsQuery.refetch()}
-            emptyDescription="Every state change on this client is recorded here."
-          />
-
-          {/* Last in the rail, at Rebecca's request (21 Sep): granting or
-              revoking access is an occasional administrative act, not
-              something to meet before the client's own details. */}
+          {/* Near the bottom of the rail, at Rebecca's request (21 Sep):
+              granting or revoking access is an occasional administrative act,
+              not something to meet before the client's own details. Kept ABOVE
+              the event log, which is unbounded — an action buried under it is
+              an action nobody finds. */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Portal access</CardTitle>
@@ -280,6 +273,16 @@ export function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          <EventLogCard
+            events={eventsQuery.data}
+            isLoading={eventsQuery.isPending}
+            isError={eventsQuery.isError}
+            error={eventsQuery.error}
+            onRetry={() => void eventsQuery.refetch()}
+            emptyDescription="Every state change on this client is recorded here."
+          />
+
         </div>
       </div>
 
