@@ -60,7 +60,7 @@ export const REQUISITION_STATUS_META: Record<
 > = {
   submitted: { label: "Submitted", group: "internal" },
   pending_principal_approval: {
-    label: "Pending principal approval",
+    label: "Pending approver sign-off",
     group: "interview",
   },
   changes_requested: { label: "Changes requested", group: "interview" },

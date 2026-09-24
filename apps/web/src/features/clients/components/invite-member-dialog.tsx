@@ -145,7 +145,7 @@ export function InviteMemberDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="invite-role">Role</Label>
+              <Label htmlFor="invite-role">Access</Label>
               <NativeSelect id="invite-role" {...form.register("role")}>
                 {ClientMemberRoleSchema.options.map((role) => (
                   <option key={role} value={role}>
@@ -164,7 +164,7 @@ export function InviteMemberDialog({
                 className="h-4 w-4 accent-current"
                 {...form.register("isPrincipal")}
               />
-              This person is the principal (approves the brief)
+              This person has authority to approve the brief
             </label>
             {errors.root ? (
               <p role="alert" className="text-xs text-danger-text">

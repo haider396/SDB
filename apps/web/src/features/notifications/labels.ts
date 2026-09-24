@@ -7,7 +7,7 @@ import type { NotificationEvent, NotificationStatus } from "@sdb/contracts";
 export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   intake_submitted: "Intake submitted",
   portal_invitation: "Portal invitation",
-  principal_approval_requested: "Principal approval requested",
+  principal_approval_requested: "Approver sign-off requested",
   candidates_presented: "Candidates presented",
   client_decision_recorded: "Client decision recorded",
   interview_scheduled: "Interview scheduled",

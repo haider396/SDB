@@ -139,7 +139,7 @@ export function GrantAccessDialog({
                 className="h-4 w-4 accent-current"
                 {...form.register("isPrincipal")}
               />
-              This person is the principal (approves the brief)
+              This person has authority to approve the brief
             </label>
             {!paymentConfirmed ? (
               <p

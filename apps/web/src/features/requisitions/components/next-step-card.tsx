@@ -45,9 +45,9 @@ const NEXT_STEP_COPY: Partial<
   Record<RequisitionStatus, { action: string; explain: string }>
 > = {
   pending_principal_approval: {
-    action: "Send brief for approval",
+    action: "Send descriptions for approval",
     explain:
-      "The client's principal reviews the brief before we start sourcing.",
+      "The client's approver reviews the descriptions before we start sourcing.",
   },
   sourcing: {
     action: "Start sourcing",

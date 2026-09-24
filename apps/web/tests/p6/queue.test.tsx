@@ -53,7 +53,7 @@ describe("attention queue page", () => {
       name: "New intake submissions",
     });
     for (const name of [
-      "Awaiting principal approval",
+      "Awaiting approver sign-off",
       "Payment confirmed, access not granted",
       "No candidates presented",
       "Awaiting client feedback",
@@ -71,7 +71,7 @@ describe("attention queue page", () => {
 
     // Empty buckets collapse: no count badge, an all-clear sentence instead.
     const principal = screen.getByRole("region", {
-      name: "Awaiting principal approval",
+      name: "Awaiting approver sign-off",
     });
     expect(
       within(principal).getByText("No approvals have been waiting too long."),
@@ -84,7 +84,7 @@ describe("attention queue page", () => {
       (section) => section.getAttribute("aria-label") ?? "",
     );
     expect(names.indexOf("Payment confirmed, access not granted")).toBeLessThan(
-      names.indexOf("Awaiting principal approval"),
+      names.indexOf("Awaiting approver sign-off"),
     );
     expect(BUCKET_DISPLAY_ORDER).toHaveLength(7);
   });

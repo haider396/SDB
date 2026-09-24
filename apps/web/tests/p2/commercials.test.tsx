@@ -82,7 +82,7 @@ describe("commercial field gating", () => {
     renderAdmin(`/admin/requisitions/${requisition.id}`);
 
     // The rest of the fields editor renders…
-    expect(await screen.findByLabelText("Headcount")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Position count")).toBeInTheDocument();
     // …but nothing commercial does.
     expect(screen.queryByText("Budget")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Minimum")).not.toBeInTheDocument();

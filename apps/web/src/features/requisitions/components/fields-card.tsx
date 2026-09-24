@@ -36,7 +36,7 @@ import { useUpdateRequisition } from "../api";
 const FormSchema = z
   .object({
     advertisedTitle: z.string().max(500),
-    headcount: z.coerce.number().int().min(1, "Headcount must be at least 1."),
+    headcount: z.coerce.number().int().min(1, "Position count must be at least 1."),
     seniorityLevel: z.union([SeniorityLevelSchema, z.literal("")]),
     engagementType: z.union([EngagementTypeSchema, z.literal("")]),
     hoursPerWeek: z.string(),
@@ -223,7 +223,7 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
               <Input id="req-title" {...form.register("advertisedTitle")} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="req-headcount">Headcount</Label>
+              <Label htmlFor="req-headcount">Position count</Label>
               <Input
                 id="req-headcount"
                 type="number"
@@ -315,7 +315,7 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="req-overlap-start">Overlap from</Label>
+              <Label htmlFor="req-overlap-start">Day start time</Label>
               <Input
                 id="req-overlap-start"
                 type="time"
@@ -323,7 +323,7 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="req-overlap-end">Overlap until</Label>
+              <Label htmlFor="req-overlap-end">Day finish time</Label>
               <Input
                 id="req-overlap-end"
                 type="time"
@@ -331,7 +331,7 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="req-overlap-timezone">Overlap timezone</Label>
+              <Label htmlFor="req-overlap-timezone">Company time zone</Label>
               <NativeSelect
                 id="req-overlap-timezone"
                 aria-invalid={errors.overlapTimezone !== undefined}
@@ -357,13 +357,6 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
                 snapshot, so editing it here would put the two out of step.
                 Priority is SDB's own ranking of the work. Migration 0030. */}
             <div className="space-y-1.5">
-              <Label htmlFor="req-urgency">Urgency</Label>
-              <Input id="req-urgency" {...form.register("urgency")} />
-              <p className="text-2xs text-neutral-500">
-                What the client told us when they requested this hire.
-              </p>
-            </div>
-            <div className="space-y-1.5">
               <Label htmlFor="req-priority">Priority</Label>
               <NativeSelect id="req-priority" {...form.register("priority")}>
                 {RequisitionPrioritySchema.options.map((value) => (
@@ -376,12 +369,31 @@ export function FieldsCard({ requisition }: { requisition: RequisitionDetail }) 
                 Our ranking. The client sees this on their position.
               </p>
             </div>
+            {/* Urgency reason follows Priority because it explains it, and is
+                asked for ONLY at `urgent` (Rebecca, 21 Sep: "it's only needed
+                if it's urgent").
+
+                Hidden, never cleared. `urgency` holds what the client told us
+                at intake and is frozen in their answer snapshot; dropping a
+                position back to `normal` must not erase what they said, so the
+                field simply stops being offered and the stored value rides
+                along untouched on save. */}
+            {form.watch("priority") === "urgent" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="req-urgency">Urgency reason</Label>
+                <Input id="req-urgency" {...form.register("urgency")} />
+                <p className="text-2xs text-neutral-500">
+                  Why this one is urgent — what the client told us when they
+                  requested the hire.
+                </p>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="req-region">Region preference</Label>
               <Input id="req-region" {...form.register("regionPreference")} />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="req-principal">Principal (approves the brief)</Label>
+              <Label htmlFor="req-principal">Approver (approves the brief)</Label>
               <NativeSelect
                 id="req-principal"
                 {...form.register("principalUserId")}

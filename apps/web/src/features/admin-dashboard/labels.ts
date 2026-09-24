@@ -29,7 +29,7 @@ export const BUCKET_DISPLAY_ORDER: readonly AttentionQueueBucketKey[] = [
 /** Fallback titles — the API's bucket `label` wins when present. */
 export const BUCKET_LABELS: Record<AttentionQueueBucketKey, string> = {
   new_intake_submissions: "New intake submissions",
-  awaiting_principal_approval: "Awaiting principal approval",
+  awaiting_principal_approval: "Awaiting approver sign-off",
   payment_confirmed_access_not_granted: "Payment confirmed, access not granted",
   no_candidates_presented: "No candidates presented",
   awaiting_client_feedback: "Awaiting client feedback",

@@ -82,7 +82,7 @@ export function EditMemberDialog({
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="member-role">Role</Label>
+                <Label htmlFor="member-role">Access</Label>
                 <NativeSelect
                   id="member-role"
                   value={role}
@@ -110,7 +110,7 @@ export function EditMemberDialog({
                   checked={isPrincipal}
                   onChange={(event) => setIsPrincipal(event.target.checked)}
                 />
-                This person is the principal (approves the brief)
+                This person has authority to approve the brief
               </label>
               {error !== null ? (
                 <p role="alert" className="text-xs text-danger-text">

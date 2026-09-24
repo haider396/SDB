@@ -116,7 +116,7 @@ const baseColumns: ColumnDef<Requisition, unknown>[] = [
   {
     id: "headcount",
     accessorKey: "headcount",
-    header: "Headcount",
+    header: "Position count",
     meta: meta({ numeric: true }),
     cell: ({ row }) => row.original.headcount,
   },

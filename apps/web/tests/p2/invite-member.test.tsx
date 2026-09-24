@@ -80,11 +80,11 @@ describe("invite member", () => {
     await user.type(within(dialog).getByLabelText("Email"), "olivia@acme.test");
     await user.type(within(dialog).getByLabelText(/job title/i), "Head of Ops");
     await user.selectOptions(
-      within(dialog).getByLabelText("Role"),
+      within(dialog).getByLabelText("Access"),
       "client_admin",
     );
     await user.click(
-      within(dialog).getByLabelText(/this person is the principal/i),
+      within(dialog).getByLabelText(/authority to approve the brief/i),
     );
     await user.click(
       within(dialog).getByRole("button", { name: "Send invitation" }),

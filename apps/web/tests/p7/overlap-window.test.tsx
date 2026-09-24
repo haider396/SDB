@@ -51,12 +51,12 @@ describe("requisition overlap window (fields card)", () => {
     const user = userEvent.setup();
     const { requisition, mock } = setup();
 
-    const start = await screen.findByLabelText("Overlap from");
-    const end = screen.getByLabelText("Overlap until");
+    const start = await screen.findByLabelText("Day start time");
+    const end = screen.getByLabelText("Day finish time");
     fireEvent.change(start, { target: { value: "09:00" } });
     fireEvent.change(end, { target: { value: "14:00" } });
     await user.selectOptions(
-      screen.getByLabelText("Overlap timezone"),
+      screen.getByLabelText("Company time zone"),
       "America/Chicago",
     );
 
@@ -85,18 +85,18 @@ describe("requisition overlap window (fields card)", () => {
       overlapTimezone: "America/Chicago",
     });
 
-    const start = await screen.findByLabelText("Overlap from");
+    const start = await screen.findByLabelText("Day start time");
     expect(start).toHaveValue("09:00");
-    expect(screen.getByLabelText("Overlap until")).toHaveValue("14:30");
-    expect(screen.getByLabelText("Overlap timezone")).toHaveValue(
+    expect(screen.getByLabelText("Day finish time")).toHaveValue("14:30");
+    expect(screen.getByLabelText("Company time zone")).toHaveValue(
       "America/Chicago",
     );
 
     fireEvent.change(start, { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText("Overlap until"), {
+    fireEvent.change(screen.getByLabelText("Day finish time"), {
       target: { value: "" },
     });
-    await user.selectOptions(screen.getByLabelText("Overlap timezone"), "");
+    await user.selectOptions(screen.getByLabelText("Company time zone"), "");
 
     await user.click(screen.getByRole("button", { name: "Save fields" }));
 
@@ -118,7 +118,7 @@ describe("requisition overlap window (fields card)", () => {
     const user = userEvent.setup();
     setup();
 
-    fireEvent.change(await screen.findByLabelText("Overlap from"), {
+    fireEvent.change(await screen.findByLabelText("Day start time"), {
       target: { value: "09:00" },
     });
     await user.click(screen.getByRole("button", { name: "Save fields" }));
