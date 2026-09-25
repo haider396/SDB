@@ -64,6 +64,44 @@ function errorCode(res: { json: <T>() => T }): string {
   return res.json<{ error: { code: string } }>().error.code;
 }
 
+/**
+ * A minimal live form with one block pointing at `questionId`.
+ *
+ * Built in the order 0020's constraints demand, which is not the obvious one:
+ *   - `chk_form_role_category_required` — a non-default form needs a role
+ *     category, so one is created up front.
+ *   - `chk_form_active_needs_version` — an active form must already have a
+ *     published version, so it is inserted as a DRAFT, given its version, and
+ *     only then promoted. Inserting it 'active' first fails outright, which
+ *     is how this fixture broke.
+ */
+async function formUsing(questionId: string, label: string): Promise<void> {
+  const formId = randomUUID();
+  const versionId = randomUUID();
+  const { roleCategoryId } = await insertTaxonomyChain(db.sql);
+  await db.sql`
+    insert into candidate_forms (id, key, label, status, is_default, role_category_id)
+    values (
+      ${formId}, ${`f_${formId.slice(0, 8)}`}, ${label},
+      'draft', false, ${roleCategoryId}
+    )
+  `;
+  await db.sql`
+    insert into candidate_form_versions (id, form_id, version_number, pages, theme)
+    values (${versionId}, ${formId}, 1, '[]'::jsonb, '{}'::jsonb)
+  `;
+  await db.sql`
+    insert into candidate_form_blocks
+      (id, form_version_id, block_type, question_id, page_index, sort_order, layout)
+    values (${randomUUID()}, ${versionId}, 'question', ${questionId}, 0, 0, '{}'::jsonb)
+  `;
+  await db.sql`
+    update candidate_forms
+       set status = 'active', published_version_id = ${versionId}
+     where id = ${formId}
+  `;
+}
+
 describe('candidate mapped questions are protected like client ones', () => {
   it('refuses to archive the email question', async () => {
     const id = emailQuestionId;
@@ -140,43 +178,6 @@ describe('the identity question cannot be switched off', () => {
 });
 
 describe('a question in use cannot leave the candidate audience', () => {
-  /**
-   * A minimal live form with one block pointing at `questionId`.
-   *
-   * Built in the order 0020's constraints demand, which is not the obvious one:
-   *   - `chk_form_role_category_required` — a non-default form needs a role
-   *     category, so one is created up front.
-   *   - `chk_form_active_needs_version` — an active form must already have a
-   *     published version, so it is inserted as a DRAFT, given its version, and
-   *     only then promoted. Inserting it 'active' first fails outright, which
-   *     is how this fixture broke.
-   */
-  async function formUsing(questionId: string, label: string): Promise<void> {
-    const formId = randomUUID();
-    const versionId = randomUUID();
-    const { roleCategoryId } = await insertTaxonomyChain(db.sql);
-    await db.sql`
-      insert into candidate_forms (id, key, label, status, is_default, role_category_id)
-      values (
-        ${formId}, ${`f_${formId.slice(0, 8)}`}, ${label},
-        'draft', false, ${roleCategoryId}
-      )
-    `;
-    await db.sql`
-      insert into candidate_form_versions (id, form_id, version_number, pages, theme)
-      values (${versionId}, ${formId}, 1, '[]'::jsonb, '{}'::jsonb)
-    `;
-    await db.sql`
-      insert into candidate_form_blocks
-        (id, form_version_id, block_type, question_id, page_index, sort_order, layout)
-      values (${randomUUID()}, ${versionId}, 'question', ${questionId}, 0, 0, '{}'::jsonb)
-    `;
-    await db.sql`
-      update candidate_forms
-         set status = 'active', published_version_id = ${versionId}
-       where id = ${formId}
-    `;
-  }
 
   it('refuses, and names the forms that would silently lose the question', async () => {
     const id = await candidateQuestion(`q_inuse_${randomUUID().slice(0, 8)}`);
@@ -212,21 +213,10 @@ describe('a question in use cannot leave the candidate audience', () => {
 describe('GET /questions/:id reports which forms use the question', () => {
   it('lists them, so the builder can warn before a library edit', async () => {
     const id = await candidateQuestion(`q_used_${randomUUID().slice(0, 8)}`);
-    const formId = randomUUID();
-    const versionId = randomUUID();
-    await db.sql`
-      insert into candidate_forms (id, key, label, status, is_default)
-      values (${formId}, ${`f_${formId.slice(0, 8)}`}, 'Executive Assistant', 'active', false)
-    `;
-    await db.sql`
-      insert into candidate_form_versions (id, form_id, version_number, pages, theme)
-      values (${versionId}, ${formId}, 1, '[]'::jsonb, '{}'::jsonb)
-    `;
-    await db.sql`
-      insert into candidate_form_blocks
-        (id, form_version_id, block_type, question_id, page_index, sort_order, layout)
-      values (${randomUUID()}, ${versionId}, 'question', ${id}, 0, 0, '{}'::jsonb)
-    `;
+    // Same helper the audience guard uses. This block used to inline its own
+    // copy of the inserts and so carried the same constraint-ordering bug
+    // twice — it was the one failure left after the first round of fixes.
+    await formUsing(id, 'Executive Assistant');
 
     const res = await harness.app.inject({
       method: 'GET',
