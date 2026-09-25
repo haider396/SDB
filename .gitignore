@@ -4,8 +4,15 @@ build/
 coverage/
 .env
 .env.*
-!.env.example
 *.log
 .DS_Store
 .turbo/
 supabase/.temp/
+
+# Vercel project link — holds the project/org ids and a short-lived OIDC token.
+.vercel
+
+# Keep LAST. gitignore is last-match-wins, so any broader .env rule added below
+# this line silently re-ignores the one env file that must stay committed:
+# 06-BACKEND.md §8 requires a checked-in .env.example listing every key.
+!.env.example
