@@ -97,7 +97,14 @@ The harness applies all migrations to a template DB once, then clones per test f
 
 - **Supabase project:** `sdb-portal-staging`, ref `dahusyhhlfuhynzrimyr`, org "Tech TDB", us-east-1, free tier, Postgres 17. **Do not touch the org's other project (`5eos-mvp`).**
 - Migrations 0001–0015 applied; `dev_seed.sql` data loaded (25 candidates, 2 clients, 3 requisitions incl. one placed); private `candidates` storage bucket; ES256 JWT signing keys (the API verifies via JWKS — no shared-secret fallback needed).
-- **Logins** (password `SdbStaging!2026` unless noted): `haider@teamdonebetter.com` / `Haider@6599` (super admin), `rebecca@teamdonebetter.com` (super admin), `ximena@teamdonebetter.com` (admin), `marcus@acmecoaching.com` (client user). ⚠️ `dana@acmecoaching.com` (client admin + principal) has a drifted password — reset it in Supabase dashboard → Auth → Users.
+- **Logins** — accounts only; **passwords are never recorded here**. `haider@teamdonebetter.com` (super admin), `rebecca@teamdonebetter.com` (super admin), `ximena@teamdonebetter.com` (admin), `dana@acmecoaching.com` (client admin + principal), `marcus@acmecoaching.com` (client user). Get in via **Forgot password** on `/login`, or reset from the Supabase dashboard → Authentication → Users.
+
+  > This line previously carried the staging passwords in plaintext, against
+  > `01-PRODUCT-OVERVIEW.md` NFR-12 — *"Secrets: environment variables only. No
+  > secret in the repo, ever."* They were exposed while the repository was
+  > public on 25 Sep, and they remain in git history — removing the line does
+  > not retract them. **Rotate those passwords in Supabase if it has not been
+  > done**; that, not this edit, is what makes them safe.
 - **GoHighLevel:** all seven notification events currently POST to one inbound-webhook workflow (location `lSbqRVXPbTmCeqMGPoWK`); production should use one workflow URL per event so Rebecca can edit each email's copy in GHL. Notification dispatch is post-commit with 1/5-min backoff, capped at 3 attempts; the admin UI at `/admin/notifications` shows the log with manual resend.
 - Secrets (DB password, service-role key) live only in the local `.env` files and the Supabase dashboard.
 
