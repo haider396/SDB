@@ -37,6 +37,14 @@ const EXPECTED_TABLES = [
   'assignments', 'rejection_reasons', 'rejections', 'interviews', 'placements',
   // 0009 events & ops
   'events', 'notification_log', 'webhook_ingest_log', 'app_settings',
+  // 0017 candidate registration — candidates answer questions of their own,
+  // so they need their own answer tables rather than sharing the client ones.
+  'candidate_answers', 'candidate_answer_options',
+  'candidate_registration_sessions', 'candidate_registration_files',
+  // 0020 candidate form builder — a form is a versioned document of blocks
+  // laid over the question library, and a submission ties one to a candidate.
+  'candidate_forms', 'candidate_form_versions', 'candidate_form_blocks',
+  'candidate_form_submissions',
 ].sort();
 
 const EXPECTED_ENUMS = [
@@ -48,6 +56,9 @@ const EXPECTED_ENUMS = [
   'candidate_source', 'submission_channel', 'data_completeness',
   'workspace_type', 'interview_outcome', 'placement_status',
   'notification_event',
+  // 0030 — SDB's own ranking of a position. Deliberately NOT `urgency`, which
+  // is the client's stated timeline captured at intake; see the migration.
+  'requisition_priority',
 ].sort();
 
 /** Key columns per critical table (docs/02-DATABASE.md §§3–10). */

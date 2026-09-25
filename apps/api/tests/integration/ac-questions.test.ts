@@ -179,7 +179,11 @@ describe('AC-Q-02 (revised by migration 0027) — admin manages questions; clien
       join role_permissions rp on rp.role_id = r.id
       join permissions p on p.id = rp.permission_id
       where p.key = 'question.manage'
-      order by r.key
+      -- ::text is load-bearing. roles.key is the user_role_key ENUM, and
+      -- Postgres orders an enum by DECLARATION order, not alphabetically --
+      -- 0001 declares super_admin first, so ordering on the bare column
+      -- returns super_admin then admin, failing the expectation below.
+      order by r.key::text
     `;
     expect(rows.map((row) => row.key)).toEqual(['admin', 'super_admin']);
   });

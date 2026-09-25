@@ -96,13 +96,21 @@ export async function insertRequisition(
     roleCategoryId?: string;
     budget?: { min: number; max: number; unit: string; currency?: string };
     serviceTier?: string;
+    /**
+     * T16's sourcing gate refuses a move INTO `sourcing` without one
+     * (requisitions.service.ts). Defaults to null so the gate stays observable
+     * — a fixture that always supplied a description would make the gate
+     * untestable and hide a regression in it.
+     */
+    jobDescription?: string | null;
   },
 ): Promise<string> {
   const id = opts.id ?? randomUUID();
   await sql`
     insert into requisitions (
       id, reference, client_id, status, principal_user_id, role_category_id,
-      budget_min, budget_max, budget_unit, budget_currency, service_tier
+      budget_min, budget_max, budget_unit, budget_currency, service_tier,
+      job_description
     )
     values (
       ${id}, ${uniqueRef('REQ-IT')}, ${opts.clientId},
@@ -111,7 +119,8 @@ export async function insertRequisition(
       ${opts.budget?.min ?? null}, ${opts.budget?.max ?? null},
       ${opts.budget?.unit ?? null}::rate_unit,
       ${opts.budget?.currency ?? 'USD'},
-      ${opts.serviceTier ?? null}::service_tier
+      ${opts.serviceTier ?? null}::service_tier,
+      ${opts.jobDescription ?? null}
     )
   `;
   return id;

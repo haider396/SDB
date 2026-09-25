@@ -295,6 +295,9 @@ describe('lookup — :id accepts the uuid OR the public id, same resource', () =
     const requisitionId = await insertRequisition(db.sql, {
       clientId: clientA,
       status: 'pending_principal_approval',
+      // This case transitions to sourcing further down, which T16 gates on a
+      // job description. The subject here is public-id routing, not the gate.
+      jobDescription: 'Integration fixture — job description.',
     });
     const publicId = await publicIdOf('requisitions', requisitionId);
 

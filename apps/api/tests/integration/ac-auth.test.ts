@@ -73,6 +73,18 @@ const PUBLIC_URLS = new Set([
   '/api/v1/intake-form',
   '/api/v1/taxonomy/public',
   '/api/v1/intake-submissions',
+  // Public CANDIDATE surface (04 §8.3, T38). A candidate has no account — the
+  // no-candidate-portal rule means there is nothing for them to log in to — so
+  // every one of these is deliberately unauthenticated and rides the same
+  // 60/min/IP limiter. Absent here since T38 shipped, unnoticed because the
+  // integration suite had never run.
+  '/api/v1/candidate-registration-form',
+  '/api/v1/candidate-registrations',
+  '/api/v1/candidate-registrations/session',
+  '/api/v1/candidate-registrations/:sessionId/upload-url',
+  '/api/v1/candidate-registrations/:sessionId/files/:fileId/confirm',
+  '/api/v1/candidate-forms/public/:slug',
+  '/api/v1/candidate-forms/public/:slug/submissions',
 ]);
 function isPublic(url: string): boolean {
   return PUBLIC_URLS.has(url) || url.startsWith('/api/v1/docs');
@@ -221,9 +233,13 @@ describe('AC-AUTH-03 — /auth/me resolves the exact permission set per role', (
     }
   });
 
-  it('permission set sizes match docs/02-DATABASE.md §3 (29 / 26 / 9 / 7)', () => {
+  // admin is 27, not 26: migration 0027 returned question.manage to admin, so
+  // only settings.manage and user.manage remain super_admin-only. ADMIN_EXCLUDED
+  // above was corrected at the time; these literals were not, and nothing
+  // noticed because the integration suite had never been run.
+  it('permission set sizes match docs/02-DATABASE.md §3 (29 / 27 / 9 / 7)', () => {
     expect(EXPECTED_PERMISSIONS.super_admin).toHaveLength(29);
-    expect(EXPECTED_PERMISSIONS.admin).toHaveLength(26);
+    expect(EXPECTED_PERMISSIONS.admin).toHaveLength(27);
     expect(EXPECTED_PERMISSIONS.client_admin).toHaveLength(9);
     expect(EXPECTED_PERMISSIONS.client_user).toHaveLength(7);
   });

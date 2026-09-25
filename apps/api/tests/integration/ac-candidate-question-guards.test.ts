@@ -18,6 +18,7 @@ import {
   assignRole,
   insertQuestion,
   insertQuestionCategory,
+  insertTaxonomyChain,
   insertUser,
 } from './fixtures.js';
 import { buildTestApp, freshDb, type TestApp, type TestDb } from './harness.js';
@@ -26,6 +27,15 @@ let db: TestDb;
 let harness: TestApp;
 let superAdmin: string;
 let categoryId: string;
+/**
+ * The identity question, created once.
+ *
+ * questions.key is globally unique and beforeAll builds a single database for
+ * this whole file, so creating 'email' per test collided. Sharing is safe
+ * precisely because both tests assert a REFUSAL — neither archives or
+ * deactivates it, so it stays exactly as created.
+ */
+let emailQuestionId: string;
 
 beforeAll(async () => {
   db = await freshDb();
@@ -33,6 +43,7 @@ beforeAll(async () => {
   await assignRole(db.sql, superAdmin, 'super_admin');
   harness = await buildTestApp(db);
   categoryId = await insertQuestionCategory(db.sql);
+  emailQuestionId = await candidateQuestion('email');
 });
 
 afterAll(async () => {
@@ -55,7 +66,7 @@ function errorCode(res: { json: <T>() => T }): string {
 
 describe('candidate mapped questions are protected like client ones', () => {
   it('refuses to archive the email question', async () => {
-    const id = await candidateQuestion('email');
+    const id = emailQuestionId;
     const res = await harness.app.inject({
       method: 'DELETE',
       url: `/api/v1/questions/${id}`,
@@ -102,7 +113,7 @@ describe('candidate mapped questions are protected like client ones', () => {
 
 describe('the identity question cannot be switched off', () => {
   it('refuses to deactivate email', async () => {
-    const id = await candidateQuestion('email');
+    const id = emailQuestionId;
     const res = await harness.app.inject({
       method: 'POST',
       url: `/api/v1/questions/${id}/deactivate`,
@@ -120,19 +131,36 @@ describe('the identity question cannot be switched off', () => {
       headers: await harness.bearer(superAdmin),
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json<{ data: { warnings: { code: string }[] } }>();
-    expect(body.data.warnings.some((w) => w.code === 'MAPPED_QUESTION')).toBe(true);
+    // `warnings` is a SIBLING of `data`, not nested inside it — the route
+    // returns `{ data: question, warnings }` (04 §4, and api-client's
+    // apiFetchEnvelope exists for exactly this shape).
+    const body = res.json<{ warnings: { code: string }[] }>();
+    expect(body.warnings.some((w) => w.code === 'MAPPED_QUESTION')).toBe(true);
   });
 });
 
 describe('a question in use cannot leave the candidate audience', () => {
-  /** A minimal live form with one block pointing at `questionId`. */
+  /**
+   * A minimal live form with one block pointing at `questionId`.
+   *
+   * Built in the order 0020's constraints demand, which is not the obvious one:
+   *   - `chk_form_role_category_required` — a non-default form needs a role
+   *     category, so one is created up front.
+   *   - `chk_form_active_needs_version` — an active form must already have a
+   *     published version, so it is inserted as a DRAFT, given its version, and
+   *     only then promoted. Inserting it 'active' first fails outright, which
+   *     is how this fixture broke.
+   */
   async function formUsing(questionId: string, label: string): Promise<void> {
     const formId = randomUUID();
     const versionId = randomUUID();
+    const { roleCategoryId } = await insertTaxonomyChain(db.sql);
     await db.sql`
-      insert into candidate_forms (id, key, label, status, is_default)
-      values (${formId}, ${`f_${formId.slice(0, 8)}`}, ${label}, 'active', false)
+      insert into candidate_forms (id, key, label, status, is_default, role_category_id)
+      values (
+        ${formId}, ${`f_${formId.slice(0, 8)}`}, ${label},
+        'draft', false, ${roleCategoryId}
+      )
     `;
     await db.sql`
       insert into candidate_form_versions (id, form_id, version_number, pages, theme)
@@ -142,6 +170,11 @@ describe('a question in use cannot leave the candidate audience', () => {
       insert into candidate_form_blocks
         (id, form_version_id, block_type, question_id, page_index, sort_order, layout)
       values (${randomUUID()}, ${versionId}, 'question', ${questionId}, 0, 0, '{}'::jsonb)
+    `;
+    await db.sql`
+      update candidate_forms
+         set status = 'active', published_version_id = ${versionId}
+       where id = ${formId}
     `;
   }
 

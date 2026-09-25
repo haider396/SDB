@@ -105,11 +105,97 @@ afterAll(async () => {
   await db.close();
 });
 
+/**
+ * T16's sourcing gate. Rebecca, 13 Aug: "we cannot look for the position until
+ * we have the job description."
+ *
+ * It shipped with no integration test of its own — the only reason we knew it
+ * worked is that it started failing the transition cases above once this suite
+ * finally ran. Covered here so a regression in it is caught directly rather
+ * than as collateral damage somewhere else.
+ */
+describe('the sourcing gate refuses a position with no job description', () => {
+  it('refuses the move into sourcing, naming the field', async () => {
+    const requisition = await insertRequisition(db.sql, {
+      clientId: clientA,
+      status: 'pending_principal_approval',
+      jobDescription: null,
+    });
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/requisitions/${requisition}/transition`,
+      headers: await harness.bearer(admin),
+      payload: { toStatus: 'sourcing' },
+    });
+    expect(res.statusCode).toBe(422);
+    const body = res.json<{
+      error: { code: string; details?: { fields?: Record<string, string> } };
+    }>();
+    expect(body.error.code).toBe('VALIDATION_FAILED');
+    expect(body.error.details?.fields?.['jobDescription']).toMatch(/job description/i);
+
+    // Refused, not half-applied.
+    const rows = await db.sql<{ status: string }[]>`
+      select status from requisitions where id = ${requisition}
+    `;
+    expect(rows[0]!.status).toBe('pending_principal_approval');
+  });
+
+  it('allows every OTHER transition without one — only sourcing is gated', async () => {
+    const requisition = await insertRequisition(db.sql, {
+      clientId: clientA,
+      status: 'submitted',
+      jobDescription: null,
+    });
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/requisitions/${requisition}/transition`,
+      headers: await harness.bearer(admin),
+      payload: { toStatus: 'on_hold' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('accepts the move once a description exists', async () => {
+    const requisition = await insertRequisition(db.sql, {
+      clientId: clientA,
+      status: 'pending_principal_approval',
+      jobDescription: 'Executive Assistant — full brief.',
+    });
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/requisitions/${requisition}/transition`,
+      headers: await harness.bearer(admin),
+      payload: { toStatus: 'sourcing' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('treats a whitespace-only description as absent', async () => {
+    // `.trim() === ''` in the service — a space is not a job description.
+    const requisition = await insertRequisition(db.sql, {
+      clientId: clientA,
+      status: 'pending_principal_approval',
+      jobDescription: '   ',
+    });
+    const res = await harness.app.inject({
+      method: 'POST',
+      url: `/api/v1/requisitions/${requisition}/transition`,
+      headers: await harness.bearer(admin),
+      payload: { toStatus: 'sourcing' },
+    });
+    expect(res.statusCode).toBe(422);
+  });
+});
+
 describe('AC-RQ-01 — every valid transition succeeds and writes an event', () => {
   it.each(VALID_PAIRS)('%s → %s', async (from, to) => {
     const requisition = await insertRequisition(db.sql, {
       clientId: clientA,
       status: from,
+      // T16 gates the move into sourcing on a job description; these cases
+      // are about the transition map, not the gate, so supply one.
+      jobDescription: 'Integration fixture — job description.',
     });
     const res = await harness.app.inject({
       method: 'POST',
@@ -142,6 +228,9 @@ describe('AC-RQ-02 — every invalid transition is a 409 with from/to details', 
     const requisition = await insertRequisition(db.sql, {
       clientId: clientA,
       status: from,
+      // T16 gates the move into sourcing on a job description; these cases
+      // are about the transition map, not the gate, so supply one.
+      jobDescription: 'Integration fixture — job description.',
     });
     const res = await harness.app.inject({
       method: 'POST',
@@ -191,6 +280,7 @@ describe('AC-RQ-04 — principal identity is enforced beyond the permission', ()
       clientId: clientA,
       status: 'pending_principal_approval',
       principalUserId: principalA,
+      jobDescription: 'Integration fixture — job description.',
     });
   }
 
@@ -250,6 +340,7 @@ describe('AC-RQ-05 — principal-request-changes requires a comment', () => {
       clientId: clientA,
       status: 'pending_principal_approval',
       principalUserId: principalA,
+      jobDescription: 'Integration fixture — job description.',
     });
     const res = await harness.app.inject({
       method: 'POST',
@@ -274,6 +365,7 @@ describe('AC-RQ-05 — principal-request-changes requires a comment', () => {
       clientId: clientA,
       status: 'pending_principal_approval',
       principalUserId: principalA,
+      jobDescription: 'Integration fixture — job description.',
     });
     for (const payload of [{}, { comment: '' }]) {
       const res = await harness.app.inject({
